@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useAppAuth } from '@/hooks/useAppAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Calculator, Loader2, Lock } from 'lucide-react';
 
 const passwordSchema = z.object({
@@ -18,7 +18,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const { login } = useAppAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 

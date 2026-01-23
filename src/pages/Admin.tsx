@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useAppAuth } from '@/hooks/useAppAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Loader2, Shield } from 'lucide-react';
 
 const passwordSchema = z.object({
@@ -25,7 +25,7 @@ export default function Admin() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
 
-  const { changePassword } = useAppAuth();
+  const { changePassword } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 

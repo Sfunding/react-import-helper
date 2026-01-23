@@ -1,14 +1,16 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Calculator, FolderOpen, LogOut } from 'lucide-react';
-import { useAppAuth } from '@/hooks/useAppAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 
 export function Navbar() {
-  const { logout } = useAppAuth();
+  const { logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    navigate('/login');
   };
 
   const isActive = (path: string) => location.pathname === path;
