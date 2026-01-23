@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -13,9 +13,11 @@ import {
   Settings, 
   Position, 
   DEFAULT_MERCHANT, 
-  DEFAULT_SETTINGS 
+  DEFAULT_SETTINGS,
+  SavedCalculation
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
+import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import {
   Tooltip,
   TooltipContent,
@@ -40,6 +42,7 @@ export default function Index() {
   const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [lastSavedState, setLastSavedState] = useState<string>('');
+  const [lastSavedCalculation, setLastSavedCalculation] = useState<SavedCalculation | null>(null);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -299,7 +302,7 @@ export default function Index() {
   };
 
   const handleSave = async (name: string) => {
-    await saveCalculation({
+    const result = await saveCalculation({
       name,
       merchant,
       settings,
@@ -309,6 +312,60 @@ export default function Index() {
     });
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    
+    // Store the saved calculation for export options
+    if (result) {
+      const savedCalc: SavedCalculation = {
+        id: result.id || '',
+        user_id: result.user_id || '',
+        name,
+        merchant_name: merchant.name,
+        merchant_business_type: merchant.businessType,
+        merchant_monthly_revenue: merchant.monthlyRevenue,
+        settings,
+        positions,
+        total_balance: totalBalance,
+        total_daily_payment: totalCurrentDailyPayment,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setLastSavedCalculation(savedCalc);
+      
+      // Show toast with export options
+      toast({
+        title: 'Calculation saved!',
+        description: (
+          <div className="mt-2">
+            <p className="mb-2 text-sm">Export your proposal:</p>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  exportToExcel(savedCalc);
+                  toast({ title: 'Excel exported', description: 'File downloaded successfully.' });
+                }}
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-1" />
+                Excel
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  exportToPDF(savedCalc);
+                  toast({ title: 'PDF exported', description: 'File downloaded successfully.' });
+                }}
+              >
+                <FileText className="w-4 h-4 mr-1" />
+                PDF
+              </Button>
+            </div>
+          </div>
+        ),
+        duration: 10000,
+      });
+    }
   };
 
   const handleSaveAndLeave = async () => {

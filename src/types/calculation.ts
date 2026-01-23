@@ -69,3 +69,19 @@ export type ScheduleBreakdown = {
   }>;
   total: number;
 };
+
+export type DayScheduleExport = {
+  day: number;
+  week: number;
+  cashInfusion: number;
+  dailyWithdrawal: number;
+  exposureOnReverse: number;
+  rtrBalance: number;
+};
+
+export type WeekScheduleExport = {
+  week: number;
+  cashInfusion: number;
+  totalDebits: number;
+  endExposure: number;
+};
