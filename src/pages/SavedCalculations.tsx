@@ -63,6 +63,8 @@ export default function SavedCalculations() {
   const handleLoad = (calc: typeof calculations[0]) => {
     // Store in sessionStorage for the calculator to pick up
     sessionStorage.setItem('loadCalculation', JSON.stringify({
+      id: calc.id,
+      name: calc.name,
       merchant: {
         name: calc.merchant_name || '',
         businessType: calc.merchant_business_type || '',

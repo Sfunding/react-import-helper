@@ -96,12 +96,55 @@ export function useCalculations() {
     }
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (params: {
+      id: string;
+      name: string;
+      merchant: { name: string; businessType: string; monthlyRevenue: number };
+      settings: Settings;
+      positions: Position[];
+      totalBalance: number;
+      totalDailyPayment: number;
+    }) => {
+      const { data, error } = await supabase
+        .from('saved_calculations')
+        .update({
+          name: params.name,
+          merchant_name: params.merchant.name,
+          merchant_business_type: params.merchant.businessType,
+          merchant_monthly_revenue: params.merchant.monthlyRevenue,
+          settings: params.settings,
+          positions: params.positions,
+          total_balance: params.totalBalance,
+          total_daily_payment: params.totalDailyPayment
+        })
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error updating calculation',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
   return {
     calculations,
     isLoading,
     error,
     saveCalculation: saveMutation.mutateAsync,
     isSaving: saveMutation.isPending,
+    updateCalculation: updateMutation.mutateAsync,
+    isUpdating: updateMutation.isPending,
     deleteCalculation: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending
   };
