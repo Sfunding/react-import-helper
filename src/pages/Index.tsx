@@ -559,13 +559,16 @@ export default function Index() {
             <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Monthly Revenue
             </label>
-            <input 
-              type="number" 
-              value={merchant.monthlyRevenue || ''} 
-              onChange={e => setMerchant({...merchant, monthlyRevenue: parseFloat(e.target.value) || 0})} 
-              placeholder="0" 
-              className="w-full p-2.5 border-2 border-secondary rounded-md text-sm bg-accent focus:ring-2 focus:ring-ring focus:border-transparent transition-all font-medium"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+              <input 
+                type="number" 
+                value={merchant.monthlyRevenue || ''} 
+                onChange={e => setMerchant({...merchant, monthlyRevenue: parseFloat(e.target.value) || 0})} 
+                placeholder="0" 
+                className="w-full p-2.5 pl-7 border-2 border-secondary rounded-md text-sm bg-accent focus:ring-2 focus:ring-ring focus:border-transparent transition-all font-medium"
+              />
+            </div>
           </div>
           <div className="flex items-end gap-2">
             <div className="px-4 py-2.5 bg-destructive text-destructive-foreground rounded-lg text-center shadow-sm">
@@ -663,12 +666,15 @@ export default function Index() {
                   </TooltipContent>
                 </Tooltip>
               </label>
-              <input 
-                type="number" 
-                value={settings.newMoney} 
-                onChange={e => setSettings({...settings, newMoney: parseFloat(e.target.value) || 0})} 
-                className="w-full p-2.5 border-2 border-success rounded-md text-sm bg-card font-medium"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                <input 
+                  type="number" 
+                  value={settings.newMoney} 
+                  onChange={e => setSettings({...settings, newMoney: parseFloat(e.target.value) || 0})} 
+                  className="w-full p-2.5 pl-7 border-2 border-success rounded-md text-sm bg-card font-medium"
+                />
+              </div>
             </div>
           </TooltipProvider>
         </div>
@@ -763,22 +769,28 @@ export default function Index() {
                             />
                           </td>
                           <td className="p-2">
-                            <input 
-                              type="number" 
-                              value={p.balance || ''} 
-                              onChange={e => updatePosition(p.id, 'balance', parseFloat(e.target.value) || 0)} 
-                              placeholder="0.00" 
-                              className="w-full p-2 border border-input rounded-md text-right bg-background"
-                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <input 
+                                type="number" 
+                                value={p.balance || ''} 
+                                onChange={e => updatePosition(p.id, 'balance', parseFloat(e.target.value) || 0)} 
+                                placeholder="0.00" 
+                                className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+                              />
+                            </div>
                           </td>
                           <td className="p-2">
-                            <input 
-                              type="number" 
-                              value={p.dailyPayment || ''} 
-                              onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
-                              placeholder="0.00" 
-                              className="w-full p-2 border border-input rounded-md text-right bg-background"
-                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <input 
+                                type="number" 
+                                value={p.dailyPayment || ''} 
+                                onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
+                                placeholder="0.00" 
+                                className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+                              />
+                            </div>
                           </td>
                           <td className="p-2 text-center">
                             <span className={`px-3 py-1 rounded-full font-semibold text-sm ${
