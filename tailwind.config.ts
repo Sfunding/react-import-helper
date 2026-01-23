@@ -69,6 +69,12 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        avion: {
+          dark: "hsl(var(--avion-dark))",
+          mid: "hsl(var(--avion-mid))",
+          light: "hsl(var(--avion-light))",
+          pale: "hsl(var(--avion-pale))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

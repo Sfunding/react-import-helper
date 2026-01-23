@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Calculator, Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
+import avionLogo from '@/assets/avion-logo.png';
 
 const passwordSchema = z.object({
   password: z.string().min(1, 'Password is required')
@@ -55,11 +56,15 @@ export default function Login() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <Calculator className="w-6 h-6 text-primary" />
+          <div className="mx-auto mb-6">
+            <img 
+              src={avionLogo} 
+              alt="Avion Funding" 
+              className="h-12 w-auto mx-auto"
+            />
           </div>
           <CardTitle className="flex items-center justify-center gap-2">
-            <Lock className="w-5 h-5" />
+            <Lock className="w-5 h-5 text-primary" />
             Sign In
           </CardTitle>
           <CardDescription>
