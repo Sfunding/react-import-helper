@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Save, FilePlus, Info, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
 import { ScheduleBreakdownDialog, BreakdownEntry } from '@/components/ScheduleBreakdownDialog';
+import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog';
 import { useCalculations } from '@/hooks/useCalculations';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import { 
   Merchant, 
   Settings, 
@@ -26,6 +28,7 @@ type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
 export default function Index() {
   const { saveCalculation, isSaving } = useCalculations();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -34,6 +37,46 @@ export default function Index() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState<{ day?: number; week?: number } | null>(null);
+  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [lastSavedState, setLastSavedState] = useState<string>('');
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = useCallback(() => {
+    const currentState = JSON.stringify({ merchant, settings, positions });
+    // If we have data (positions or merchant name or settings changed from default)
+    const hasData = positions.length > 0 || 
+                    merchant.name !== '' || 
+                    merchant.monthlyRevenue > 0 ||
+                    settings.newMoney > 0;
+    
+    // If no data, no unsaved changes
+    if (!hasData) return false;
+    
+    // If we've never saved, we have unsaved changes
+    if (!lastSavedState) return true;
+    
+    // Compare current state to last saved state
+    return currentState !== lastSavedState;
+  }, [merchant, settings, positions, lastSavedState]);
+
+  // Handle navigation with unsaved changes check
+  const handleNavigation = useCallback((path: string) => {
+    if (hasUnsavedChanges()) {
+      setPendingNavigation(path);
+      setUnsavedDialogOpen(true);
+    } else {
+      navigate(path);
+    }
+  }, [hasUnsavedChanges, navigate]);
+
+  // Expose navigation handler to Navbar
+  useEffect(() => {
+    (window as any).__calculatorNavigation = handleNavigation;
+    return () => {
+      delete (window as any).__calculatorNavigation;
+    };
+  }, [handleNavigation]);
 
   // Load calculation from sessionStorage if available
   useEffect(() => {
@@ -45,6 +88,12 @@ export default function Index() {
         if (data.settings) setSettings(data.settings);
         if (data.positions) setPositions(data.positions);
         sessionStorage.removeItem('loadCalculation');
+        // Mark as "saved" state since we just loaded it
+        setLastSavedState(JSON.stringify({ 
+          merchant: data.merchant || DEFAULT_MERCHANT, 
+          settings: data.settings || DEFAULT_SETTINGS, 
+          positions: data.positions || [] 
+        }));
         toast({
           title: 'Calculation loaded',
           description: 'Your saved calculation has been loaded.'
@@ -163,7 +212,9 @@ export default function Index() {
               entity: p.entity,
               dailyPayment: p.dailyPayment,
               daysContributing,
-              totalContribution: p.dailyPayment * daysContributing
+              totalContribution: p.dailyPayment * daysContributing,
+              remainingBalance: p.balance,
+              totalDaysLeft: p.daysLeft
             });
             total += p.dailyPayment * daysContributing;
           }
@@ -190,7 +241,9 @@ export default function Index() {
               entity: p.entity,
               dailyPayment: p.dailyPayment,
               daysContributing,
-              totalContribution: p.dailyPayment * daysContributing
+              totalContribution: p.dailyPayment * daysContributing,
+              remainingBalance: p.balance,
+              totalDaysLeft: p.daysLeft
             });
             total += p.dailyPayment * daysContributing;
           }
@@ -254,6 +307,21 @@ export default function Index() {
       totalBalance,
       totalDailyPayment: totalCurrentDailyPayment
     });
+    // Mark current state as saved
+    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+  };
+
+  const handleSaveAndLeave = async () => {
+    setSaveDialogOpen(true);
+    setUnsavedDialogOpen(false);
+  };
+
+  const handleDiscardAndLeave = () => {
+    setUnsavedDialogOpen(false);
+    if (pendingNavigation) {
+      navigate(pendingNavigation);
+      setPendingNavigation(null);
+    }
   };
 
   const tabs: { key: TabType; label: string }[] = [
@@ -286,10 +354,32 @@ export default function Index() {
 
         <SaveCalculationDialog
           open={saveDialogOpen}
-          onOpenChange={setSaveDialogOpen}
+          onOpenChange={(open) => {
+            setSaveDialogOpen(open);
+            // If saved successfully and there was pending navigation, go there
+            if (!open && pendingNavigation && !isSaving) {
+              setTimeout(() => {
+                if (pendingNavigation) {
+                  navigate(pendingNavigation);
+                  setPendingNavigation(null);
+                }
+              }, 100);
+            }
+          }}
           onSave={handleSave}
           isSaving={isSaving}
           defaultName={merchant.name ? `${merchant.name} Consolidation` : ''}
+        />
+
+        <UnsavedChangesDialog
+          isOpen={unsavedDialogOpen}
+          onClose={() => {
+            setUnsavedDialogOpen(false);
+            setPendingNavigation(null);
+          }}
+          onDiscard={handleDiscardAndLeave}
+          onSave={handleSaveAndLeave}
+          isSaving={isSaving}
         />
       
       {/* Merchant Info Section */}

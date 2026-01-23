@@ -16,6 +16,17 @@ export function Navbar() {
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Use custom navigation handler if on calculator page
+  const handleNavClick = (e: React.MouseEvent, path: string) => {
+    if (location.pathname === '/' && path !== '/') {
+      const customNav = (window as any).__calculatorNavigation;
+      if (customNav) {
+        e.preventDefault();
+        customNav(path);
+      }
+    }
+  };
+
   return (
     <nav className="bg-card border-b border-border shadow-sm">
       <div className="max-w-6xl mx-auto px-4">
@@ -46,6 +57,7 @@ export function Navbar() {
               </Link>
               <Link
                 to="/saved"
+                onClick={(e) => handleNavClick(e, '/saved')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive('/saved') 
                     ? 'bg-primary text-primary-foreground' 
