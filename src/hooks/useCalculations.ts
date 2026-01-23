@@ -60,10 +60,7 @@ export function useCalculations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      toast({
-        title: 'Calculation saved',
-        description: 'Your calculation has been saved successfully.'
-      });
+      // Toast is handled by the caller to allow custom content
     },
     onError: (error: Error) => {
       toast({

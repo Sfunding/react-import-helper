@@ -14,15 +14,51 @@ import {
   AlertDialogTitle, 
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
-import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator } from 'lucide-react';
+import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText } from 'lucide-react';
 import { format } from 'date-fns';
+import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { SavedCalculation } from '@/types/calculation';
+import { useToast } from '@/hooks/use-toast';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
   const { calculations, isLoading, deleteCalculation, isDeleting } = useCalculations();
+  const { toast } = useToast();
 
   const fmt = (v: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0);
+
+  const handleExportExcel = (calc: typeof calculations[0]) => {
+    try {
+      exportToExcel(calc as SavedCalculation);
+      toast({
+        title: 'Excel exported',
+        description: `${calc.name} has been downloaded as Excel.`
+      });
+    } catch (error) {
+      toast({
+        title: 'Export failed',
+        description: 'Failed to generate Excel file.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleExportPDF = async (calc: typeof calculations[0]) => {
+    try {
+      await exportToPDF(calc as SavedCalculation);
+      toast({
+        title: 'PDF exported',
+        description: `${calc.name} has been downloaded as PDF.`
+      });
+    } catch (error) {
+      toast({
+        title: 'Export failed',
+        description: 'Failed to generate PDF file.',
+        variant: 'destructive'
+      });
+    }
+  };
 
   const handleLoad = (calc: typeof calculations[0]) => {
     // Store in sessionStorage for the calculator to pick up
@@ -111,6 +147,22 @@ export default function SavedCalculations() {
                     >
                       <ExternalLink className="w-4 h-4 mr-1" />
                       Load
+                    </Button>
+                    <Button 
+                      onClick={() => handleExportExcel(calc)} 
+                      variant="outline" 
+                      size="sm"
+                      title="Export to Excel"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      onClick={() => handleExportPDF(calc)} 
+                      variant="outline" 
+                      size="sm"
+                      title="Export to PDF"
+                    >
+                      <FileText className="w-4 h-4" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
