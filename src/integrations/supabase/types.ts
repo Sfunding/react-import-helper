@@ -83,7 +83,7 @@ export type Database = {
           total_balance?: number | null
           total_daily_payment?: number | null
           updated_at?: string
-          user_id: string
+          user_id?: string
         }
         Update: {
           created_at?: string
