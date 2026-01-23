@@ -58,3 +58,14 @@ export const DEFAULT_SETTINGS: Settings = {
   newMoney: 0,
   currentExposure: 0
 };
+
+export type ScheduleBreakdown = {
+  newMoney: number;
+  entries: Array<{
+    entity: string;
+    dailyPayment: number;
+    daysContributing: number;
+    totalContribution: number;
+  }>;
+  total: number;
+};

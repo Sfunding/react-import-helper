@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Save, FilePlus } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
+import { ScheduleBreakdownDialog, BreakdownEntry } from '@/components/ScheduleBreakdownDialog';
 import { useCalculations } from '@/hooks/useCalculations';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -12,6 +13,13 @@ import {
   DEFAULT_MERCHANT, 
   DEFAULT_SETTINGS 
 } from '@/types/calculation';
+import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
 
@@ -24,6 +32,8 @@ export default function Index() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('positions');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [selectedBreakdown, setSelectedBreakdown] = useState<{ day?: number; week?: number } | null>(null);
 
   // Load calculation from sessionStorage if available
   useEffect(() => {
@@ -129,6 +139,76 @@ export default function Index() {
     });
     return Array.from(weekMap.values());
   }, [dailySchedule]);
+
+  // Calculate breakdown entries for a specific day or week
+  const getBreakdownEntries = (day?: number, week?: number): { entries: BreakdownEntry[]; total: number } => {
+    const entries: BreakdownEntry[] = [];
+    let total = 0;
+
+    if (day !== undefined) {
+      // For daily breakdown - calculate which positions contribute on this payday
+      const weekNum = Math.ceil(day / 5);
+      const startDay = day;
+      const endDay = Math.min(day + 4, 500);
+      
+      positionsWithDays
+        .filter(p => !p.isOurPosition && p.balance > 0)
+        .forEach(p => {
+          let daysContributing = 0;
+          for (let d = startDay; d <= endDay; d++) {
+            if (d <= p.daysLeft) daysContributing++;
+          }
+          if (daysContributing > 0) {
+            entries.push({
+              entity: p.entity,
+              dailyPayment: p.dailyPayment,
+              daysContributing,
+              totalContribution: p.dailyPayment * daysContributing
+            });
+            total += p.dailyPayment * daysContributing;
+          }
+        });
+
+      // Add new money on day 1
+      if (day === 1 && settings.newMoney > 0) {
+        total += settings.newMoney;
+      }
+    } else if (week !== undefined) {
+      // For weekly breakdown
+      const startDay = (week - 1) * 5 + 1;
+      const endDay = week * 5;
+      
+      positionsWithDays
+        .filter(p => !p.isOurPosition && p.balance > 0)
+        .forEach(p => {
+          let daysContributing = 0;
+          for (let d = startDay; d <= endDay; d++) {
+            if (d <= p.daysLeft) daysContributing++;
+          }
+          if (daysContributing > 0) {
+            entries.push({
+              entity: p.entity,
+              dailyPayment: p.dailyPayment,
+              daysContributing,
+              totalContribution: p.dailyPayment * daysContributing
+            });
+            total += p.dailyPayment * daysContributing;
+          }
+        });
+
+      // Add new money on week 1
+      if (week === 1 && settings.newMoney > 0) {
+        total += settings.newMoney;
+      }
+    }
+
+    return { entries, total };
+  };
+
+  const handleBreakdownClick = (day?: number, week?: number) => {
+    setSelectedBreakdown({ day, week });
+    setBreakdownOpen(true);
+  };
 
   const metrics = useMemo(() => {
     if (dailySchedule.length === 0) return {} as any;
@@ -332,15 +412,27 @@ export default function Index() {
               className="w-full p-2.5 border border-input rounded-md text-sm bg-card"
             />
           </div>
-          <div>
-            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">New Money</label>
-            <input 
-              type="number" 
-              value={settings.newMoney} 
-              onChange={e => setSettings({...settings, newMoney: parseFloat(e.target.value) || 0})} 
-              className="w-full p-2.5 border border-input rounded-md text-sm bg-card"
-            />
-          </div>
+          <TooltipProvider>
+            <div>
+              <label className="mb-1 text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1">
+                New Money
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[250px]">
+                    <p>Additional cash paid to the merchant on Day 1, on top of paying off their existing positions.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </label>
+              <input 
+                type="number" 
+                value={settings.newMoney} 
+                onChange={e => setSettings({...settings, newMoney: parseFloat(e.target.value) || 0})} 
+                className="w-full p-2.5 border-2 border-success rounded-md text-sm bg-card font-medium"
+              />
+            </div>
+          </TooltipProvider>
         </div>
         
         {/* Summary Cards */}
@@ -415,6 +507,7 @@ export default function Index() {
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily Payment</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold">Last Payment</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -457,6 +550,11 @@ export default function Index() {
                             </span>
                           </td>
                           <td className="p-2 text-center">
+                            <span className="text-xs text-muted-foreground">
+                              {getFormattedLastPaymentDate(daysLeft)}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center">
                             <button 
                               onClick={() => deletePosition(p.id)} 
                               className="px-4 py-2 bg-destructive/10 text-destructive rounded-md font-semibold cursor-pointer border-none hover:bg-destructive/20 transition-colors"
@@ -473,6 +571,7 @@ export default function Index() {
                       <td className="p-3 rounded-bl-md">TOTAL ({externalPositions.length} positions)</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
+                      <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center rounded-br-md">-</td>
                     </tr>
@@ -535,8 +634,16 @@ export default function Index() {
                   {dailySchedule.slice(0, 200).map((d, i) => (
                     <tr key={i} className={`${d.isPayDay ? 'bg-secondary/20' : 'bg-card'} hover:bg-muted/50 transition-colors`}>
                       <td className="p-2 text-center font-medium">{d.day}</td>
-                      <td className={`p-2 text-right ${d.cashInfusion > 0 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                        {d.cashInfusion > 0 ? fmt(d.cashInfusion) : '-'}
+                      <td 
+                        className={`p-2 text-right ${d.cashInfusion > 0 ? 'text-destructive font-medium cursor-pointer hover:underline' : 'text-muted-foreground'}`}
+                        onClick={() => d.cashInfusion > 0 && handleBreakdownClick(d.day)}
+                      >
+                        {d.cashInfusion > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            {fmt(d.cashInfusion)}
+                            <ChevronRight className="h-3 w-3" />
+                          </span>
+                        ) : '-'}
                       </td>
                       <td className="p-2 text-right text-success font-medium">{d.dailyWithdrawal > 0 ? fmt(d.dailyWithdrawal) : '-'}</td>
                       <td className={`p-2 text-right font-semibold ${d.exposureOnReverse > 0 ? 'text-destructive' : 'text-success'}`}>
@@ -569,7 +676,17 @@ export default function Index() {
                   {weeklySummary.map((w, i) => (
                     <tr key={i} className="border-b border-border hover:bg-muted/50 transition-colors">
                       <td className="p-3 text-center font-semibold">{w.week}</td>
-                      <td className="p-3 text-right text-destructive">{w.cashInfusion > 0 ? fmt(w.cashInfusion) : '-'}</td>
+                      <td 
+                        className={`p-3 text-right ${w.cashInfusion > 0 ? 'text-destructive cursor-pointer hover:underline' : ''}`}
+                        onClick={() => w.cashInfusion > 0 && handleBreakdownClick(undefined, w.week)}
+                      >
+                        {w.cashInfusion > 0 ? (
+                          <span className="inline-flex items-center justify-end gap-1">
+                            {fmt(w.cashInfusion)}
+                            <ChevronRight className="h-3 w-3" />
+                          </span>
+                        ) : '-'}
+                      </td>
                       <td className="p-3 text-right text-success font-medium">{fmt(w.totalDebits)}</td>
                       <td className="p-3 text-right font-semibold">{fmt(w.endExposure)}</td>
                     </tr>
@@ -627,6 +744,20 @@ export default function Index() {
           </div>
         )}
       </div>
+
+        {/* Schedule Breakdown Dialog */}
+        <ScheduleBreakdownDialog
+          isOpen={breakdownOpen}
+          onClose={() => {
+            setBreakdownOpen(false);
+            setSelectedBreakdown(null);
+          }}
+          day={selectedBreakdown?.day}
+          week={selectedBreakdown?.week}
+          newMoney={settings.newMoney}
+          entries={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).entries : []}
+          total={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).total : 0}
+        />
       </div>
     </div>
   );
