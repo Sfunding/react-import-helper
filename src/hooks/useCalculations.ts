@@ -137,6 +137,47 @@ export function useCalculations() {
     }
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: async (params: {
+      originalId: string;
+      newName: string;
+      calculation: SavedCalculation;
+    }) => {
+      const { data, error } = await supabase
+        .from('saved_calculations')
+        .insert({
+          user_id: SHARED_USER_ID,
+          name: params.newName,
+          merchant_name: params.calculation.merchant_name,
+          merchant_business_type: params.calculation.merchant_business_type,
+          merchant_monthly_revenue: params.calculation.merchant_monthly_revenue,
+          settings: params.calculation.settings,
+          positions: params.calculation.positions,
+          total_balance: params.calculation.total_balance,
+          total_daily_payment: params.calculation.total_daily_payment
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+      toast({
+        title: 'Calculation duplicated',
+        description: 'A copy has been created.'
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error duplicating calculation',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
   return {
     calculations,
     isLoading,
@@ -145,6 +186,8 @@ export function useCalculations() {
     isSaving: saveMutation.isPending,
     updateCalculation: updateMutation.mutateAsync,
     isUpdating: updateMutation.isPending,
+    duplicateCalculation: duplicateMutation.mutateAsync,
+    isDuplicating: duplicateMutation.isPending,
     deleteCalculation: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending
   };
