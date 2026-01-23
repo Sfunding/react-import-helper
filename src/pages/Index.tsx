@@ -1,50 +1,53 @@
-import React, { useState, useMemo } from 'react';
-
-type Merchant = {
-  name: string;
-  businessType: string;
-  monthlyRevenue: number;
-};
-
-type Settings = {
-  dailyPaymentDecrease: number;
-  feeSchedule: string;
-  feePercent: number;
-  rate: number;
-  brokerCommission: number;
-  newMoney: number;
-  currentExposure: number;
-};
-
-type Position = {
-  id: number;
-  entity: string;
-  balance: number;
-  dailyPayment: number;
-  isOurPosition: boolean;
-};
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Save, FilePlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Navbar } from '@/components/Navbar';
+import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
+import { useAuth } from '@/hooks/useAuth';
+import { useCalculations } from '@/hooks/useCalculations';
+import { useToast } from '@/hooks/use-toast';
+import { 
+  Merchant, 
+  Settings, 
+  Position, 
+  DEFAULT_MERCHANT, 
+  DEFAULT_SETTINGS 
+} from '@/types/calculation';
 
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
 
 export default function Index() {
-  const [merchant, setMerchant] = useState<Merchant>({
-    name: '',
-    businessType: '',
-    monthlyRevenue: 0
-  });
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { saveCalculation, isSaving } = useCalculations();
+  const { toast } = useToast();
 
-  const [settings, setSettings] = useState<Settings>({
-    dailyPaymentDecrease: 0.30,
-    feeSchedule: 'average',
-    feePercent: 0.09,
-    rate: 1.499,
-    brokerCommission: 0.00,
-    newMoney: 0,
-    currentExposure: 0
-  });
-
+  const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [positions, setPositions] = useState<Position[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('positions');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+
+  // Load calculation from sessionStorage if available
+  useEffect(() => {
+    const stored = sessionStorage.getItem('loadCalculation');
+    if (stored) {
+      try {
+        const data = JSON.parse(stored);
+        if (data.merchant) setMerchant(data.merchant);
+        if (data.settings) setSettings(data.settings);
+        if (data.positions) setPositions(data.positions);
+        sessionStorage.removeItem('loadCalculation');
+        toast({
+          title: 'Calculation loaded',
+          description: 'Your saved calculation has been loaded.'
+        });
+      } catch (e) {
+        console.error('Failed to parse stored calculation:', e);
+      }
+    }
+  }, [toast]);
 
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   
@@ -159,6 +162,28 @@ export default function Index() {
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v || 0);
   const fmtPct = (v: number) => `${(v || 0).toFixed(2)}%`;
 
+  const handleNewCalculation = () => {
+    setMerchant(DEFAULT_MERCHANT);
+    setSettings(DEFAULT_SETTINGS);
+    setPositions([]);
+    setActiveTab('positions');
+  };
+
+  const handleSave = async (name: string) => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+      return;
+    }
+    await saveCalculation({
+      name,
+      merchant,
+      settings,
+      positions,
+      totalBalance,
+      totalDailyPayment: totalCurrentDailyPayment
+    });
+  };
+
   const tabs: { key: TabType; label: string }[] = [
     { key: 'positions', label: `Positions (${externalPositions.length})` },
     { key: 'metrics', label: 'Metrics' },
@@ -168,10 +193,32 @@ export default function Index() {
   ];
 
   return (
-    <div className="p-4 md:p-6 font-sans bg-background min-h-screen max-w-6xl mx-auto">
-      <h1 className="text-center text-primary text-2xl md:text-3xl font-bold mb-6">
-        Reverse Consolidation Calculator
-      </h1>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <h1 className="text-primary text-2xl md:text-3xl font-bold">
+            Reverse Consolidation Calculator
+          </h1>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleNewCalculation}>
+              <FilePlus className="w-4 h-4 mr-2" />
+              New
+            </Button>
+            <Button onClick={() => isAuthenticated ? setSaveDialogOpen(true) : navigate('/auth')}>
+              <Save className="w-4 h-4 mr-2" />
+              Save
+            </Button>
+          </div>
+        </div>
+
+        <SaveCalculationDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          onSave={handleSave}
+          isSaving={isSaving}
+          defaultName={merchant.name ? `${merchant.name} Consolidation` : ''}
+        />
       
       {/* Merchant Info Section */}
       <div className="mb-4 p-4 bg-card rounded-lg border border-border shadow-sm">
@@ -587,6 +634,7 @@ export default function Index() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

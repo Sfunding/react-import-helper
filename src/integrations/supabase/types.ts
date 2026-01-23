@@ -14,7 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      saved_calculations: {
+        Row: {
+          created_at: string
+          id: string
+          merchant_business_type: string | null
+          merchant_monthly_revenue: number | null
+          merchant_name: string | null
+          name: string
+          positions: Json
+          settings: Json
+          total_balance: number | null
+          total_daily_payment: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          merchant_business_type?: string | null
+          merchant_monthly_revenue?: number | null
+          merchant_name?: string | null
+          name: string
+          positions?: Json
+          settings?: Json
+          total_balance?: number | null
+          total_daily_payment?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          merchant_business_type?: string | null
+          merchant_monthly_revenue?: number | null
+          merchant_name?: string | null
+          name?: string
+          positions?: Json
+          settings?: Json
+          total_balance?: number | null
+          total_daily_payment?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
