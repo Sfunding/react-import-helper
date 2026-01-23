@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalculations } from '@/hooks/useCalculations';
 import { Navbar } from '@/components/Navbar';
@@ -14,7 +15,16 @@ import {
   AlertDialogTitle, 
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
-import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import { SavedCalculation } from '@/types/calculation';
@@ -22,8 +32,11 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
-  const { calculations, isLoading, deleteCalculation, isDeleting } = useCalculations();
+  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations();
   const { toast } = useToast();
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [calcToDuplicate, setCalcToDuplicate] = useState<SavedCalculation | null>(null);
+  const [duplicateName, setDuplicateName] = useState('');
 
   const fmt = (v: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0);
@@ -74,6 +87,26 @@ export default function SavedCalculations() {
       positions: calc.positions
     }));
     navigate('/');
+  };
+
+  const openDuplicateDialog = (calc: typeof calculations[0]) => {
+    setCalcToDuplicate(calc as SavedCalculation);
+    setDuplicateName(`${calc.name} (Copy)`);
+    setDuplicateDialogOpen(true);
+  };
+
+  const handleDuplicate = async () => {
+    if (!calcToDuplicate || !duplicateName.trim()) return;
+    
+    await duplicateCalculation({
+      originalId: calcToDuplicate.id,
+      newName: duplicateName.trim(),
+      calculation: calcToDuplicate
+    });
+    
+    setDuplicateDialogOpen(false);
+    setCalcToDuplicate(null);
+    setDuplicateName('');
   };
 
   return (
@@ -151,6 +184,15 @@ export default function SavedCalculations() {
                       Load
                     </Button>
                     <Button 
+                      onClick={() => openDuplicateDialog(calc)} 
+                      variant="outline" 
+                      size="sm"
+                      title="Duplicate"
+                      disabled={isDuplicating}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button 
                       onClick={() => handleExportExcel(calc)} 
                       variant="outline" 
                       size="sm"
@@ -196,6 +238,47 @@ export default function SavedCalculations() {
             ))}
           </div>
         )}
+
+        {/* Duplicate Dialog */}
+        <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Copy className="w-5 h-5" />
+                Duplicate Calculation
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="duplicate-name" className="text-sm font-medium">
+                New Calculation Name
+              </Label>
+              <Input
+                id="duplicate-name"
+                value={duplicateName}
+                onChange={(e) => setDuplicateName(e.target.value)}
+                placeholder="Enter name for the copy"
+                className="mt-2"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && duplicateName.trim()) {
+                    handleDuplicate();
+                  }
+                }}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleDuplicate} 
+                disabled={!duplicateName.trim() || isDuplicating}
+              >
+                {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
