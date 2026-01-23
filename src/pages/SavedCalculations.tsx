@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { useCalculations } from '@/hooks/useCalculations';
-import { useAuth } from '@/hooks/useAuth';
 import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,12 +14,11 @@ import {
   AlertDialogTitle, 
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
-import { FolderOpen, Trash2, ExternalLink, Loader2, LogIn, Calculator } from 'lucide-react';
+import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
-  const { isAuthenticated, loading: authLoading } = useAuth();
   const { calculations, isLoading, deleteCalculation, isDeleting } = useCalculations();
 
   const fmt = (v: number) => 
@@ -39,43 +37,6 @@ export default function SavedCalculations() {
     }));
     navigate('/');
   };
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="max-w-6xl mx-auto p-4 pt-16">
-          <Card className="max-w-md mx-auto text-center">
-            <CardHeader>
-              <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
-                <LogIn className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <CardTitle>Sign In Required</CardTitle>
-              <CardDescription>
-                Please sign in to view your saved calculations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => navigate('/auth')}>
-                Sign In
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background">

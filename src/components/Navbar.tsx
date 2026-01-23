@@ -1,14 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Calculator, FolderOpen, LogIn, LogOut, User } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { Calculator, FolderOpen, LogOut } from 'lucide-react';
+import { useAppAuth } from '@/hooks/useAppAuth';
 import { Button } from '@/components/ui/button';
 
 export function Navbar() {
-  const { user, signOut, isAuthenticated } = useAuth();
+  const { logout } = useAppAuth();
   const location = useLocation();
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleLogout = () => {
+    logout();
   };
 
   const isActive = (path: string) => location.pathname === path;
@@ -42,32 +42,15 @@ export function Navbar() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-2">
-            {isAuthenticated ? (
-              <>
-                <span className="text-sm text-muted-foreground hidden sm:flex items-center gap-1">
-                  <User className="w-4 h-4" />
-                  {user?.email?.split('@')[0]}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="flex items-center gap-1"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span className="hidden sm:inline">Sign Out</span>
-                </Button>
-              </>
-            ) : (
-              <Link to="/auth">
-                <Button variant="outline" size="sm" className="flex items-center gap-1">
-                  <LogIn className="w-4 h-4" />
-                  <span>Sign In</span>
-                </Button>
-              </Link>
-            )}
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-1"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Log Out</span>
+          </Button>
         </div>
       </div>
     </nav>

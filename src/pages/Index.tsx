@@ -1,10 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Save, FilePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
-import { useAuth } from '@/hooks/useAuth';
 import { useCalculations } from '@/hooks/useCalculations';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -18,8 +16,6 @@ import {
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
 
 export default function Index() {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
   const { saveCalculation, isSaving } = useCalculations();
   const { toast } = useToast();
 
@@ -170,10 +166,6 @@ export default function Index() {
   };
 
   const handleSave = async (name: string) => {
-    if (!isAuthenticated) {
-      navigate('/auth');
-      return;
-    }
     await saveCalculation({
       name,
       merchant,
@@ -205,7 +197,7 @@ export default function Index() {
               <FilePlus className="w-4 h-4 mr-2" />
               New
             </Button>
-            <Button onClick={() => isAuthenticated ? setSaveDialogOpen(true) : navigate('/auth')}>
+            <Button onClick={() => setSaveDialogOpen(true)}>
               <Save className="w-4 h-4 mr-2" />
               Save
             </Button>
