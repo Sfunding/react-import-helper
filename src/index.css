@@ -9,25 +9,28 @@ All colors MUST be HSL.
 @layer base {
   :root {
     --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    --foreground: 215 35% 20%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 215 35% 20%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 215 35% 20%;
 
-    --primary: 217 91% 30%;
+    /* Avion dark blue */
+    --primary: 215 55% 35%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 45 93% 47%;
-    --secondary-foreground: 222 47% 11%;
+    /* Avion light blue */
+    --secondary: 205 65% 55%;
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 210 20% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 20% 50%;
 
-    --accent: 45 100% 94%;
-    --accent-foreground: 222 47% 11%;
+    /* Avion accent - lighter blue */
+    --accent: 205 70% 92%;
+    --accent-foreground: 215 55% 35%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -38,45 +41,54 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --info: 199 89% 48%;
+    --info: 205 65% 55%;
     --info-foreground: 0 0% 100%;
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 217 91% 30%;
+    --ring: 215 55% 35%;
 
     --radius: 0.5rem;
 
+    /* Avion gradient colors */
+    --avion-dark: 215 55% 35%;
+    --avion-mid: 210 55% 45%;
+    --avion-light: 205 65% 55%;
+    --avion-pale: 200 60% 70%;
+
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5% 26%;
-    --sidebar-primary: 240 6% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 5% 96%;
-    --sidebar-accent-foreground: 240 6% 10%;
+    --sidebar-foreground: 215 35% 20%;
+    --sidebar-primary: 215 55% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 205 70% 92%;
+    --sidebar-accent-foreground: 215 55% 35%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 205 65% 55%;
   }
 
   .dark {
-    --background: 222 47% 7%;
+    --background: 215 35% 8%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 11%;
+    --card: 215 35% 12%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 11%;
+    --popover: 215 35% 12%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    /* Avion dark blue - lighter for dark mode */
+    --primary: 205 65% 55%;
+    --primary-foreground: 215 35% 8%;
 
-    --secondary: 45 93% 47%;
-    --secondary-foreground: 222 47% 11%;
+    /* Avion light blue */
+    --secondary: 200 60% 70%;
+    --secondary-foreground: 215 35% 8%;
 
-    --muted: 217 33% 17%;
+    --muted: 215 30% 18%;
     --muted-foreground: 215 20% 65%;
 
-    --accent: 45 100% 20%;
+    /* Avion accent */
+    --accent: 215 40% 20%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 63% 31%;
@@ -88,21 +100,27 @@ All colors MUST be HSL.
     --warning: 38 92% 40%;
     --warning-foreground: 0 0% 100%;
 
-    --info: 199 89% 38%;
+    --info: 205 65% 45%;
     --info-foreground: 0 0% 100%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 213 27% 84%;
+    --border: 215 30% 18%;
+    --input: 215 30% 18%;
+    --ring: 205 65% 55%;
 
-    --sidebar-background: 240 6% 10%;
-    --sidebar-foreground: 240 5% 96%;
-    --sidebar-primary: 224 76% 48%;
+    /* Avion gradient colors - dark mode */
+    --avion-dark: 205 65% 55%;
+    --avion-mid: 200 60% 60%;
+    --avion-light: 200 60% 70%;
+    --avion-pale: 195 55% 80%;
+
+    --sidebar-background: 215 35% 10%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 205 65% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4% 16%;
-    --sidebar-accent-foreground: 240 5% 96%;
-    --sidebar-border: 240 4% 16%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-accent: 215 40% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 30% 16%;
+    --sidebar-ring: 205 65% 55%;
   }
 }
 
