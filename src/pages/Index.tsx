@@ -28,7 +28,7 @@ import {
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
 
 export default function Index() {
-  const { saveCalculation, isSaving } = useCalculations();
+  const { saveCalculation, updateCalculation, isSaving, isUpdating } = useCalculations();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -43,6 +43,8 @@ export default function Index() {
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [lastSavedState, setLastSavedState] = useState<string>('');
   const [lastSavedCalculation, setLastSavedCalculation] = useState<SavedCalculation | null>(null);
+  const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
+  const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -90,6 +92,13 @@ export default function Index() {
         if (data.merchant) setMerchant(data.merchant);
         if (data.settings) setSettings(data.settings);
         if (data.positions) setPositions(data.positions);
+        
+        // Track the loaded calculation ID and name for updates
+        if (data.id) {
+          setLoadedCalculationId(data.id);
+          setLoadedCalculationName(data.name || '');
+        }
+        
         sessionStorage.removeItem('loadCalculation');
         // Mark as "saved" state since we just loaded it
         setLastSavedState(JSON.stringify({ 
@@ -299,6 +308,9 @@ export default function Index() {
     setSettings(DEFAULT_SETTINGS);
     setPositions([]);
     setActiveTab('positions');
+    setLoadedCalculationId(null);
+    setLoadedCalculationName('');
+    setLastSavedState('');
   };
 
   const handleSave = async (name: string) => {
@@ -312,6 +324,10 @@ export default function Index() {
     });
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    
+    // Clear loaded ID since this is now a new calculation
+    setLoadedCalculationId(result?.id || null);
+    setLoadedCalculationName(name);
     
     // Store the saved calculation for export options
     if (result) {
@@ -334,6 +350,78 @@ export default function Index() {
       // Show toast with export options
       toast({
         title: 'Calculation saved!',
+        description: (
+          <div className="mt-2">
+            <p className="mb-2 text-sm">Export your proposal:</p>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  exportToExcel(savedCalc);
+                  toast({ title: 'Excel exported', description: 'File downloaded successfully.' });
+                }}
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-1" />
+                Excel
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => {
+                  exportToPDF(savedCalc);
+                  toast({ title: 'PDF exported', description: 'File downloaded successfully.' });
+                }}
+              >
+                <FileText className="w-4 h-4 mr-1" />
+                PDF
+              </Button>
+            </div>
+          </div>
+        ),
+        duration: 10000,
+      });
+    }
+  };
+
+  const handleUpdate = async (name: string) => {
+    if (!loadedCalculationId) return;
+    
+    const result = await updateCalculation({
+      id: loadedCalculationId,
+      name,
+      merchant,
+      settings,
+      positions,
+      totalBalance,
+      totalDailyPayment: totalCurrentDailyPayment
+    });
+    
+    // Mark current state as saved
+    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    setLoadedCalculationName(name);
+    
+    // Store the saved calculation for export options
+    if (result) {
+      const savedCalc: SavedCalculation = {
+        id: result.id || '',
+        user_id: result.user_id || '',
+        name,
+        merchant_name: merchant.name,
+        merchant_business_type: merchant.businessType,
+        merchant_monthly_revenue: merchant.monthlyRevenue,
+        settings,
+        positions,
+        total_balance: totalBalance,
+        total_daily_payment: totalCurrentDailyPayment,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setLastSavedCalculation(savedCalc);
+      
+      // Show toast with export options
+      toast({
+        title: 'Calculation updated!',
         description: (
           <div className="mt-2">
             <p className="mb-2 text-sm">Export your proposal:</p>
@@ -414,7 +502,7 @@ export default function Index() {
           onOpenChange={(open) => {
             setSaveDialogOpen(open);
             // If saved successfully and there was pending navigation, go there
-            if (!open && pendingNavigation && !isSaving) {
+            if (!open && pendingNavigation && !isSaving && !isUpdating) {
               setTimeout(() => {
                 if (pendingNavigation) {
                   navigate(pendingNavigation);
@@ -424,8 +512,11 @@ export default function Index() {
             }
           }}
           onSave={handleSave}
-          isSaving={isSaving}
+          onUpdate={handleUpdate}
+          isSaving={isSaving || isUpdating}
           defaultName={merchant.name ? `${merchant.name} Consolidation` : ''}
+          existingId={loadedCalculationId}
+          existingName={loadedCalculationName}
         />
 
         <UnsavedChangesDialog
