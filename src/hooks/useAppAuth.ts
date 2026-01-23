@@ -43,10 +43,10 @@ export function useAppAuth() {
     setIsAuthenticated(false);
   };
 
-  const changePassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const { data, error } = await supabase.functions.invoke('change-password', {
-        body: { newPassword }
+        body: { currentPassword, newPassword }
       });
 
       if (error) {

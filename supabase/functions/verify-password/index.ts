@@ -6,6 +6,62 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper functions for hex encoding/decoding
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function fromHex(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+// PBKDF2-based password verification using Web Crypto API
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  try {
+    // Parse stored hash format: algorithm$iterations$salt$hash
+    const parts = storedHash.split('$');
+    if (parts.length !== 4 || parts[0] !== 'pbkdf2') {
+      console.error('Invalid hash format');
+      return false;
+    }
+    
+    const iterations = parseInt(parts[1], 10);
+    const salt = fromHex(parts[2]);
+    const expectedHash = parts[3];
+    
+    // Derive key from password
+    const encoder = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(password),
+      'PBKDF2',
+      false,
+      ['deriveBits']
+    );
+    
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: 'PBKDF2',
+        salt: salt.buffer as ArrayBuffer,
+        iterations: iterations,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      256
+    );
+    
+    const derivedHash = toHex(new Uint8Array(derivedBits));
+    return derivedHash === expectedHash;
+  } catch (err) {
+    console.error('Password verification error:', err);
+    return false;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -47,7 +103,10 @@ serve(async (req) => {
       );
     }
 
-    const isValid = password === data.password_hash;
+    // Verify password
+    const isValid = await verifyPassword(password, data.password_hash);
+
+    console.log('Password verification attempt:', isValid ? 'success' : 'failed');
 
     return new Response(
       JSON.stringify({ success: isValid }),

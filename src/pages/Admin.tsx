@@ -10,7 +10,8 @@ import { useAppAuth } from '@/hooks/useAppAuth';
 import { ArrowLeft, Loader2, Shield } from 'lucide-react';
 
 const passwordSchema = z.object({
-  newPassword: z.string().min(4, 'Password must be at least 4 characters'),
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string()
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
@@ -18,10 +19,11 @@ const passwordSchema = z.object({
 });
 
 export default function Admin() {
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
+  const [errors, setErrors] = useState<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
 
   const { changePassword } = useAppAuth();
   const navigate = useNavigate();
@@ -30,10 +32,11 @@ export default function Admin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const validation = passwordSchema.safeParse({ newPassword, confirmPassword });
+    const validation = passwordSchema.safeParse({ currentPassword, newPassword, confirmPassword });
     if (!validation.success) {
-      const fieldErrors: { newPassword?: string; confirmPassword?: string } = {};
+      const fieldErrors: { currentPassword?: string; newPassword?: string; confirmPassword?: string } = {};
       validation.error.errors.forEach((err) => {
+        if (err.path[0] === 'currentPassword') fieldErrors.currentPassword = err.message;
         if (err.path[0] === 'newPassword') fieldErrors.newPassword = err.message;
         if (err.path[0] === 'confirmPassword') fieldErrors.confirmPassword = err.message;
       });
@@ -45,7 +48,7 @@ export default function Admin() {
     setIsSubmitting(true);
 
     try {
-      const result = await changePassword(newPassword);
+      const result = await changePassword(currentPassword, newPassword);
       
       if (result.success) {
         toast({
@@ -80,13 +83,27 @@ export default function Admin() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current password"
+                className={errors.currentPassword ? 'border-destructive' : ''}
+              />
+              {errors.currentPassword && (
+                <p className="text-sm text-destructive mt-1">{errors.currentPassword}</p>
+              )}
+            </div>
+            <div>
               <Label htmlFor="newPassword">New Password</Label>
               <Input
                 id="newPassword"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
+                placeholder="Enter new password (min 8 characters)"
                 className={errors.newPassword ? 'border-destructive' : ''}
               />
               {errors.newPassword && (
