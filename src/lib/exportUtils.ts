@@ -33,6 +33,7 @@ export function calculateSchedules(
 ) {
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalAdvanceAmount = externalPositions.reduce((sum, p) => sum + (p.advanceAmount ?? p.balance), 0);
   const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   const positionsWithDays = positions.map(p => ({
@@ -40,7 +41,8 @@ export function calculateSchedules(
     daysLeft: p.dailyPayment > 0 && p.balance > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0
   }));
 
-  const totalFunding = (settings.newMoney + totalBalance) / (1 - settings.feePercent);
+  // Use totalAdvanceAmount instead of totalBalance for funding calculations
+  const totalFunding = (settings.newMoney + totalAdvanceAmount) / (1 - settings.feePercent);
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
   const newDailyPayment = totalCurrentDailyPayment * (1 - settings.dailyPaymentDecrease);
@@ -133,6 +135,7 @@ export function calculateSchedules(
     positionsWithDays,
     metrics: {
       totalBalance,
+      totalAdvanceAmount,
       totalCurrentDailyPayment,
       totalFunding,
       netAdvance,
@@ -216,19 +219,20 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ['Entity', 'Balance', 'Advance Amount', 'Daily Payment', 'Days Left', 'Last Payment Date'],
     ...externalPositions.map(p => [
       p.entity || 'Unknown',
       fmtNoDecimals(p.balance),
+      fmtNoDecimals(p.advanceAmount ?? p.balance),
       fmtNoDecimals(p.dailyPayment),
       p.daysLeft,
       getFormattedLastPaymentDate(p.daysLeft)
     ]),
     [''],
-    ['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
+    ['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalAdvanceAmount), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
@@ -451,15 +455,16 @@ export async function exportToPDF(calculation: SavedCalculation) {
   
   autoTable(doc, {
     startY: 35,
-    head: [['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment']],
+    head: [['Entity', 'Balance', 'Advance', 'Daily Payment', 'Days Left', 'Last Payment']],
     body: externalPositions.map(p => [
       p.entity || 'Unknown',
       fmtNoDecimals(p.balance),
+      fmtNoDecimals(p.advanceAmount ?? p.balance),
       fmtNoDecimals(p.dailyPayment),
       p.daysLeft.toString(),
       getFormattedLastPaymentDate(p.daysLeft)
     ]),
-    foot: [['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']],
+    foot: [['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalAdvanceAmount), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']],
     theme: 'striped',
     headStyles: { fillColor: primaryColor, fontSize: 10 },
     footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },

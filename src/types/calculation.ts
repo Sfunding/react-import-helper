@@ -20,6 +20,7 @@ export type Position = {
   balance: number;
   dailyPayment: number;
   isOurPosition: boolean;
+  advanceAmount?: number; // Optional - defaults to balance if not set
 };
 
 export type SavedCalculation = {
