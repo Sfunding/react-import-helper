@@ -125,7 +125,8 @@ export default function Index() {
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   
   const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  const totalAdvanceAmount = externalPositions.reduce((sum, p) => sum + (p.advanceAmount ?? p.balance), 0);
+  // Use deal-level advance amount from settings, defaulting to totalBalance
+  const totalAdvanceAmount = settings.advanceAmount ?? totalBalance;
   const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
@@ -375,31 +376,28 @@ export default function Index() {
     setAdjustmentDialogOpen(true);
   };
 
-  // Handle advance amount change with confirmation
-  const handleAdvanceChange = (positionId: number, newAdvance: number) => {
-    const position = positions.find(p => p.id === positionId);
-    if (!position) return;
-    
-    const oldAdvance = position.advanceAmount ?? position.balance;
+  // Handle deal-level advance amount change with confirmation
+  const handleAdvanceChange = (newAdvance: number) => {
+    const oldAdvance = settings.advanceAmount ?? totalBalance;
     if (Math.abs(oldAdvance - newAdvance) < 0.01) return;
     
     // Calculate funding impact
-    const currentTotalAdvance = externalPositions.reduce((sum, p) => sum + (p.advanceAmount ?? p.balance), 0);
-    const newTotalAdvance = currentTotalAdvance - oldAdvance + newAdvance;
-    const oldTotalFunding = (settings.newMoney + currentTotalAdvance) / (1 - settings.feePercent);
-    const newTotalFunding = (settings.newMoney + newTotalAdvance) / (1 - settings.feePercent);
+    const oldTotalFunding = (settings.newMoney + oldAdvance) / (1 - settings.feePercent);
+    const newTotalFunding = (settings.newMoney + newAdvance) / (1 - settings.feePercent);
+    const oldRtr = oldTotalFunding * settings.rate;
+    const newRtr = newTotalFunding * settings.rate;
     
     setPendingChange({
       type: 'advance',
-      positionId,
-      positionEntity: position.entity || 'Unknown',
       oldAdvance,
       newAdvance,
-      balance: position.balance,
+      totalBalance,
       oldTotalFunding,
       newTotalFunding,
-      oldDailyDebit: newDailyPayment,
-      newDailyDebit: newDailyPayment, // Daily debit stays the same (it's based on discount %)
+      oldRtr,
+      newRtr,
+      newDailyPayment,
+      daysToPayoff: totalDays,
     });
     setAdjustmentDialogOpen(true);
   };
@@ -411,11 +409,7 @@ export default function Index() {
     if (pendingChange.type === 'discount') {
       setSettings({ ...settings, dailyPaymentDecrease: pendingChange.newValue });
     } else {
-      setPositions(positions.map(p => 
-        p.id === pendingChange.positionId 
-          ? { ...p, advanceAmount: pendingChange.newAdvance }
-          : p
-      ));
+      setSettings({ ...settings, advanceAmount: pendingChange.newAdvance });
     }
     
     setAdjustmentDialogOpen(false);
@@ -841,7 +835,71 @@ export default function Index() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Deal Summary - Key Metrics Header */}
+      <div className="mb-4 p-4 bg-primary rounded-lg shadow-lg">
+        <h3 className="text-primary-foreground font-bold text-lg mb-3">Deal Summary</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* Advance Amount - Editable */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="text-xs text-primary-foreground/80 font-medium uppercase flex items-center gap-1 mb-1 cursor-help">
+                    Advance Amount
+                    <Info className="h-3 w-3" />
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[250px]">
+                  <p>The advance amount controls total funding and RTR calculations. Defaults to total position balance but can be adjusted.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary-foreground/70 text-sm font-medium">$</span>
+              <input 
+                type="number" 
+                defaultValue={totalAdvanceAmount || ''}
+                key={`advance-${settings.advanceAmount ?? totalBalance}`}
+                onBlur={e => {
+                  const newValue = parseFloat(e.target.value) || 0;
+                  const currentAdvance = settings.advanceAmount ?? totalBalance;
+                  if (Math.abs(newValue - currentAdvance) > 0.01) {
+                    handleAdvanceChange(newValue);
+                  }
+                }}
+                onChange={() => {}}
+                placeholder="0"
+                className="w-full p-2 pl-5 bg-primary-foreground text-primary rounded-md text-lg font-bold text-right border-2 border-primary-foreground/30 focus:border-primary-foreground"
+              />
+            </div>
+          </div>
+          
+          {/* Factor Rate - Display */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Factor Rate</div>
+            <div className="text-2xl font-bold text-primary-foreground">{settings.rate.toFixed(3)}</div>
+          </div>
+          
+          {/* Total Payback (RTR) - Display */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Total Payback</div>
+            <div className="text-2xl font-bold text-primary-foreground">{fmt(totalFunding * settings.rate)}</div>
+          </div>
+          
+          {/* Daily Payment - Display */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Daily Payment</div>
+            <div className="text-2xl font-bold text-primary-foreground">{fmt(newDailyPayment)}</div>
+          </div>
+          
+          {/* Number of Debits - Display */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1"># of Debits</div>
+            <div className="text-2xl font-bold text-primary-foreground">{totalDays}</div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex gap-0.5 border-b-2 border-border overflow-x-auto">
         {tabs.map(tab => (
           <button 
@@ -890,21 +948,6 @@ export default function Index() {
                     <tr className="bg-muted">
                       <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
-                      <th className="p-3 text-right border-b-2 border-border font-semibold">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-help flex items-center justify-end gap-1">
-                                Advance
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[250px]">
-                              <p>The advance amount affects how much funding we provide. Balance affects weekly infusions (payoffs), while Advance affects total funding and RTR calculations.</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily Payment</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Last Payment</th>
@@ -914,7 +957,6 @@ export default function Index() {
                   <tbody>
                     {positions.filter(p => !p.isOurPosition).map(p => {
                       const daysLeft = p.dailyPayment > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0;
-                      const currentAdvance = p.advanceAmount ?? p.balance;
                       return (
                         <tr key={p.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                           <td className="p-2">
@@ -934,26 +976,6 @@ export default function Index() {
                                 onChange={e => updatePosition(p.id, 'balance', parseFloat(e.target.value) || 0)} 
                                 placeholder="0.00" 
                                 className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
-                              />
-                            </div>
-                          </td>
-                          <td className="p-2">
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <input 
-                                type="number" 
-                                value={currentAdvance || ''} 
-                                onBlur={e => {
-                                  const newValue = parseFloat(e.target.value) || 0;
-                                  if (newValue !== currentAdvance) {
-                                    handleAdvanceChange(p.id, newValue);
-                                  }
-                                }}
-                                onChange={e => {}} // Controlled but we only trigger on blur
-                                defaultValue={currentAdvance || ''}
-                                key={`${p.id}-${currentAdvance}`} // Force re-render when value changes
-                                placeholder="0.00" 
-                                className="w-full p-2 pl-5 border-2 border-info rounded-md text-right bg-info/5"
                               />
                             </div>
                           </td>
@@ -997,7 +1019,6 @@ export default function Index() {
                     <tr className="bg-primary text-primary-foreground font-bold">
                       <td className="p-3 rounded-bl-md">TOTAL ({externalPositions.length} positions)</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
-                      <td className="p-3 text-right">{fmt(totalAdvanceAmount)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
                       <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center">-</td>
