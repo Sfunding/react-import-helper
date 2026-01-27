@@ -1,67 +1,94 @@
 
 
-## Implement Fee Schedule Logic (Upfront vs Average)
+## Enhanced RTR & Exposure Visibility
 
 ### Overview
-Currently the Fee Schedule dropdown ("Average" / "Fee Upfront") is cosmetic only. This plan implements the actual logic so that:
-
-- **Fee Upfront**: The full fee is deducted from the Day 1 cash infusion. The RTR (Return to Repay) on Day 1 is larger because it's calculated on the full funding amount. Net to merchant stays the same.
-- **Average**: The fee is spread proportionally across all cash infusions throughout the deal.
+Add comprehensive visibility into RTR (Return to Repay) and Exposure calculations throughout the application, making it clear how the contract amount is calculated including fees on Day 1.
 
 ---
 
-### How It Works
+### What You'll See
 
-| Mode | Day 1 Cash Infusion | RTR Calculation | Contract Size |
-|------|---------------------|-----------------|---------------|
-| **Fee Upfront** | Normal (new money + position payoffs) | RTR = (cumulative cash + FULL fee) x rate | Larger upfront |
-| **Average** | Normal (new money + position payoffs) | RTR = (cumulative cash + proportional fee) x rate | Spread out |
+**1. Day 1 Contract Summary Card (New)**
+A prominent card above the Daily Schedule showing:
+- **Cash Infusion**: How much cash went in on Day 1
+- **+ Fees Included**: The consolidation fees added
+- **= Gross Contract**: Total funding + fees (what RTR is based on)
+- **× Rate**: The factor rate applied
+- **= Day 1 RTR**: The full return-to-repay amount
 
-**Example with $100,000 total funding and 9% fee ($9,000):**
+This makes it crystal clear that the RTR is based on (cash + fees) × rate.
 
-- **Fee Upfront**: Day 1 RTR includes the full $9,000 fee immediately
-- **Average**: If Day 1 infusion is 40% of total, only $3,600 of fee is included in RTR
+**2. Enhanced Daily Schedule Table**
+Add columns showing the full picture:
+| Day | Cash In | Cumulative Cash | + Fees | = Gross | Daily Debit | RTR Balance | Exposure |
+
+Currently the table shows: Day, Cash Infusion, Daily Withdrawal, Exposure, RTR Balance
+Will add: **Cumulative Net Funded**, **Gross (w/ Fees)** columns
+
+**3. Remove 200-row limit**
+Show the full schedule instead of truncating at 200 days - all days will be visible with a scroll.
+
+**4. ScheduleBreakdownDialog Enhancement**
+When clicking Day 1's Cash Infusion, the breakdown dialog will also show:
+- How the fees are incorporated
+- What the Gross Contract amount becomes
+- The RTR calculation for that day
 
 ---
 
-### Technical Implementation
+### Technical Changes
 
 #### File: `src/pages/Index.tsx`
 
-**Change 1: Modify Daily Schedule Calculation (lines 142-186)**
-
-Current logic uses a fixed `originationFee = consolidationFees` that's added to every day's cumulative gross calculation.
-
-New logic:
+**Change 1: Add Day 1 Summary Card**
+Add a summary card above the daily schedule table (when activeTab === 'daily') showing:
 ```text
-if (feeSchedule === 'upfront'):
-    - Day 1: Add full consolidationFees to cumulativeGross
-    - Day 2+: No additional fee added
-    
-if (feeSchedule === 'average'):
-    - Track what proportion of total expected cash has been collected
-    - Add proportional fee: (cumulativeNetFunded / totalExpectedCash) x consolidationFees
+┌────────────────────────────────────────────────────────────┐
+│  📊 Day 1 Contract Formation                               │
+│                                                            │
+│  Cash Infused:    $85,000    (New Money + Position Pays)   │
+│  + Orig Fee:      $ 9,000    (9% of Total Funding)         │
+│  ─────────────────────────────                             │
+│  Gross Contract:  $94,000                                  │
+│  × Factor Rate:   1.499                                    │
+│  ─────────────────────────────                             │
+│  Day 1 RTR:       $140,906   (What we're collecting)       │
+└────────────────────────────────────────────────────────────┘
 ```
 
-**Change 2: Calculate Total Expected Cash Infusion**
+**Change 2: Enhance Daily Table Columns**
+Current columns:
+- Day | Cash Infusion | Daily Withdrawal | Exposure | RTR Balance
 
-Before the daily loop, calculate the total expected cash infusion (new money + all position daily payments x their remaining days). This is needed for the "average" proportional calculation.
+New columns:
+- Day | Cash In | Cum. Funded | Gross | Daily Debit | RTR Balance | Exposure
+
+This adds cumulative and gross visibility so users can trace the math.
+
+**Change 3: Remove 200-row slice**
+On line 884:
+```tsx
+// Before:
+{dailySchedule.slice(0, 200).map((d, i) => ...
+
+// After:
+{dailySchedule.map((d, i) => ...
+```
+
+This shows the complete schedule.
 
 ---
 
-#### File: `src/lib/exportUtils.ts`
+#### File: `src/components/ScheduleBreakdownDialog.tsx`
 
-**Change: Update `calculateSchedules` function (lines 54-102)**
+**Change: Add RTR/Fee Breakdown for Day 1**
+When viewing Day 1 breakdown, add a section showing:
+- The origination fee being added
+- How Gross Contract is calculated
+- What the RTR amount is for that day
 
-Mirror the same logic changes from Index.tsx so that exports (Excel/PDF) reflect the correct fee schedule behavior.
-
----
-
-### Visual Indicator
-
-Add a tooltip or helper text to the Fee Schedule dropdown explaining:
-- **Fee Upfront**: "Fee collected Day 1 - larger initial contract"
-- **Average**: "Fee spread across all cash infusions"
+This will use props passed from the parent to show fee and rate info.
 
 ---
 
@@ -69,17 +96,17 @@ Add a tooltip or helper text to the Fee Schedule dropdown explaining:
 
 | File | Changes |
 |------|---------|
-| `src/pages/Index.tsx` | Update dailySchedule calculation to respect feeSchedule setting |
-| `src/lib/exportUtils.ts` | Update calculateSchedules to match Index.tsx logic |
+| `src/pages/Index.tsx` | Add Day 1 summary card, enhance daily table columns, remove 200-row limit |
+| `src/components/ScheduleBreakdownDialog.tsx` | Add RTR/fee breakdown section for Day 1 |
 
 ---
 
 ### Summary
 
-1. Calculate total expected cash infusion before the schedule loop
-2. In the daily schedule loop:
-   - **Upfront**: Add full fee on Day 1 only
-   - **Average**: Add proportional fee based on cash collected so far
-3. Update both Index.tsx and exportUtils.ts to keep them in sync
-4. Add helpful tooltips to the dropdown options
+1. **Day 1 Summary Card**: Shows how Cash + Fees = Gross → RTR
+2. **Enhanced Table Columns**: Shows cumulative and gross amounts per row  
+3. **Full Schedule**: No more 200-day limit - see entire payoff timeline
+4. **Fee Visibility in Breakdown**: Day 1 dialog explains fee contribution to RTR
+
+This gives you complete transparency into how the RTR is formed and how exposure changes day by day.
 
