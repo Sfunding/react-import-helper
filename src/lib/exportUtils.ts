@@ -33,7 +33,8 @@ export function calculateSchedules(
 ) {
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  const totalAdvanceAmount = externalPositions.reduce((sum, p) => sum + (p.advanceAmount ?? p.balance), 0);
+  // Use deal-level advance amount from settings, defaulting to totalBalance
+  const totalAdvanceAmount = settings.advanceAmount ?? totalBalance;
   const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   const positionsWithDays = positions.map(p => ({
@@ -219,20 +220,19 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Entity', 'Balance', 'Advance Amount', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
     ...externalPositions.map(p => [
       p.entity || 'Unknown',
       fmtNoDecimals(p.balance),
-      fmtNoDecimals(p.advanceAmount ?? p.balance),
       fmtNoDecimals(p.dailyPayment),
       p.daysLeft,
       getFormattedLastPaymentDate(p.daysLeft)
     ]),
     [''],
-    ['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalAdvanceAmount), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
+    ['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
@@ -455,16 +455,15 @@ export async function exportToPDF(calculation: SavedCalculation) {
   
   autoTable(doc, {
     startY: 35,
-    head: [['Entity', 'Balance', 'Advance', 'Daily Payment', 'Days Left', 'Last Payment']],
+    head: [['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment']],
     body: externalPositions.map(p => [
       p.entity || 'Unknown',
       fmtNoDecimals(p.balance),
-      fmtNoDecimals(p.advanceAmount ?? p.balance),
       fmtNoDecimals(p.dailyPayment),
       p.daysLeft.toString(),
       getFormattedLastPaymentDate(p.daysLeft)
     ]),
-    foot: [['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalAdvanceAmount), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']],
+    foot: [['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']],
     theme: 'striped',
     headStyles: { fillColor: primaryColor, fontSize: 10 },
     footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },

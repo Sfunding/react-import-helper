@@ -29,15 +29,15 @@ export interface DiscountChange {
 
 export interface AdvanceChange {
   type: 'advance';
-  positionId: number;
-  positionEntity: string;
   oldAdvance: number;
   newAdvance: number;
-  balance: number;
+  totalBalance: number;
   oldTotalFunding: number;
   newTotalFunding: number;
-  oldDailyDebit: number;
-  newDailyDebit: number;
+  oldRtr: number;
+  newRtr: number;
+  newDailyPayment: number;
+  daysToPayoff: number;
 }
 
 export type PendingChange = DiscountChange | AdvanceChange;
@@ -101,10 +101,6 @@ export function AdjustmentConfirmDialog({
                 </>
               ) : (
                 <>
-                  <div className="text-sm text-muted-foreground">
-                    Position: <span className="font-semibold text-foreground">{pendingChange.positionEntity || 'Unknown'}</span>
-                  </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground uppercase">Current Advance</div>
@@ -117,7 +113,7 @@ export function AdjustmentConfirmDialog({
                   </div>
                   
                   <div className="text-xs text-muted-foreground">
-                    Balance (unchanged): <span className="font-semibold">{fmt(pendingChange.balance)}</span>
+                    Total Position Balance (unchanged): <span className="font-semibold">{fmt(pendingChange.totalBalance)}</span>
                   </div>
                   
                   <div className="bg-muted rounded-lg p-3 space-y-2">
@@ -129,10 +125,18 @@ export function AdjustmentConfirmDialog({
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">New Daily Debit:</span>
+                      <span className="text-muted-foreground">RTR (Total Payback):</span>
                       <span className="font-medium">
-                        {fmt(pendingChange.oldDailyDebit)} → <span className="text-primary">{fmt(pendingChange.newDailyDebit)}</span>
+                        {fmt(pendingChange.oldRtr)} → <span className="text-primary">{fmt(pendingChange.newRtr)}</span>
                       </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Daily Payment:</span>
+                      <span className="font-medium">{fmt(pendingChange.newDailyPayment)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Days to Payoff:</span>
+                      <span className="font-medium">{pendingChange.daysToPayoff}</span>
                     </div>
                   </div>
                 </>
