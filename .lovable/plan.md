@@ -1,151 +1,109 @@
 
-## Add Adjustable Advance Amount with Confirmation Prompts
 
-### Overview
-Add an **Advance Amount** field to each position that allows adjusting how the deal is structured. When you change the advance amount, it affects the net funding and therefore the daily debits, while the weekly cash infusions (based on balance payoffs) remain unchanged. Additionally, both the Discount % and Advance Amount adjustments will trigger a confirmation prompt showing what changed before applying.
+## Fix: Move Advance Amount to Deal Summary
 
----
-
-### What Changes
-
-| Field | Effect When Adjusted |
-|-------|---------------------|
-| **Balance** | Affects weekly cash infusions (payoff schedule stays the same) |
-| **Advance Amount** (NEW) | Affects daily debits (how much we collect back) |
-| **Discount %** | Also affects daily debits calculation |
+### The Problem
+The Advance Amount was incorrectly added as a column in the positions table. Based on your reference images, you want it as a **single field in the Deal Summary section** - similar to how "Total Funding" is displayed prominently.
 
 ---
 
-### How It Works
+### What Will Change
 
-1. **New "Advance Amount" Column**: Add an "Advance" column to the positions table
-   - Default: Same as balance (so current behavior is preserved)
-   - When adjusted: The advance amount is used for calculating the daily debit schedule
-   - Balance still drives the weekly infusions (position payoffs)
-
-2. **Daily Debit Calculation Changes**:
-   - Currently: `newDailyPayment = totalCurrentDailyPayment * (1 - discount%)`
-   - Updated: The calculation will be based on total advance amounts instead of balances when calculating the RTR and daily debits
-
-3. **Confirmation Prompt**: When you change either:
-   - **Discount %** (the slider/input in settings)
-   - **Advance Amount** (on any position)
-   
-   A dialog appears showing:
-   - What the previous value was
-   - What the new value is
-   - How it affects the calculation (e.g., "New Daily Payment: $X -> $Y")
-   - Confirm or Cancel buttons
+| Current (Wrong) | Fixed (Correct) |
+|-----------------|-----------------|
+| "Advance" column in positions table | Single "Advance Amount" in Deal Summary |
+| Each position has its own advance input | One advance amount for the entire deal |
+| Shows in positions table footer | Shows in Deal Summary like your reference |
 
 ---
 
-### Technical Implementation
+### How It Should Work
+
+The Deal Summary will show these key metrics in a prominent header style (like your reference image with the blue background):
+
+| Metric | Description |
+|--------|-------------|
+| **Advance Amount** | Editable - controls daily debit calculations |
+| Factor Rate | The rate multiplier |
+| Total Payback | Advance Amount x Factor Rate |
+| Payment | New daily payment amount |
+| Number of Debits | Days to payoff |
+
+When you adjust the Advance Amount, the confirmation dialog will still appear showing the before/after impact.
+
+---
+
+### Technical Changes
 
 #### File: `src/types/calculation.ts`
-
-**Add new field to Position type:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `advanceAmount` | number | Optional - defaults to balance if not set |
-
----
-
-#### File: `src/components/AdjustmentConfirmDialog.tsx` (NEW)
-
-Create a reusable confirmation dialog that shows:
-- Field being adjusted (Discount % or Advance Amount)
-- Previous value vs New value
-- Impact on calculations (old vs new daily payment, RTR, etc.)
-- Confirm / Cancel buttons
-
----
+- Remove `advanceAmount` field from the `Position` type
+- No longer needed per-position
 
 #### File: `src/pages/Index.tsx`
 
-**Change 1: Track pending adjustments**
-Add state to track:
-- `pendingDiscountChange`: Holds the new discount value pending confirmation
-- `pendingAdvanceChange`: Holds { positionId, newAmount } pending confirmation
+**Change 1: Remove the Advance column from positions table**
+- Remove the "Advance" header column (lines 893-907)
+- Remove the advance input cell from each position row (lines 940-958)  
+- Remove the advance total from the footer (line 1000)
+- Remove the `handleAdvanceChange` function that handles per-position changes
 
-**Change 2: Intercept discount % changes**
-Instead of immediately applying `setSettings({...settings, dailyPaymentDecrease: newValue})`:
-- Store the pending value
-- Open the confirmation dialog
-- Only apply if user confirms
+**Change 2: Add Advance Amount to Settings or Deal Summary**
+- Add a single `advanceAmount` input field in the Deal Summary/Settings area
+- This will be an editable field that defaults to `totalBalance` (sum of position balances)
+- When changed, triggers the confirmation dialog
 
-**Change 3: Add Advance Amount column to positions table**
-- Add an input field for advance amount (next to balance)
-- Default display: use balance if advanceAmount is not set
-- On change: store pending value and open confirmation dialog
+**Change 3: Update calculations**
+- `totalAdvanceAmount` will come from this single settings value instead of summing per-position
+- The rest of the calculations (Total Funding, RTR, daily debits) remain the same but use this single value
 
-**Change 4: Update calculations to use advance amounts**
-- `totalFunding` calculation should consider advance amounts
-- RTR calculations should be based on advance amounts
-
-**Change 5: Update position table footer**
-- Show total balance AND total advance amount
-
----
-
-### User Experience
-
-**When you adjust Discount %:**
-
-```text
-+------------------------------------------+
-|  Confirm Discount Adjustment             |
-|------------------------------------------|
-|  Current Discount:    30%                |
-|  New Discount:        35%                |
-|                                          |
-|  Impact:                                 |
-|  • New Daily Payment: $850 -> $780       |
-|  • Days to Payoff:    187 -> 203         |
-|                                          |
-|  [Cancel]              [Confirm Change]  |
-+------------------------------------------+
-```
-
-**When you adjust Advance Amount:**
-
-```text
-+------------------------------------------+
-|  Confirm Advance Adjustment              |
-|------------------------------------------|
-|  Position: ABC Funding                   |
-|                                          |
-|  Current Advance:     $50,000            |
-|  New Advance:         $45,000            |
-|  Balance (unchanged): $50,000            |
-|                                          |
-|  Impact:                                 |
-|  • Total Funding: $100,000 -> $95,000    |
-|  • New Daily Debit: $850 -> $807         |
-|                                          |
-|  [Cancel]              [Confirm Change]  |
-+------------------------------------------+
-```
+**Change 4: Add Deal Summary Header**
+Create a prominent "Deal Summary" section styled like your reference (blue header with key metrics):
+- Advance Amount (editable with confirmation)
+- Factor Rate
+- Total Payback (RTR)
+- Payment (new daily)
+- Number of Debits (days)
 
 ---
 
-### Files to Create/Modify
+#### File: `src/lib/exportUtils.ts`
+- Remove per-position advance amount references
+- Use the single advance amount from settings
+
+---
+
+### Visual Result
+
+Your Deal Summary will look similar to your reference image:
+
+```text
++------------------------------------------------------------------+
+|                        DEAL SUMMARY                               |
+|------------------------------------------------------------------|
+| Advance Amount | Factor Rate | Total Payback | Payment | # Debits |
+|    $954,031    |    1.45     | $1,383,345    | $9,970  |   139    |
++------------------------------------------------------------------+
+```
+
+The "Advance Amount" will be editable (with confirmation prompt on change), while the other fields calculate automatically.
+
+---
+
+### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/types/calculation.ts` | Add `advanceAmount` field to Position type |
-| `src/components/AdjustmentConfirmDialog.tsx` | NEW - Reusable confirmation dialog |
-| `src/pages/Index.tsx` | Add pending state, intercept changes, show dialog, update calculations |
-| `src/lib/exportUtils.ts` | Update exports to include advance amounts |
+| `src/types/calculation.ts` | Remove `advanceAmount` from Position type |
+| `src/pages/Index.tsx` | Remove position-level advance column, add single Advance Amount to Deal Summary |
+| `src/lib/exportUtils.ts` | Update to use single advance amount |
 
 ---
 
 ### Summary
 
-1. Add `advanceAmount` field to positions (defaults to balance)
-2. Create confirmation dialog component showing before/after impact
-3. Intercept Discount % and Advance Amount changes to show confirmation
-4. Update RTR/debit calculations to use advance amounts
-5. Keep balance-based weekly infusions unchanged
+1. Remove the "Advance" column from the positions table entirely
+2. Add a single, prominent "Advance Amount" field in the Deal Summary section
+3. Style it like your reference image with key deal metrics in a header row
+4. Keep the confirmation dialog when the advance amount is changed
+5. The advance amount still drives the daily debit/RTR calculations, but now it's a deal-level field, not per-position
 
-This gives you full control over the deal structure while ensuring you consciously approve any changes that affect the payment calculations.
