@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
 import { ScheduleBreakdownDialog, BreakdownEntry } from '@/components/ScheduleBreakdownDialog';
+import { Day1SummaryCard } from '@/components/Day1SummaryCard';
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog';
 import { useCalculations } from '@/hooks/useCalculations';
 import { useToast } from '@/hooks/use-toast';
@@ -868,43 +869,60 @@ export default function Index() {
         )}
 
         {activeTab === 'daily' && (
-          <div className="max-h-96 overflow-y-auto rounded-lg border border-border">
-            {dailySchedule.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">Add positions to see daily schedule</div>
-            ) : (
-              <table className="w-full text-xs border-collapse">
-                <thead className="sticky top-0 bg-muted">
-                  <tr>
-                    {['Day', 'Cash Infusion', 'Daily Withdrawal', 'Exposure', 'RTR Balance'].map((h, i) => (
-                      <th key={i} className={`p-2.5 border-b-2 border-border font-semibold ${i === 0 ? 'text-center' : 'text-right'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailySchedule.slice(0, 200).map((d, i) => (
-                    <tr key={i} className={`${d.isPayDay ? 'bg-secondary/20' : 'bg-card'} hover:bg-muted/50 transition-colors`}>
-                      <td className="p-2 text-center font-medium">{d.day}</td>
-                      <td 
-                        className={`p-2 text-right ${d.cashInfusion > 0 ? 'text-destructive font-medium cursor-pointer hover:underline' : 'text-muted-foreground'}`}
-                        onClick={() => d.cashInfusion > 0 && handleBreakdownClick(d.day)}
-                      >
-                        {d.cashInfusion > 0 ? (
-                          <span className="inline-flex items-center gap-1">
-                            {fmt(d.cashInfusion)}
-                            <ChevronRight className="h-3 w-3" />
-                          </span>
-                        ) : '-'}
-                      </td>
-                      <td className="p-2 text-right text-success font-medium">{d.dailyWithdrawal > 0 ? fmt(d.dailyWithdrawal) : '-'}</td>
-                      <td className={`p-2 text-right font-semibold ${d.exposureOnReverse > 0 ? 'text-destructive' : 'text-success'}`}>
-                        {fmt(d.exposureOnReverse)}
-                      </td>
-                      <td className="p-2 text-right">{fmt(d.rtrBalance)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="space-y-4">
+            {/* Day 1 Summary Card */}
+            {dailySchedule.length > 0 && (
+              <Day1SummaryCard
+                cashInfused={dailySchedule[0]?.cashInfusion || 0}
+                originationFee={consolidationFees}
+                feePercent={settings.feePercent}
+                grossContract={dailySchedule[0]?.cumulativeGross || 0}
+                factorRate={settings.rate}
+                day1Rtr={dailySchedule[0]?.rtrBalance || 0}
+                feeSchedule={settings.feeSchedule}
+              />
             )}
+            
+            <div className="max-h-[500px] overflow-y-auto rounded-lg border border-border">
+              {dailySchedule.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">Add positions to see daily schedule</div>
+              ) : (
+                <table className="w-full text-xs border-collapse">
+                  <thead className="sticky top-0 bg-muted z-10">
+                    <tr>
+                      {['Day', 'Cash In', 'Cum. Funded', 'Gross (w/ Fees)', 'Daily Debit', 'RTR Balance', 'Exposure'].map((h, i) => (
+                        <th key={i} className={`p-2.5 border-b-2 border-border font-semibold ${i === 0 ? 'text-center' : 'text-right'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailySchedule.map((d, i) => (
+                      <tr key={i} className={`${d.isPayDay ? 'bg-secondary/20' : 'bg-card'} hover:bg-muted/50 transition-colors`}>
+                        <td className="p-2 text-center font-medium">{d.day}</td>
+                        <td 
+                          className={`p-2 text-right ${d.cashInfusion > 0 ? 'text-destructive font-medium cursor-pointer hover:underline' : 'text-muted-foreground'}`}
+                          onClick={() => d.cashInfusion > 0 && handleBreakdownClick(d.day)}
+                        >
+                          {d.cashInfusion > 0 ? (
+                            <span className="inline-flex items-center justify-end gap-1">
+                              {fmt(d.cashInfusion)}
+                              <ChevronRight className="h-3 w-3" />
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="p-2 text-right text-muted-foreground">{fmt(d.cumulativeNetFunded)}</td>
+                        <td className="p-2 text-right font-medium text-primary">{fmt(d.cumulativeGross)}</td>
+                        <td className="p-2 text-right text-success font-medium">{d.dailyWithdrawal > 0 ? fmt(d.dailyWithdrawal) : '-'}</td>
+                        <td className="p-2 text-right">{fmt(d.rtrBalance)}</td>
+                        <td className={`p-2 text-right font-semibold ${d.exposureOnReverse > 0 ? 'text-destructive' : 'text-success'}`}>
+                          {fmt(d.exposureOnReverse)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 
@@ -1007,6 +1025,12 @@ export default function Index() {
           newMoney={settings.newMoney}
           entries={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).entries : []}
           total={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).total : 0}
+          originationFee={consolidationFees}
+          feePercent={settings.feePercent}
+          grossContract={dailySchedule[0]?.cumulativeGross || 0}
+          factorRate={settings.rate}
+          day1Rtr={dailySchedule[0]?.rtrBalance || 0}
+          feeSchedule={settings.feeSchedule}
         />
       </div>
     </div>

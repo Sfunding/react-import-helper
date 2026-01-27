@@ -28,6 +28,13 @@ type ScheduleBreakdownDialogProps = {
   newMoney: number;
   entries: BreakdownEntry[];
   total: number;
+  // RTR/Fee info for Day 1 breakdown
+  originationFee?: number;
+  feePercent?: number;
+  grossContract?: number;
+  factorRate?: number;
+  day1Rtr?: number;
+  feeSchedule?: string;
 };
 
 const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v || 0);
@@ -39,7 +46,13 @@ export function ScheduleBreakdownDialog({
   week,
   newMoney,
   entries,
-  total
+  total,
+  originationFee = 0,
+  feePercent = 0,
+  grossContract = 0,
+  factorRate = 0,
+  day1Rtr = 0,
+  feeSchedule = 'average'
 }: ScheduleBreakdownDialogProps) {
   const [selectedPosition, setSelectedPosition] = useState<BreakdownEntry | null>(null);
   const title = day ? `Day ${day} Breakdown` : week ? `Week ${week} Breakdown` : 'Cash Infusion Breakdown';
@@ -113,6 +126,35 @@ export function ScheduleBreakdownDialog({
               </div>
             </div>
 
+            {/* RTR/Fee Breakdown for Day 1 */}
+            {(day === 1 || week === 1) && originationFee > 0 && (
+              <div className="p-3 bg-primary/5 rounded-lg border border-primary/20 mt-4">
+                <p className="text-sm font-semibold text-primary mb-2">📊 RTR Calculation</p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash Infused:</span>
+                    <span className="font-medium">{fmt(total)}</span>
+                  </div>
+                  <div className="flex justify-between text-destructive">
+                    <span>+ {feeSchedule === 'upfront' ? 'Full Fee' : 'Proportional Fee'} ({(feePercent * 100).toFixed(0)}%):</span>
+                    <span className="font-medium">{fmt(originationFee)}</span>
+                  </div>
+                  <div className="border-t border-dashed border-border pt-1 flex justify-between">
+                    <span className="font-medium">= Gross Contract:</span>
+                    <span className="font-bold text-primary">{fmt(grossContract)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">× Factor Rate:</span>
+                    <span className="font-medium">{factorRate.toFixed(3)}</span>
+                  </div>
+                  <div className="border-t border-dashed border-border pt-1 flex justify-between">
+                    <span className="font-medium">= Day 1 RTR:</span>
+                    <span className="font-bold text-success">{fmt(day1Rtr)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Explanation */}
             {(day === 1 || week === 1) && (
               <div className="p-3 bg-info/10 rounded-lg border border-info/20 mt-4">
