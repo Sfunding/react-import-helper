@@ -640,6 +640,10 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   const successColor: [number, number, number] = [22, 163, 74]; // Green
   const lightBlue: [number, number, number] = [239, 246, 255]; // Light blue bg
   const lightGreen: [number, number, number] = [220, 252, 231]; // Light green bg
+  const darkGreen: [number, number, number] = [21, 128, 61]; // Darker green for gradient effect
+
+  // White label company name
+  const companyName = settings.whiteLabelCompany?.trim() || 'AVION FUNDING';
 
   // Page 1: Main Offer
   // Header bar
@@ -650,7 +654,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('AVION FUNDING', margin, 25);
+  doc.text(companyName.toUpperCase(), margin, 25);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
   doc.text('Your Consolidation Offer', margin, 35);
@@ -711,43 +715,108 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
 
   currentY += 25;
 
-  // Cash & Savings Row
-  const smallBoxWidth = (pageWidth - margin * 2 - 15) / 2;
-  const smallBoxHeight = 50;
+  // ========== PROMINENT SAVINGS SECTION ==========
+  const savingsBoxHeight = 70;
+  const savingsFullWidth = pageWidth - margin * 2;
+  
+  // Full-width green gradient background
+  doc.setFillColor(...successColor);
+  doc.roundedRect(margin, currentY, savingsFullWidth, savingsBoxHeight, 5, 5, 'F');
+  
+  // Add a darker accent stripe at top
+  doc.setFillColor(...darkGreen);
+  doc.roundedRect(margin, currentY, savingsFullWidth, 18, 5, 5, 'F');
+  doc.rect(margin, currentY + 10, savingsFullWidth, 8, 'F'); // Fill bottom corners
+  
+  // Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('💰  YOUR SAVINGS  💰', pageWidth / 2, currentY + 12, { align: 'center' });
+  
+  // Savings boxes inside
+  const innerPadding = 10;
+  const innerY = currentY + 22;
+  const innerHeight = savingsBoxHeight - 28;
+  const savingsColWidth = (savingsFullWidth - innerPadding * 4) / 3;
+  
+  // Daily Savings Box
+  const dailyX = margin + innerPadding;
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(dailyX, innerY, savingsColWidth, innerHeight, 3, 3, 'F');
+  doc.setTextColor(100, 100, 100);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('DAILY', dailyX + savingsColWidth/2, innerY + 12, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.dailySavings), dailyX + savingsColWidth/2, innerY + 28, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.text('per day', dailyX + savingsColWidth/2, innerY + 38, { align: 'center' });
+  
+  // Weekly Savings Box
+  const weeklyX = dailyX + savingsColWidth + innerPadding;
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(weeklyX, innerY, savingsColWidth, innerHeight, 3, 3, 'F');
+  doc.setTextColor(100, 100, 100);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('WEEKLY', weeklyX + savingsColWidth/2, innerY + 12, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.weeklySavings), weeklyX + savingsColWidth/2, innerY + 28, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.text('per week', weeklyX + savingsColWidth/2, innerY + 38, { align: 'center' });
+  
+  // Monthly Savings Box (larger emphasis)
+  const monthlyX = weeklyX + savingsColWidth + innerPadding;
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(monthlyX, innerY, savingsColWidth, innerHeight, 3, 3, 'F');
+  // Add border for emphasis
+  doc.setDrawColor(...darkGreen);
+  doc.setLineWidth(2);
+  doc.roundedRect(monthlyX, innerY, savingsColWidth, innerHeight, 3, 3, 'S');
+  doc.setTextColor(...darkGreen);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('★ MONTHLY ★', monthlyX + savingsColWidth/2, innerY + 12, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.monthlySavings), monthlyX + savingsColWidth/2, innerY + 28, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.text('per month', monthlyX + savingsColWidth/2, innerY + 38, { align: 'center' });
 
-  // Cash You Receive
+  currentY += savingsBoxHeight + 12;
+
+  // Cash You Receive (below savings)
+  const cashBoxWidth = 140;
+  const cashBoxHeight = 40;
+  const cashX = (pageWidth - cashBoxWidth) / 2;
   doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin, currentY, smallBoxWidth, smallBoxHeight, 3, 3, 'F');
+  doc.roundedRect(cashX, currentY, cashBoxWidth, cashBoxHeight, 3, 3, 'F');
   doc.setTextColor(...primaryColor);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('CASH YOU RECEIVE', margin + smallBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(20);
+  doc.text('CASH YOU RECEIVE ON DAY 1', cashX + cashBoxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   if (settings.newMoney > 0) {
-    doc.text(fmtNoDecimals(settings.newMoney), margin + smallBoxWidth/2, currentY + 30, { align: 'center' });
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('on Day 1', margin + smallBoxWidth/2, currentY + 42, { align: 'center' });
+    doc.text(fmtNoDecimals(settings.newMoney), cashX + cashBoxWidth/2, currentY + 30, { align: 'center' });
   } else {
-    doc.setFontSize(14);
-    doc.text('Consolidation Only', margin + smallBoxWidth/2, currentY + 32, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('Consolidation Only', cashX + cashBoxWidth/2, currentY + 28, { align: 'center' });
   }
 
-  // Your Savings
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin + smallBoxWidth + 15, currentY, smallBoxWidth, smallBoxHeight, 3, 3, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('YOUR SAVINGS', margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`Daily: ${fmtNoDecimals(metrics.dailySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 26, { align: 'center' });
-  doc.text(`Weekly: ${fmtNoDecimals(metrics.weeklySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 36, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Monthly: ${fmtNoDecimals(metrics.monthlySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 46, { align: 'center' });
-
-  currentY += smallBoxHeight + 15;
+  currentY += cashBoxHeight + 15;
 
   // Deal Terms Section
   doc.setFillColor(...primaryColor);
@@ -883,11 +952,11 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
     doc.text(`* Positions fall off on Day ${falloffDay}. Days are business days from deal start.`, margin, currentY + 5);
   }
 
-  // Footer
+  // Footer (use white label company name)
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
   doc.text(
-    `Avion Funding | ${calculation.merchant_name || calculation.name} | ${dateStr}`,
+    `${companyName} | ${calculation.merchant_name || calculation.name} | ${dateStr}`,
     pageWidth / 2,
     pageHeight - 10,
     { align: 'center' }
