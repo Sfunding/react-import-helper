@@ -190,8 +190,8 @@ export default function Index() {
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
   
-  // Total Payback for display (anchor value - always derived from funding × rate)
-  const totalPayback = totalFunding * settings.rate;
+  // Base payback calculation from funding × rate (used as default reference)
+  const basePayback = totalFunding * settings.rate;
   
   // Determine Daily Payment and Term based on which is set
   // Priority: dailyPaymentOverride > termDays > discount-based calculation
@@ -199,18 +199,21 @@ export default function Index() {
   let calculatedNumberOfDebits: number;
   
   if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
-    // User specified daily payment → derive term
+    // User specified daily payment → derive term from base payback
     newDailyPayment = settings.dailyPaymentOverride;
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
   } else if (settings.termDays !== null && settings.termDays > 0) {
-    // User specified term → derive daily payment
+    // User specified term → derive daily payment from base payback
     calculatedNumberOfDebits = settings.termDays;
-    newDailyPayment = calculatedNumberOfDebits > 0 ? totalPayback / calculatedNumberOfDebits : 0;
+    newDailyPayment = calculatedNumberOfDebits > 0 ? basePayback / calculatedNumberOfDebits : 0;
   } else {
     // Default: use discount to calculate payment, derive term
     newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
   }
+  
+  // CRITICAL: Total Payback ALWAYS equals Daily Payment × # of Debits (math ties out exactly)
+  const totalPayback = newDailyPayment * calculatedNumberOfDebits;
   
   // Derive the implied discount for display
   const impliedDiscount = includedDailyPayment > 0 
