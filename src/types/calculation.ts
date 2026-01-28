@@ -17,7 +17,7 @@ export type Settings = {
 export type Position = {
   id: number;
   entity: string;
-  balance: number;
+  balance: number | null;  // null = unknown balance
   dailyPayment: number;
   isOurPosition: boolean;
   includeInReverse: boolean;
