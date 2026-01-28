@@ -47,3 +47,46 @@ export function getFormattedLastPaymentDate(daysLeft: number): string {
   const date = getLastPaymentDate(daysLeft);
   return formatBusinessDate(date);
 }
+
+/**
+ * Calculates the number of business days between two dates (excludes weekends)
+ */
+export function getBusinessDaysBetween(startDate: Date, endDate: Date): number {
+  let count = 0;
+  const current = new Date(startDate);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  
+  while (current < end) {
+    current.setDate(current.getDate() + 1);
+    const dayOfWeek = current.getDay();
+    // Count only weekdays (Monday-Friday)
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+  }
+  
+  return count;
+}
+
+/**
+ * Calculates remaining balance based on funded amount, daily payment, and business days elapsed
+ */
+export function calculateRemainingBalance(
+  fundedDate: string | null,
+  amountFunded: number | null,
+  dailyPayment: number
+): number | null {
+  if (!fundedDate || amountFunded === null || amountFunded <= 0) {
+    return null;
+  }
+  
+  const funded = new Date(fundedDate);
+  const today = new Date();
+  const businessDaysElapsed = getBusinessDaysBetween(funded, today);
+  const totalPaid = businessDaysElapsed * dailyPayment;
+  const remaining = Math.max(0, amountFunded - totalPaid);
+  
+  return remaining;
+}

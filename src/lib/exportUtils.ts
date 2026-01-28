@@ -9,7 +9,8 @@ import {
   DayScheduleExport, 
   WeekScheduleExport 
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, calculateRemainingBalance } from '@/lib/dateUtils';
+import { format } from 'date-fns';
 
 // Helper to format currency
 const fmt = (v: number) => 
@@ -31,17 +32,26 @@ export function calculateSchedules(
   settings: Settings,
   merchantMonthlyRevenue: number
 ) {
+  // Helper to get effective balance (auto-calculated or manual)
+  const getEffectiveBalance = (p: Position): number | null => {
+    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+    return autoCalc !== null ? autoCalc : p.balance;
+  };
+
   // All external positions with known balances (for leverage calculations)
-  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance !== null && p.balance > 0);
+  const allExternalPositions = positions.filter(p => {
+    const effectiveBalance = getEffectiveBalance(p);
+    return !p.isOurPosition && effectiveBalance !== null && effectiveBalance > 0;
+  });
   // Only included positions (for reverse calculations)
   const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
   
   // Use ALL positions for leverage metrics
-  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   // Use INCLUDED positions for reverse calculations
-  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   // Advance Amount = Included positions + New Money
@@ -50,10 +60,14 @@ export function calculateSchedules(
   const totalBalance = includedBalance;
   const totalCurrentDailyPayment = includedDailyPayment;
   
-  const positionsWithDays = positions.map(p => ({
-    ...p,
-    daysLeft: p.dailyPayment > 0 && p.balance > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0
-  }));
+  const positionsWithDays = positions.map(p => {
+    const effectiveBalance = getEffectiveBalance(p);
+    return {
+      ...p,
+      balance: effectiveBalance, // Use effective balance for calculations
+      daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
+    };
+  });
 
   // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
   const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
@@ -238,30 +252,37 @@ export function exportToExcel(calculation: SavedCalculation) {
 
   // Tab 2: Current Positions (show all positions with Include status)
   const ourPositions = positions.filter(p => p.isOurPosition);
-  const unknownBalancePositions = positions.filter(p => p.balance === null);
+  const unknownBalancePositions = positions.filter(p => {
+    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+    return autoCalc === null && p.balance === null;
+  });
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Ours', 'Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ['Ours', 'Include', 'Entity', 'Funded Date', 'Amount Funded', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
     ...positions.map(p => {
       const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
       const isOurs = p.isOurPosition;
-      const isUnknown = p.balance === null;
+      const effectiveBalance = posWithDays?.balance;
+      const isUnknown = effectiveBalance === null;
+      const hasAutoCalc = p.fundedDate && p.amountFunded !== null;
       return [
         isOurs ? 'Yes' : 'No',
         isOurs ? '-' : (p.includeInReverse !== false ? 'Yes' : 'No'),
         p.entity || 'Unknown',
-        isUnknown ? 'Unknown' : fmtNoDecimals(p.balance || 0),
+        p.fundedDate ? format(new Date(p.fundedDate), 'MMM d, yyyy') : '-',
+        p.amountFunded !== null ? fmtNoDecimals(p.amountFunded) : '-',
+        isUnknown ? 'Unknown' : (hasAutoCalc ? `${fmtNoDecimals(effectiveBalance || 0)} (auto)` : fmtNoDecimals(effectiveBalance || 0)),
         fmtNoDecimals(p.dailyPayment),
         isUnknown ? '?' : (posWithDays?.daysLeft || 0),
         isUnknown ? '-' : getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
       ];
     }),
     [''],
-    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
+    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, '', '', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
@@ -482,26 +503,39 @@ export async function exportToPDF(calculation: SavedCalculation) {
 
   autoTable(doc, {
     startY: 35,
-    head: [['Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment']],
+    head: [['Include', 'Entity', 'Funded', 'Funded Amt', 'Balance', 'Daily', 'Days', 'Last Pay']],
     body: allExternalPositions.map(p => {
       const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+      const hasAutoCalc = p.fundedDate && p.amountFunded !== null;
       return [
         p.includeInReverse !== false ? '✓' : '-',
         p.entity || 'Unknown',
-        fmtNoDecimals(p.balance),
+        p.fundedDate ? format(new Date(p.fundedDate), 'MM/dd/yy') : '-',
+        p.amountFunded !== null ? fmtNoDecimals(p.amountFunded) : '-',
+        hasAutoCalc ? `${fmtNoDecimals(posWithDays?.balance || 0)}*` : fmtNoDecimals(posWithDays?.balance || 0),
         fmtNoDecimals(p.dailyPayment),
         (posWithDays?.daysLeft || 0).toString(),
         getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
       ];
     }),
     foot: [
-      [`${includedPositions.length}/${allExternalPositions.length}`, 'REVERSING', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', ''],
-      ['', 'ALL POSITIONS', fmtNoDecimals(totalBalanceAll), fmtNoDecimals(totalCurrentDailyPaymentAll), '', '']
+      [`${includedPositions.length}/${allExternalPositions.length}`, 'REVERSING', '', '', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', ''],
+      ['', 'ALL POSITIONS', '', '', fmtNoDecimals(totalBalanceAll), fmtNoDecimals(totalCurrentDailyPaymentAll), '', '']
     ],
     theme: 'striped',
-    headStyles: { fillColor: primaryColor, fontSize: 10 },
+    headStyles: { fillColor: primaryColor, fontSize: 8 },
     footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
-    styles: { fontSize: 9, cellPadding: 4 },
+    styles: { fontSize: 8, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 15 },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 22 },
+      4: { cellWidth: 25 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 15 },
+      7: { cellWidth: 25 }
+    },
     margin: { left: margin, right: margin },
   });
 

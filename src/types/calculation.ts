@@ -21,6 +21,8 @@ export type Position = {
   dailyPayment: number;
   isOurPosition: boolean;
   includeInReverse: boolean;
+  fundedDate: string | null;  // ISO date string when the position was funded
+  amountFunded: number | null;  // Original funded amount for auto-balance calculation
 };
 
 export type SavedCalculation = {

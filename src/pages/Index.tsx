@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -19,8 +19,13 @@ import {
   DEFAULT_SETTINGS,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { format } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
+import { cn } from '@/lib/utils';
 import {
   Tooltip,
   TooltipContent,
@@ -133,20 +138,29 @@ export default function Index() {
     }
   }, [toast]);
 
+  // Helper to get effective balance (auto-calculated or manual)
+  const getEffectiveBalance = (p: Position): number | null => {
+    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+    return autoCalc !== null ? autoCalc : p.balance;
+  };
+
   // All external positions with known balances (for leverage calculations - merchant's full debt picture)
-  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance !== null && p.balance > 0);
+  const allExternalPositions = positions.filter(p => {
+    const effectiveBalance = getEffectiveBalance(p);
+    return !p.isOurPosition && effectiveBalance !== null && effectiveBalance > 0;
+  });
   // Only positions included in the reverse (for advance/funding calculations)
   const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
   // Count "our" positions and unknown balance positions for display
   const ourPositionsCount = positions.filter(p => p.isOurPosition).length;
-  const unknownBalanceCount = positions.filter(p => p.balance === null).length;
+  const unknownBalanceCount = positions.filter(p => getEffectiveBalance(p) === null).length;
   
   // Use ALL positions for leverage metrics
-  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   // Use INCLUDED positions for reverse calculations
-  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   // Advance Amount = Included positions + New Money
@@ -156,10 +170,14 @@ export default function Index() {
   const totalCurrentDailyPayment = includedDailyPayment;
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
-  const positionsWithDays = positions.map(p => ({
-    ...p,
-    daysLeft: p.dailyPayment > 0 && p.balance > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0
-  }));
+  const positionsWithDays = positions.map(p => {
+    const effectiveBalance = getEffectiveBalance(p);
+    return {
+      ...p,
+      balance: effectiveBalance, // Use effective balance for calculations
+      daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
+    };
+  });
 
   // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
   const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
@@ -343,7 +361,7 @@ export default function Index() {
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true }]);
+    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true, fundedDate: null, amountFunded: null }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
@@ -990,6 +1008,8 @@ export default function Index() {
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Ours</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
                       <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold">Funded Date</th>
+                      <th className="p-3 text-right border-b-2 border-border font-semibold">Amount Funded</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
@@ -1000,13 +1020,18 @@ export default function Index() {
                   </thead>
                   <tbody>
                     {positions.map(p => {
-                      const daysLeft = p.dailyPayment > 0 && p.balance !== null && p.balance > 0 
-                        ? Math.ceil(p.balance / p.dailyPayment) 
+                      // Auto-calculate balance if funded date and amount funded are provided
+                      const autoCalculatedBalance = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+                      const effectiveBalance = autoCalculatedBalance !== null ? autoCalculatedBalance : p.balance;
+                      
+                      const daysLeft = p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 
+                        ? Math.ceil(effectiveBalance / p.dailyPayment) 
                         : 0;
                       const isIncluded = p.includeInReverse !== false;
                       const isOurs = p.isOurPosition;
-                      const isUnknown = p.balance === null;
+                      const isUnknown = effectiveBalance === null;
                       const isExcluded = !isIncluded && !isOurs;
+                      const hasAutoCalc = autoCalculatedBalance !== null;
                       
                       return (
                         <tr 
@@ -1043,9 +1068,67 @@ export default function Index() {
                               className={`w-full p-2 border border-input rounded-md bg-background ${isExcluded ? 'line-through text-muted-foreground' : ''}`}
                             />
                           </td>
-                          {/* Balance cell with unknown support */}
+                          {/* Funded Date picker */}
                           <td className="p-2">
-                            {isUnknown ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full justify-start text-left font-normal h-10",
+                                    !p.fundedDate && "text-muted-foreground"
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {p.fundedDate ? format(new Date(p.fundedDate), "MMM d, yyyy") : <span>Pick date</span>}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={p.fundedDate ? new Date(p.fundedDate) : undefined}
+                                  onSelect={(date) => updatePosition(p.id, 'fundedDate', date ? date.toISOString().split('T')[0] : null)}
+                                  initialFocus
+                                  className={cn("p-3 pointer-events-auto")}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          </td>
+                          {/* Amount Funded input */}
+                          <td className="p-2">
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <input 
+                                type="number" 
+                                value={p.amountFunded ?? ''} 
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  updatePosition(p.id, 'amountFunded', val === '' ? null : parseFloat(val) || 0);
+                                }} 
+                                placeholder="0.00" 
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
+                              />
+                            </div>
+                          </td>
+                          {/* Balance cell with auto-calc or manual entry */}
+                          <td className="p-2">
+                            {hasAutoCalc ? (
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded text-sm font-semibold ${effectiveBalance === 0 ? 'bg-success/20 text-success' : 'bg-info/20 text-info'}`}>
+                                  {fmt(effectiveBalance || 0)}
+                                </span>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Auto-calculated from funded date & amount</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            ) : isUnknown ? (
                               <div className="flex items-center gap-2">
                                 <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
                                   Unknown
@@ -1150,6 +1233,8 @@ export default function Index() {
                         {ourPositionsCount > 0 && <span className="ml-1 font-normal text-xs">({ourPositionsCount} ours)</span>}
                         {unknownBalanceCount > 0 && <span className="ml-1 font-normal text-xs">({unknownBalanceCount} unknown)</span>}
                       </td>
+                      <td className="p-3 text-center">-</td>
+                      <td className="p-3 text-center">-</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentWeeklyPayment)}</td>
