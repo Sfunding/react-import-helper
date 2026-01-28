@@ -1,16 +1,16 @@
 
 
-## Plan: Fix Total Payback Display — Use the Correct Variable Everywhere
+## Plan: Fix Total Payback Display — Replace Old Formula with Correct Variable
 
 ### The Problem
 
-The calculation logic is correct:
+The calculation logic was fixed correctly:
 ```typescript
 const totalPayback = newDailyPayment * calculatedNumberOfDebits;
 // 8,664 × 117 = 1,013,688 ✓
 ```
 
-But the **UI is still using the OLD formula** in 5 places:
+But the **UI is still using the OLD formula** in 4 places:
 ```typescript
 {fmt(totalFunding * settings.rate)}  // Shows $1,011,008.70 (WRONG!)
 ```
@@ -55,7 +55,7 @@ Instead of:
 <div className="p-4 text-center text-lg font-bold">{fmt(totalPayback)}</div>
 ```
 
-**Line 1653** — Profit calculation (RTR - Funding):
+**Line 1653** — Financing Cost calculation (Total Payback - Funding):
 ```tsx
 // Before
 <div className="p-4 text-center text-lg font-bold">{fmt((totalFunding * settings.rate) - totalFunding)}</div>
@@ -64,7 +64,7 @@ Instead of:
 <div className="p-4 text-center text-lg font-bold">{fmt(totalPayback - totalFunding)}</div>
 ```
 
-**Line 1803** — Mobile/secondary view Total Payback:
+**Line 1803** — Secondary view Total Payback:
 ```tsx
 // Before
 <div className="text-lg font-bold">{fmt(totalFunding * settings.rate)}</div>
