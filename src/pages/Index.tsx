@@ -193,9 +193,8 @@ export default function Index() {
   const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
   const newWeeklyPayment = newDailyPayment * 5;
   
-  // Mathematically consistent # of debits: Total Payback / Daily Payment
+  // Total Payback for display
   const totalPayback = totalFunding * settings.rate;
-  const calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
   // Use ALL positions for leverage/SP calculations to show true merchant leverage
   const sp = merchant.monthlyRevenue > 0 ? (newDailyPayment * 22) / merchant.monthlyRevenue : 0;
   
@@ -384,6 +383,10 @@ export default function Index() {
     const percentDaysInRed = dailySchedule.length > 0 ? (lastDayExposed / dailySchedule.length) * 100 : 0;
     return { maxExposure, maxExposureDay, lastDayExposed, profit, dealTrueFactor, currentLeverage, totalCashInfusion, actualPaybackCollected, percentDaysInRed };
   }, [dailySchedule, consolidationFees, totalCurrentDailyPaymentAll, merchant.monthlyRevenue]);
+  
+  // Count actual debit days from simulation (excludes Day 1, counts only days with withdrawals)
+  const actualDebitCount = dailySchedule.filter(d => d.dailyWithdrawal > 0).length;
+  const calculatedNumberOfDebits = actualDebitCount;
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
@@ -1597,7 +1600,7 @@ export default function Index() {
                 <div className="p-4 text-center text-lg font-bold">{fmt(consolidationFees)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(netAdvance)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt((totalFunding * settings.rate) - totalFunding)}</div>
-                <div className="p-4 text-center text-lg font-bold text-success">{fmt((totalFunding * settings.rate) - totalFunding - (totalFunding * settings.brokerCommission))}</div>
+                <div className="p-4 text-center text-lg font-bold text-success">{fmt(metrics.profit || 0)}</div>
               </div>
             </div>
             
