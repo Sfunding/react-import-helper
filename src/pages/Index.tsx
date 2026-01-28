@@ -20,7 +20,7 @@ import {
   SavedCalculation
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
-import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { exportToExcel, exportToPDF, exportMerchantPDF } from '@/lib/exportUtils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer';
+type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
 
 export default function Index() {
   const { saveCalculation, updateCalculation, isSaving, isUpdating } = useCalculations();
@@ -669,6 +669,7 @@ export default function Index() {
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
     { key: 'offer', label: 'Offer' },
+    { key: 'merchantOffer', label: "Merchant's Offer" },
   ];
 
   return (
@@ -1462,6 +1463,159 @@ export default function Index() {
               <div className="p-4 bg-info/10 rounded-lg text-center border-2 border-info/20">
                 <div className="text-sm text-muted-foreground font-medium">Leverage Reduction</div>
                 <div className="text-3xl font-bold text-info">-{((metrics.currentLeverage || 0) - (sp * 100)).toFixed(0)}%</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'merchantOffer' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
+              <Button
+                onClick={() => {
+                  // Create a temporary calculation object for PDF export
+                  const tempCalc = {
+                    id: '',
+                    user_id: '',
+                    name: merchant.name || 'Merchant Offer',
+                    merchant_name: merchant.name,
+                    merchant_business_type: merchant.businessType,
+                    merchant_monthly_revenue: merchant.monthlyRevenue,
+                    settings,
+                    positions,
+                    total_balance: totalBalance,
+                    total_daily_payment: totalCurrentDailyPayment,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  };
+                  exportMerchantPDF(tempCalc);
+                  toast({ title: 'Merchant PDF exported', description: 'File downloaded successfully.' });
+                }}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Export Merchant PDF
+              </Button>
+            </div>
+
+            {/* Positions Being Consolidated */}
+            <div className="bg-muted rounded-lg p-4">
+              <h3 className="font-semibold text-foreground mb-3 uppercase text-sm tracking-wide">Positions Being Consolidated</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-2 font-semibold">Funder</th>
+                      <th className="text-right p-2 font-semibold">Balance</th>
+                      <th className="text-right p-2 font-semibold">Daily Payment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {includedPositions.map(p => (
+                      <tr key={p.id} className="border-b border-border/50">
+                        <td className="p-2">{p.entity || 'Unknown Funder'}</td>
+                        <td className="p-2 text-right">{fmt(getEffectiveBalance(p) || 0)}</td>
+                        <td className="p-2 text-right">{fmt(p.dailyPayment)}/day</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-primary text-primary-foreground font-bold">
+                      <td className="p-2 rounded-bl-md">TOTAL</td>
+                      <td className="p-2 text-right">{fmt(totalBalance)}</td>
+                      <td className="p-2 text-right rounded-br-md">{fmt(totalCurrentDailyPayment)}/day</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Payment Comparison */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-destructive/10 border-2 border-destructive/30 rounded-lg p-4 text-center">
+                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Old Payment</div>
+                <div className="text-2xl font-bold text-destructive">{fmt(totalCurrentDailyPayment)}/day</div>
+                <div className="text-lg text-destructive/80">{fmt(totalCurrentWeeklyPayment)}/week</div>
+              </div>
+              <div className="bg-success/10 border-2 border-success/30 rounded-lg p-4 text-center">
+                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">New Payment</div>
+                <div className="text-2xl font-bold text-success">{fmt(newDailyPayment)}/day</div>
+                <div className="text-lg text-success/80">{fmt(newWeeklyPayment)}/week</div>
+              </div>
+            </div>
+
+            {/* Reduction Badge */}
+            <div className="text-center">
+              <span className="inline-block bg-success text-success-foreground px-6 py-2 rounded-full font-bold text-lg">
+                ▼ {(settings.dailyPaymentDecrease * 100).toFixed(0)}% PAYMENT REDUCTION ▼
+              </span>
+            </div>
+
+            {/* Cash & Savings Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Cash You Receive */}
+              <div className="bg-primary/10 border-2 border-primary/30 rounded-lg p-6 text-center">
+                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Cash You Receive</div>
+                {settings.newMoney > 0 ? (
+                  <>
+                    <div className="text-3xl font-bold text-primary">{fmt(settings.newMoney)}</div>
+                    <div className="text-sm text-muted-foreground">on Day 1</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xl font-semibold text-muted-foreground">Consolidation Only</div>
+                    <div className="text-sm text-muted-foreground">No additional cash</div>
+                  </>
+                )}
+              </div>
+
+              {/* Your Savings */}
+              <div className="bg-info/10 border-2 border-info/30 rounded-lg p-6">
+                <div className="text-sm text-muted-foreground font-medium uppercase mb-3 text-center">Your Savings</div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Daily:</span>
+                    <span className="font-bold text-info">{fmt(dailySavings)}/day</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Weekly:</span>
+                    <span className="font-bold text-info">{fmt(weeklySavings)}/week</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Monthly:</span>
+                    <span className="font-bold text-info">{fmt(monthlySavings)}/month</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Deal Terms */}
+            <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden">
+              <div className="bg-secondary p-2">
+                <h3 className="font-semibold text-secondary-foreground text-center uppercase text-sm tracking-wide">Deal Terms</h3>
+              </div>
+              <div className="grid grid-cols-5 bg-card p-4 gap-4 text-center">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">Amount Funded</div>
+                  <div className="text-lg font-bold">{fmt(totalFunding)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">Total Payback</div>
+                  <div className="text-lg font-bold">{fmt(totalFunding * settings.rate)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">Factor Rate</div>
+                  <div className="text-lg font-bold">{settings.rate.toFixed(3)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">Origination Fee</div>
+                  <div className="text-lg font-bold">{(settings.feePercent * 100).toFixed(1)}%</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1"># of Payments</div>
+                  <div className="text-lg font-bold">{totalDays}</div>
+                </div>
               </div>
             </div>
           </div>
