@@ -138,10 +138,14 @@ export default function Index() {
     }
   }, [toast]);
 
-  // Helper to get effective balance (auto-calculated or manual)
+  // Helper to get effective balance - always use the stored balance for calculations
   const getEffectiveBalance = (p: Position): number | null => {
-    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-    return autoCalc !== null ? autoCalc : p.balance;
+    return p.balance;
+  };
+
+  // Helper to get expected balance from funded date/amount for discrepancy comparison
+  const getExpectedBalance = (p: Position): number | null => {
+    return calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
   };
 
   // All external positions with known balances (for leverage calculations - merchant's full debt picture)
@@ -199,6 +203,22 @@ export default function Index() {
       setSettings(prev => ({ ...prev, feeSchedule: 'average' }));
     }
   }, [settings.newMoney, settings.feeSchedule]);
+
+  // Auto-populate balance when funding data is entered (only if balance is null or 0)
+  useEffect(() => {
+    const updated = positions.map(p => {
+      const expected = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+      // Only auto-fill if balance is null or 0 and we have a calculated value > 0
+      if ((p.balance === null || p.balance === 0) && expected !== null && expected > 0) {
+        return { ...p, balance: expected };
+      }
+      return p;
+    });
+    // Only update if something changed
+    if (JSON.stringify(updated) !== JSON.stringify(positions)) {
+      setPositions(updated);
+    }
+  }, [positions.map(p => `${p.fundedDate}-${p.amountFunded}-${p.dailyPayment}`).join(',')]);
 
   const dailySchedule = useMemo(() => {
     if (includedBalance === 0 && settings.newMoney === 0) return [];
@@ -1020,9 +1040,13 @@ export default function Index() {
                   </thead>
                   <tbody>
                     {positions.map(p => {
-                      // Auto-calculate balance if funded date and amount funded are provided
-                      const autoCalculatedBalance = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-                      const effectiveBalance = autoCalculatedBalance !== null ? autoCalculatedBalance : p.balance;
+                      // Get expected balance from funding data for discrepancy comparison
+                      const expectedBalance = getExpectedBalance(p);
+                      const effectiveBalance = p.balance;
+                      
+                      // Check if there's a discrepancy between manual balance and calculated
+                      const hasDiscrepancy = expectedBalance !== null && p.balance !== null && 
+                        Math.abs(expectedBalance - p.balance) > 0.01;
                       
                       const daysLeft = p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 
                         ? Math.ceil(effectiveBalance / p.dailyPayment) 
@@ -1031,7 +1055,6 @@ export default function Index() {
                       const isOurs = p.isOurPosition;
                       const isUnknown = effectiveBalance === null;
                       const isExcluded = !isIncluded && !isOurs;
-                      const hasAutoCalc = autoCalculatedBalance !== null;
                       
                       return (
                         <tr 
@@ -1110,60 +1133,76 @@ export default function Index() {
                               />
                             </div>
                           </td>
-                          {/* Balance cell with auto-calc or manual entry */}
+                          {/* Balance cell - always editable with discrepancy indicator */}
                           <td className="p-2">
-                            {hasAutoCalc ? (
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded text-sm font-semibold ${effectiveBalance === 0 ? 'bg-success/20 text-success' : 'bg-info/20 text-info'}`}>
-                                  {fmt(effectiveBalance || 0)}
-                                </span>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Auto-calculated from funded date & amount</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                            ) : isUnknown ? (
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
-                                  Unknown
-                                </span>
-                                <button 
-                                  onClick={() => updatePosition(p.id, 'balance', 0)}
-                                  className="text-xs text-muted-foreground hover:text-foreground underline"
-                                >
-                                  Set
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="relative flex items-center gap-1">
-                                <div className="relative flex-1">
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                                  <input 
-                                    type="number" 
-                                    value={p.balance || ''} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      updatePosition(p.id, 'balance', val === '' ? null : parseFloat(val) || 0);
-                                    }} 
-                                    placeholder="0.00" 
-                                    className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                  />
+                            <div className="space-y-1">
+                              {isUnknown ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
+                                    Unknown
+                                  </span>
+                                  <button 
+                                    onClick={() => updatePosition(p.id, 'balance', 0)}
+                                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                                  >
+                                    Set
+                                  </button>
                                 </div>
-                                <button 
-                                  onClick={() => updatePosition(p.id, 'balance', null)}
-                                  className="text-xs text-muted-foreground hover:text-warning font-bold"
-                                  title="Mark as unknown"
-                                >
-                                  ?
-                                </button>
-                              </div>
-                            )}
+                              ) : (
+                                <>
+                                  <div className="relative flex items-center gap-1">
+                                    <div className="relative flex-1">
+                                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                                      <input 
+                                        type="number" 
+                                        value={p.balance ?? ''} 
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          updatePosition(p.id, 'balance', val === '' ? null : parseFloat(val) || 0);
+                                        }} 
+                                        placeholder="0.00" 
+                                        className={`w-full p-2 pl-5 border rounded-md text-right bg-background 
+                                          ${hasDiscrepancy ? 'border-warning' : 'border-input'}
+                                          ${isExcluded ? 'text-muted-foreground' : ''}`}
+                                      />
+                                    </div>
+                                    <button 
+                                      onClick={() => updatePosition(p.id, 'balance', null)}
+                                      className="text-xs text-muted-foreground hover:text-warning font-bold"
+                                      title="Mark as unknown"
+                                    >
+                                      ?
+                                    </button>
+                                    {/* Sync to calculated button (only shown when discrepancy exists) */}
+                                    {hasDiscrepancy && expectedBalance !== null && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button 
+                                              onClick={() => updatePosition(p.id, 'balance', expectedBalance)}
+                                              className="text-xs text-warning hover:text-warning/80"
+                                              title="Sync to calculated balance"
+                                            >
+                                              🔄
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Reset to calculated: {fmt(expectedBalance)}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                  {/* Discrepancy indicator */}
+                                  {hasDiscrepancy && expectedBalance !== null && (
+                                    <div className="flex items-center gap-1 text-xs text-warning">
+                                      <span>⚠️</span>
+                                      <span>Expected: {fmt(expectedBalance)}</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </td>
                           <td className="p-2">
                             <div className="relative">
@@ -1234,7 +1273,7 @@ export default function Index() {
                         {unknownBalanceCount > 0 && <span className="ml-1 font-normal text-xs">({unknownBalanceCount} unknown)</span>}
                       </td>
                       <td className="p-3 text-center">-</td>
-                      <td className="p-3 text-center">-</td>
+                      <td className="p-3 text-right">{fmt(positions.reduce((sum, p) => sum + (p.amountFunded || 0), 0))}</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentWeeklyPayment)}</td>
