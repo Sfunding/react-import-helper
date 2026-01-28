@@ -31,22 +31,35 @@ export function calculateSchedules(
   settings: Settings,
   merchantMonthlyRevenue: number
 ) {
-  const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
-  const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  // Advance amount is always equal to totalBalance (auto-calculated)
-  const totalAdvanceAmount = totalBalance;
-  const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  // All external positions (for leverage calculations)
+  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
+  // Only included positions (for reverse calculations)
+  const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
+  
+  // Use ALL positions for leverage metrics
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  
+  // Use INCLUDED positions for reverse calculations
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  
+  // Advance Amount = Included positions + New Money
+  const totalAdvanceAmount = includedBalance + settings.newMoney;
+  // For display purposes
+  const totalBalance = includedBalance;
+  const totalCurrentDailyPayment = includedDailyPayment;
   
   const positionsWithDays = positions.map(p => ({
     ...p,
     daysLeft: p.dailyPayment > 0 && p.balance > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0
   }));
 
-  // Use totalAdvanceAmount instead of totalBalance for funding calculations
-  const totalFunding = (settings.newMoney + totalAdvanceAmount) / (1 - settings.feePercent);
+  // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
+  const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
-  const newDailyPayment = totalCurrentDailyPayment * (1 - settings.dailyPaymentDecrease);
+  const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
   const newWeeklyPayment = newDailyPayment * 5;
   const sp = merchantMonthlyRevenue > 0 ? (newDailyPayment * 22) / merchantMonthlyRevenue : 0;
   
@@ -54,13 +67,16 @@ export function calculateSchedules(
   const weeklySavings = dailySavings * 5;
   const monthlySavings = dailySavings * 22;
 
-  // Generate daily schedule
+  // Generate daily schedule - only use INCLUDED positions
   const dailySchedule: DayScheduleExport[] = [];
   let cumulativeNetFunded = 0;
   let cumulativeDebits = 0;
   let dealComplete = false;
   const maxDays = 500;
   const originationFee = consolidationFees;
+  
+  // Only use INCLUDED positions for the schedule
+  const includedPositionsWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false);
 
   for (let day = 1; day <= maxDays; day++) {
     if (dealComplete) break;
@@ -72,8 +88,8 @@ export function calculateSchedules(
     if (isPayDay) {
       if (day === 1) cashInfusion = settings.newMoney;
       for (let d = day; d <= day + 4 && d <= maxDays; d++) {
-        const dayPayment = positionsWithDays
-          .filter(p => !p.isOurPosition && p.balance > 0 && d <= p.daysLeft)
+        const dayPayment = includedPositionsWithDays
+          .filter(p => p.balance > 0 && d <= p.daysLeft)
           .reduce((sum, p) => sum + p.dailyPayment, 0);
         cashInfusion += dayPayment;
       }
@@ -128,12 +144,17 @@ export function calculateSchedules(
   const actualPaybackCollected = lastDay?.dailyWithdrawal ? dailySchedule.reduce((sum, d) => sum + d.dailyWithdrawal, 0) : 0;
   const profit = actualPaybackCollected - totalCashInfusion;
   const dealTrueFactor = maxExposure > 0 ? 1 + ((profit - consolidationFees) / (maxExposure + consolidationFees)) : 0;
-  const currentLeverage = merchantMonthlyRevenue > 0 ? (totalCurrentDailyPayment * 22) / merchantMonthlyRevenue * 100 : 0;
+  // Use ALL positions for leverage calculation (full merchant debt picture)
+  const currentLeverage = merchantMonthlyRevenue > 0 ? (totalCurrentDailyPaymentAll * 22) / merchantMonthlyRevenue * 100 : 0;
 
   return {
     dailySchedule,
     weeklySchedule,
     positionsWithDays,
+    allExternalPositions,
+    includedPositions,
+    totalBalanceAll,
+    totalCurrentDailyPaymentAll,
     metrics: {
       totalBalance,
       totalAdvanceAmount,
@@ -166,7 +187,7 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, metrics } = calculateSchedules(
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
     positions,
     settings,
     merchantRevenue
@@ -215,24 +236,28 @@ export function exportToExcel(calculation: SavedCalculation) {
   summarySheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
-  // Tab 2: Current Positions
-  const externalPositions = positionsWithDays.filter(p => !p.isOurPosition && p.balance > 0);
+  // Tab 2: Current Positions (show all positions with Include status)
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
-    ...externalPositions.map(p => [
-      p.entity || 'Unknown',
-      fmtNoDecimals(p.balance),
-      fmtNoDecimals(p.dailyPayment),
-      p.daysLeft,
-      getFormattedLastPaymentDate(p.daysLeft)
-    ]),
+    ['Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ...allExternalPositions.map(p => {
+      const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+      return [
+        p.includeInReverse !== false ? 'Yes' : 'No',
+        p.entity || 'Unknown',
+        fmtNoDecimals(p.balance),
+        fmtNoDecimals(p.dailyPayment),
+        posWithDays?.daysLeft || 0,
+        getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
+      ];
+    }),
     [''],
-    ['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
+    ['', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}`, fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', ''],
+    ['', `TOTAL (all positions)`, fmtNoDecimals(totalBalanceAll), fmtNoDecimals(totalCurrentDailyPaymentAll), '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
@@ -312,7 +337,7 @@ export async function exportToPDF(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, metrics } = calculateSchedules(
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
     positions,
     settings,
     merchantRevenue
@@ -451,19 +476,24 @@ export async function exportToPDF(calculation: SavedCalculation) {
   doc.setFont('helvetica', 'bold');
   doc.text('Current MCA Positions', margin, 17);
 
-  const externalPositions = positionsWithDays.filter(p => !p.isOurPosition && p.balance > 0);
-  
   autoTable(doc, {
     startY: 35,
-    head: [['Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment']],
-    body: externalPositions.map(p => [
-      p.entity || 'Unknown',
-      fmtNoDecimals(p.balance),
-      fmtNoDecimals(p.dailyPayment),
-      p.daysLeft.toString(),
-      getFormattedLastPaymentDate(p.daysLeft)
-    ]),
-    foot: [['TOTAL', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']],
+    head: [['Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment']],
+    body: allExternalPositions.map(p => {
+      const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+      return [
+        p.includeInReverse !== false ? '✓' : '-',
+        p.entity || 'Unknown',
+        fmtNoDecimals(p.balance),
+        fmtNoDecimals(p.dailyPayment),
+        (posWithDays?.daysLeft || 0).toString(),
+        getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
+      ];
+    }),
+    foot: [
+      [`${includedPositions.length}/${allExternalPositions.length}`, 'REVERSING', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', ''],
+      ['', 'ALL POSITIONS', fmtNoDecimals(totalBalanceAll), fmtNoDecimals(totalCurrentDailyPaymentAll), '', '']
+    ],
     theme: 'striped',
     headStyles: { fillColor: primaryColor, fontSize: 10 },
     footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
