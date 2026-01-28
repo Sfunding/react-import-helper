@@ -1,146 +1,139 @@
 
 
-## Updated Plan: Partial Reverse + Smart Fee Schedule + Corrected Advance Amount
+## Feature 1: Export Without Saving + Weekly/Daily Payment Input
 
-### Summary of Changes
+### Overview
 
-This plan combines three improvements:
-1. **Advance Amount includes New Money** - Shows total cash going to merchant
-2. **Partial Reverse feature** - Select which positions to include
-3. **Smart Fee Schedule** - Auto-switch to "Average" when New Money is used
-
----
-
-### Why Force "Average" Fees with New Money?
-
-When you have New Money and use Upfront fees, the entire consolidation fee comes off the Day 1 cash infusion. This means the new money gets eaten up by fees before the merchant sees it.
-
-| Fee Schedule | What Happens |
-|--------------|--------------|
-| **Upfront** | Full fee deducted from Day 1 cash → merchant gets less new money |
-| **Average** | Fee spread across all cash infusions → fair distribution |
-
-**Rule**: If New Money > 0, force "Average" fee schedule and disable "Upfront" option
+Two improvements to streamline the workflow:
+1. **Export directly from calculator** - Add Excel and PDF export buttons without requiring a save first
+2. **Weekly OR Daily payment input** - Enter either value and auto-calculate the other
 
 ---
 
-### Updated Calculations
+### Feature 1: Export Without Saving
 
-| Metric | Formula |
-|--------|---------|
-| **Advance Amount** | Included Position Balances + New Money |
-| **Total Funding** | Advance Amount / (1 - Fee%) |
-| **Total Payback (RTR)** | Total Funding × Factor Rate |
+**The Problem**: Currently you must save a calculation before you can export it to Excel or PDF. This is inefficient when you just want to quickly generate a proposal.
 
----
+**The Solution**: Add export buttons directly in the calculator header that create a temporary `SavedCalculation` object from the current state and pass it to the existing export functions.
 
-### Technical Changes
+#### Technical Changes
 
-#### File: `src/types/calculation.ts`
-Add `includeInReverse` to Position type:
+**File: `src/pages/Index.tsx`**
+
+1. **Add a helper function** to create a `SavedCalculation` from current state:
 ```typescript
-export type Position = {
-  id: number;
-  entity: string;
-  balance: number;
-  dailyPayment: number;
-  isOurPosition: boolean;
-  includeInReverse: boolean; // NEW - defaults to true
-};
+const createExportData = (): SavedCalculation => ({
+  id: loadedCalculationId || 'temp',
+  user_id: 'export',
+  name: merchant.name ? `${merchant.name} Consolidation` : 'Consolidation Proposal',
+  merchant_name: merchant.name,
+  merchant_business_type: merchant.businessType,
+  merchant_monthly_revenue: merchant.monthlyRevenue,
+  settings,
+  positions,
+  total_balance: totalBalance,
+  total_daily_payment: totalCurrentDailyPayment,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+});
+```
+
+2. **Add export buttons** next to the Save button in the header:
+```tsx
+<div className="flex gap-2">
+  <Button variant="outline" onClick={handleNewCalculation}>
+    <FilePlus className="w-4 h-4 mr-2" />
+    New
+  </Button>
+  <Button 
+    variant="outline" 
+    onClick={() => exportToExcel(createExportData())}
+    disabled={positions.length === 0}
+  >
+    <FileSpreadsheet className="w-4 h-4 mr-2" />
+    Excel
+  </Button>
+  <Button 
+    variant="outline" 
+    onClick={() => exportToPDF(createExportData())}
+    disabled={positions.length === 0}
+  >
+    <FileText className="w-4 h-4 mr-2" />
+    PDF
+  </Button>
+  <Button onClick={() => setSaveDialogOpen(true)}>
+    <Save className="w-4 h-4 mr-2" />
+    Save
+  </Button>
+</div>
 ```
 
 ---
 
-#### File: `src/pages/Index.tsx`
+### Feature 2: Weekly OR Daily Payment Input
 
-**Change 1: Position filtering for partial reverse**
-- Create `allExternalPositions` (all non-ourPosition, for leverage metrics)
-- Create `includedPositions` (only those with `includeInReverse: true`, for reverse calculations)
+**The Problem**: Currently you can only enter daily payment per position. Sometimes you know the weekly payment amount instead.
 
-**Change 2: Update Advance Amount calculation**
-```typescript
-const includedBalance = includedPositions.reduce((sum, p) => sum + p.balance, 0);
-const totalAdvanceAmount = includedBalance + settings.newMoney;
+**The Solution**: Add a toggle or dual-input that allows entering either daily or weekly payment, with automatic calculation of the other.
+
+#### Technical Approach
+
+**Option A: Add Weekly Payment Column (Recommended)**
+Add a "Weekly Payment" column that auto-calculates when daily is entered, and vice versa.
+
+**Option B: Toggle Between Daily/Weekly**
+Single input field with a toggle to switch between daily and weekly entry mode.
+
+#### Technical Changes
+
+**File: `src/pages/Index.tsx`**
+
+1. **Add a state for input mode per position** (optional) or just add both columns:
+   - Daily Payment column (existing)
+   - Weekly Payment column (new, = daily × 5)
+
+2. **Update the positions table** to include both columns with bi-directional sync:
+
+```tsx
+// Daily Payment column
+<td className="p-2">
+  <div className="relative">
+    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+    <input 
+      type="number" 
+      value={p.dailyPayment || ''} 
+      onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
+      placeholder="0.00" 
+      className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+    />
+  </div>
+</td>
+
+// Weekly Payment column (NEW)
+<td className="p-2">
+  <div className="relative">
+    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+    <input 
+      type="number" 
+      value={p.dailyPayment ? (p.dailyPayment * 5) : ''} 
+      onChange={e => {
+        const weekly = parseFloat(e.target.value) || 0;
+        updatePosition(p.id, 'dailyPayment', weekly / 5);
+      }} 
+      placeholder="0.00" 
+      className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+    />
+  </div>
+</td>
 ```
 
-**Change 3: Update Total Funding calculation**
-```typescript
-// New money is now part of advance amount
-const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
+3. **Update table header** to include both columns:
+```tsx
+<th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
+<th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
 ```
 
-**Change 4: Auto-force Average fees when New Money exists**
-Add a `useEffect` that watches `settings.newMoney`:
-```typescript
-useEffect(() => {
-  if (settings.newMoney > 0 && settings.feeSchedule === 'upfront') {
-    setSettings(prev => ({ ...prev, feeSchedule: 'average' }));
-  }
-}, [settings.newMoney, settings.feeSchedule]);
-```
-
-**Change 5: Disable Upfront option when New Money > 0**
-Update the Fee Schedule dropdown:
-```typescript
-<select 
-  value={settings.feeSchedule} 
-  onChange={e => setSettings({...settings, feeSchedule: e.target.value})}
-  disabled={settings.newMoney > 0 && e.target.value === 'upfront'}
->
-  <option value="average">Average</option>
-  <option value="upfront" disabled={settings.newMoney > 0}>
-    Fee Upfront {settings.newMoney > 0 ? '(disabled with New Money)' : ''}
-  </option>
-</select>
-```
-
-**Change 6: Add checkbox column to positions table**
-- Add "Include" column header
-- Add checkbox for each external position row
-- Style excluded rows with `opacity-60`
-
-**Change 7: Update addPosition function**
-Default new positions to `includeInReverse: true`
-
-**Change 8: Split calculations by purpose**
-- Leverage/SP metrics → use ALL external positions
-- Advance/Funding/Schedule → use only INCLUDED positions
-
-**Change 9: Update footer summary**
-Show "Reversing X of Y positions" in the table footer
-
----
-
-#### File: `src/lib/exportUtils.ts`
-- Add "Include" column to position exports
-- Use included positions for funding calculations
-- Still show all positions in exports (marked as included/excluded)
-
----
-
-### UI Changes
-
-**Fee Schedule dropdown with New Money warning:**
-```text
-+----------------------------------+
-| Fee Schedule                     |
-| [Average              ▼]         |
-+----------------------------------+
-  ℹ️ Upfront fees disabled when using New Money
-```
-
-**Positions table with Include column:**
-```text
-+----------+----------+---------+--------+------+---------+
-| Include  | Entity   | Balance | Daily  | Days | Actions |
-+----------+----------+---------+--------+------+---------+
-|   [✓]    | Funder A | $50,000 | $2,500 |  20  | Delete  |
-|   [✓]    | Funder B | $30,000 | $1,500 |  20  | Delete  |
-|   [ ]    | Funder C | $20,000 | $1,000 |  20  | Delete  | <- faded
-+----------+----------+---------+--------+------+---------+
-| Reversing 2 of 3    | $80,000 | $4,000 | ...             |
-+----------+----------+---------+--------+------+---------+
-```
+4. **Update table footer** to show both daily and weekly totals.
 
 ---
 
@@ -148,17 +141,38 @@ Show "Reversing X of Y positions" in the table footer
 
 | File | Changes |
 |------|---------|
-| `src/types/calculation.ts` | Add `includeInReverse` boolean to Position type |
-| `src/pages/Index.tsx` | Add partial reverse checkboxes, update advance amount calculation, add fee schedule auto-switch, disable upfront option with new money |
-| `src/lib/exportUtils.ts` | Handle partial reverse in exports, add Include column |
+| `src/pages/Index.tsx` | Add export buttons in header, add weekly payment column to positions table |
 
 ---
 
-### Result
+### UI Preview
 
-1. **Advance Amount** = Included position balances + New Money
-2. **Fee Schedule** = Auto-switches to "Average" when New Money > 0
-3. **Upfront Option** = Disabled when New Money is used
-4. **Partial Reverse** = Checkbox to include/exclude each position
-5. **Leverage Metrics** = Still use all positions for accurate merchant picture
+**Header with export buttons:**
+```text
++--------------------------------------------------+
+| Reverse Consolidation Calculator                 |
+|                    [New] [Excel] [PDF] [Save]    |
++--------------------------------------------------+
+```
+
+**Positions table with both payment columns:**
+```text
++--------+----------+---------+--------+--------+------+----------+---------+
+|Include | Entity   | Balance | Daily  | Weekly | Days | Last Pay | Actions |
++--------+----------+---------+--------+--------+------+----------+---------+
+|  [✓]   | Funder A | $50,000 | $2,500 | $12,500|  20  | Feb 28   | Delete  |
+|  [✓]   | Funder B | $30,000 | $1,500 | $7,500 |  20  | Feb 28   | Delete  |
++--------+----------+---------+--------+--------+------+----------+---------+
+```
+
+When you enter $2,500 in Daily, Weekly auto-fills to $12,500.
+When you enter $12,500 in Weekly, Daily auto-fills to $2,500.
+
+---
+
+### Summary
+
+1. **Export without saving**: Add Excel and PDF buttons in header that export current state directly
+2. **Weekly/Daily input**: Add weekly payment column that syncs bi-directionally with daily payment
+3. No database changes needed - all UI/logic changes in `src/pages/Index.tsx`
 
