@@ -1,112 +1,163 @@
 
 
-## Plan: Merchant's Offer Tab with PDF Export (Revised)
+## Plan: Early Pay Options (EPO) Feature
 
 ### Overview
 
-Add a new dedicated tab called "Merchant's Offer" that displays a clean, client-facing view of the consolidation offer. Includes fee percentage AND amount funded for transparency.
+Add an Early Pay Options feature that allows configuring discount tiers for merchants who pay off their balance early. The EPO section will appear below the settings row when enabled, and will display on the Merchant's Offer tab showing what discounts they can earn.
 
 ---
 
-### What the Merchant Sees
+### How Early Pay Options Work
 
-1. **Positions Being Consolidated** - List of funders being paid off with balances and old payments
-2. **Payment Comparison** - Old daily/weekly vs new payment with savings highlighted
-3. **Cash Upfront** - New Money amount they receive on Day 1
-4. **Deal Terms**:
-   - **Amount Funded** (Total Advance Amount)
-   - Total Payback Amount
-   - Factor Rate
-   - Origination Fee %
-   - Term Length / Number of Payments
-5. **Savings Breakdown** - Daily, weekly, and monthly savings
+The concept: After all the positions being consolidated fall off (are fully paid), if the merchant pays the remaining RTR balance within X days, they receive a discount on the remaining balance.
 
-### What is Hidden from Merchant
-
-- Fee dollar amount (ORG Amount)
-- Net Funding (internal breakdown)
-- Financing Cost
-- Our Profit
-- Exposure metrics
-- Broker commission
+**Example EPO Tiers:**
+- Pay within 30 days after positions fall off: 10% discount on remaining balance
+- Pay within 60 days after positions fall off: 7% discount on remaining balance
+- Pay within 90 days after positions fall off: 5% discount on remaining balance
 
 ---
 
 ### Technical Changes
 
+#### File: `src/types/calculation.ts`
+
+**Add new types for EPO:**
+
+```typescript
+export type EarlyPayTier = {
+  id: number;
+  daysAfterFalloff: number;  // Days after all positions fall off
+  discountPercent: number;   // Discount on remaining balance
+};
+
+export type EarlyPaySettings = {
+  enabled: boolean;
+  tiers: EarlyPayTier[];
+};
+
+export const DEFAULT_EPO_SETTINGS: EarlyPaySettings = {
+  enabled: false,
+  tiers: [
+    { id: 1, daysAfterFalloff: 30, discountPercent: 0.10 },
+    { id: 2, daysAfterFalloff: 60, discountPercent: 0.07 },
+    { id: 3, daysAfterFalloff: 90, discountPercent: 0.05 },
+  ]
+};
+```
+
+**Update Settings type:**
+
+```typescript
+export type Settings = {
+  dailyPaymentDecrease: number;
+  feeSchedule: string;
+  feePercent: number;
+  rate: number;
+  brokerCommission: number;
+  newMoney: number;
+  currentExposure: number;
+  earlyPayOptions: EarlyPaySettings;  // NEW
+};
+```
+
+---
+
 #### File: `src/pages/Index.tsx`
 
-**Change 1: Update TabType**
+**Change 1: Add EPO to state initialization**
 
-```typescript
-type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
+Update `DEFAULT_SETTINGS` import and initialize with EPO defaults.
+
+**Change 2: Add EPO dropdown and configuration box below settings row (after line ~910)**
+
+Below the existing settings grid, add:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [Discount %] [Fee Schedule] [Fee %] [Rate] [Broker] [New $]    │
+├─────────────────────────────────────────────────────────────────┤
+│  Early Pay Options:  [ No ▼ ]                                   │
+│                                                                 │
+│  (When "Yes" selected, shows:)                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  EARLY PAYOFF DISCOUNT TIERS                                ││
+│  │  ┌─────────────────────────────────────────────────────────┐││
+│  │  │ Days After Positions Fall Off │ Discount on Balance     │││
+│  │  │ 30 days                        │ 10%                     │││
+│  │  │ 60 days                        │ 7%                      │││
+│  │  │ 90 days                        │ 5%                      │││
+│  │  └─────────────────────────────────────────────────────────┘││
+│  │  [+ Add Tier]                                               ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Change 2: Add new tab to tabs array**
+UI Elements:
+- Dropdown: "Early Pay Options: [No / Yes]"
+- When "Yes": Show editable tier table
+- Each tier has: Days input, Discount % input, Delete button
+- Add Tier button to add more tiers
 
-```typescript
-{ key: 'merchantOffer', label: "Merchant's Offer" },
+**Change 3: Calculate EPO values based on schedule**
+
+After positions fall off (determined by when the last included position reaches 0 balance based on days left), calculate:
+- Day when all positions fall off
+- Remaining RTR balance at that point
+- For each tier: payoff deadline (falloff day + tier days) and discounted amount
+
+**Change 4: Update Merchant's Offer tab to show EPO section**
+
+After the "Deal Terms" section, add (only if EPO is enabled):
+
 ```
-
-**Change 3: Add Merchant's Offer tab content**
-
-- Header with "Your Consolidation Offer" title and Export PDF button
-- Positions table showing funders being paid off
-- Payment comparison (old vs new)
-- Cash You Receive card
-- Savings breakdown
-- Deal Terms card including **Amount Funded**
+┌─────────────────────────────────────────────────────────────────┐
+│  💸 EARLY PAYOFF OPTIONS 💸                                     │
+│                                                                 │
+│  Once all your consolidated positions have been paid off,      │
+│  you can save even more by paying off your balance early:      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ PAY BY           │ REMAINING BALANCE │ YOU SAVE            ││
+│  │ Day 45 (30 days) │ $85,000           │ $8,500 (10% off)    ││
+│  │ Day 75 (60 days) │ $91,000           │ $6,370 (7% off)     ││
+│  │ Day 105 (90 days)│ $95,000           │ $4,750 (5% off)     ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  * Days shown are business days from deal start                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 #### File: `src/lib/exportUtils.ts`
 
-**Add new function: `exportMerchantPDF`**
+**Update `exportMerchantPDF` to include EPO section**
 
-Creates a professional PDF including Amount Funded but excluding internal profit metrics.
+When EPO is enabled, add a section to the PDF showing:
+- "Early Payoff Options" header
+- Explanation of how it works
+- Table of tiers with dates, amounts, and savings
 
 ---
 
-### UI Preview
+### Calculation Logic
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Your Consolidation Offer               [Export Merchant PDF]   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  POSITIONS BEING CONSOLIDATED                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │ Funder           │ Balance    │ Daily Payment               ││
-│  │ Funder A         │ $50,000    │ $2,500/day                  ││
-│  │ Funder B         │ $30,000    │ $1,500/day                  ││
-│  ├─────────────────────────────────────────────────────────────┤│
-│  │ TOTAL            │ $80,000    │ $4,000/day                  ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                                                                 │
-│  ┌───────────────────────┐  ┌───────────────────────┐          │
-│  │   OLD PAYMENT         │  │   NEW PAYMENT         │          │
-│  │   $4,000/day          │  │   $2,800/day          │          │
-│  │   $20,000/week        │  │   $14,000/week        │          │
-│  └───────────────────────┘  └───────────────────────┘          │
-│                                                                 │
-│               ▼ 30% PAYMENT REDUCTION ▼                         │
-│                                                                 │
-│  ┌───────────────────┐  ┌───────────────────────────────────────┐
-│  │ CASH YOU          │  │ YOUR SAVINGS                         ││
-│  │ RECEIVE           │  │                                      ││
-│  │                   │  │ Daily:   $1,200/day                  ││
-│  │   $10,000         │  │ Weekly:  $6,000/week                 ││
-│  │   on Day 1        │  │ Monthly: $26,400/month               ││
-│  └───────────────────┘  └───────────────────────────────────────┘│
-│                                                                 │
-│  DEAL TERMS                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │ Amount Funded │ Total Payback │ Factor │ Fee  │ Payments    ││
-│  │   $79,860     │   $119,700    │ 1.499  │ 9%   │ 43 debits   ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+1. **Find when positions fall off:**
+   - Look at all included positions
+   - Find the maximum `daysLeft` value (when the last position is paid off)
+   - This is the "falloff day"
+
+2. **Calculate remaining RTR balance at falloff:**
+   - Use the existing `dailySchedule` to find `rtrBalance` at the falloff day
+   - If falloff day > schedule length, use the last day's balance
+
+3. **For each EPO tier, calculate:**
+   - Payoff deadline = falloff day + tier.daysAfterFalloff
+   - RTR balance at deadline = find from schedule or extrapolate
+   - Discounted payoff = balance * (1 - tier.discountPercent)
+   - Savings = balance - discounted payoff
 
 ---
 
@@ -114,18 +165,17 @@ Creates a professional PDF including Amount Funded but excluding internal profit
 
 | File | Changes |
 |------|---------|
-| `src/pages/Index.tsx` | Add 'merchantOffer' tab with positions table, payment comparison, savings, deal terms (including Amount Funded and fee %), and PDF export button |
-| `src/lib/exportUtils.ts` | Add `exportMerchantPDF` function for client-facing PDF |
+| `src/types/calculation.ts` | Add `EarlyPayTier`, `EarlyPaySettings` types, `DEFAULT_EPO_SETTINGS`, update `Settings` type and `DEFAULT_SETTINGS` |
+| `src/pages/Index.tsx` | Add EPO dropdown below settings, EPO tier editor UI, EPO calculations, EPO section in Merchant's Offer tab |
+| `src/lib/exportUtils.ts` | Update `exportMerchantPDF` to include EPO section when enabled |
 
 ---
 
 ### Summary
 
-1. **New "Merchant's Offer" tab** alongside existing tabs
-2. **Positions table** - Funders being paid off with balances
-3. **Payment comparison** - Old vs new with reduction percentage
-4. **Cash upfront** - New Money displayed prominently
-5. **Savings breakdown** - Daily, weekly, monthly
-6. **Deal terms including Amount Funded** - Shows funding amount, payback, factor rate, fee %
-7. **Merchant PDF export** - Client-facing proposal document
+1. **EPO toggle dropdown** - "Early Pay Options: Yes/No" appears below the settings row (Discount, Fee, Rate, Broker, New Money)
+2. **Tier configuration** - When enabled, shows editable table of discount tiers (days after falloff + discount %)
+3. **Automatic calculations** - Calculates when positions fall off, remaining balances at each tier deadline, and savings amounts
+4. **Merchant's Offer display** - Shows EPO options prominently with clear deadlines and savings
+5. **PDF export** - Includes EPO information in the merchant-facing PDF
 
