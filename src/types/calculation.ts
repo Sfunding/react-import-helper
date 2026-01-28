@@ -20,6 +20,7 @@ export type Position = {
   balance: number;
   dailyPayment: number;
   isOurPosition: boolean;
+  includeInReverse: boolean;
 };
 
 export type SavedCalculation = {

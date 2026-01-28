@@ -10,6 +10,7 @@ import { AdjustmentConfirmDialog, PendingChange } from '@/components/AdjustmentC
 import { useCalculations } from '@/hooks/useCalculations';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Merchant, 
   Settings, 
@@ -132,12 +133,24 @@ export default function Index() {
     }
   }, [toast]);
 
-  const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
+  // All external positions (for leverage calculations - merchant's full debt picture)
+  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
+  // Only positions included in the reverse (for advance/funding calculations)
+  const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
   
-  const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  // Advance amount is always equal to totalBalance (auto-calculated)
-  const totalAdvanceAmount = totalBalance;
-  const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  // Use ALL positions for leverage metrics
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  
+  // Use INCLUDED positions for reverse calculations
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+  
+  // Advance Amount = Included positions + New Money
+  const totalAdvanceAmount = includedBalance + settings.newMoney;
+  // For display purposes, keep totalBalance as included balance only
+  const totalBalance = includedBalance;
+  const totalCurrentDailyPayment = includedDailyPayment;
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
   const positionsWithDays = positions.map(p => ({
@@ -145,27 +158,38 @@ export default function Index() {
     daysLeft: p.dailyPayment > 0 && p.balance > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0
   }));
 
-  // Use totalAdvanceAmount instead of totalBalance for funding calculations
-  const totalFunding = (settings.newMoney + totalAdvanceAmount) / (1 - settings.feePercent);
+  // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
+  const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
   
-  const newDailyPayment = totalCurrentDailyPayment * (1 - settings.dailyPaymentDecrease);
+  const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
   const newWeeklyPayment = newDailyPayment * 5;
+  // Use ALL positions for leverage/SP calculations to show true merchant leverage
   const sp = merchant.monthlyRevenue > 0 ? (newDailyPayment * 22) / merchant.monthlyRevenue : 0;
   
   const dailySavings = totalCurrentDailyPayment - newDailyPayment;
   const weeklySavings = dailySavings * 5;
   const monthlySavings = dailySavings * 22;
 
+  // Auto-force Average fees when New Money exists
+  useEffect(() => {
+    if (settings.newMoney > 0 && settings.feeSchedule === 'upfront') {
+      setSettings(prev => ({ ...prev, feeSchedule: 'average' }));
+    }
+  }, [settings.newMoney, settings.feeSchedule]);
+
   const dailySchedule = useMemo(() => {
-    if (totalBalance === 0) return [];
+    if (includedBalance === 0 && settings.newMoney === 0) return [];
     const schedule: any[] = [];
     let cumulativeNetFunded = 0;
     let cumulativeDebits = 0;
     let dealComplete = false;
     const maxDays = 500;
     const originationFee = consolidationFees;
+    
+    // Only use INCLUDED positions for the schedule
+    const includedPositionsWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false);
     
     for (let day = 1; day <= maxDays; day++) {
       if (dealComplete) break;
@@ -177,8 +201,8 @@ export default function Index() {
       if (isPayDay) {
         if (day === 1) cashInfusion = settings.newMoney;
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
-          const dayPayment = positionsWithDays
-            .filter(p => !p.isOurPosition && p.balance > 0 && d <= p.daysLeft)
+          const dayPayment = includedPositionsWithDays
+            .filter(p => p.balance > 0 && d <= p.daysLeft)
             .reduce((sum, p) => sum + p.dailyPayment, 0);
           cashInfusion += dayPayment;
         }
@@ -202,7 +226,7 @@ export default function Index() {
       if (rtrBalance <= 0) dealComplete = true;
     }
     return schedule;
-  }, [positionsWithDays, settings, newDailyPayment, consolidationFees, totalBalance]);
+  }, [positionsWithDays, settings, newDailyPayment, consolidationFees, includedBalance]);
 
   const totalDays = dailySchedule.length;
 
@@ -220,10 +244,13 @@ export default function Index() {
     return Array.from(weekMap.values());
   }, [dailySchedule]);
 
-  // Calculate breakdown entries for a specific day or week
+  // Calculate breakdown entries for a specific day or week (only included positions)
   const getBreakdownEntries = (day?: number, week?: number): { entries: BreakdownEntry[]; total: number } => {
     const entries: BreakdownEntry[] = [];
     let total = 0;
+    
+    // Only use INCLUDED positions for breakdown
+    const includedPositionsWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false);
 
     if (day !== undefined) {
       // For daily breakdown - calculate which positions contribute on this payday
@@ -231,8 +258,8 @@ export default function Index() {
       const startDay = day;
       const endDay = Math.min(day + 4, 500);
       
-      positionsWithDays
-        .filter(p => !p.isOurPosition && p.balance > 0)
+      includedPositionsWithDays
+        .filter(p => p.balance > 0)
         .forEach(p => {
           let daysContributing = 0;
           for (let d = startDay; d <= endDay; d++) {
@@ -260,8 +287,8 @@ export default function Index() {
       const startDay = (week - 1) * 5 + 1;
       const endDay = week * 5;
       
-      positionsWithDays
-        .filter(p => !p.isOurPosition && p.balance > 0)
+      includedPositionsWithDays
+        .filter(p => p.balance > 0)
         .forEach(p => {
           let daysContributing = 0;
           for (let d = startDay; d <= endDay; d++) {
@@ -305,14 +332,15 @@ export default function Index() {
     const actualPaybackCollected = lastDay?.cumulativeDebits || 0;
     const profit = actualPaybackCollected - totalCashInfusion;
     const dealTrueFactor = maxExposure > 0 ? 1 + ((profit - consolidationFees) / (maxExposure + consolidationFees)) : 0;
-    const currentLeverage = merchant.monthlyRevenue > 0 ? (totalCurrentDailyPayment * 22) / merchant.monthlyRevenue * 100 : 0;
+    // Use ALL positions for leverage calculation (full merchant debt picture)
+    const currentLeverage = merchant.monthlyRevenue > 0 ? (totalCurrentDailyPaymentAll * 22) / merchant.monthlyRevenue * 100 : 0;
     const percentDaysInRed = dailySchedule.length > 0 ? (lastDayExposed / dailySchedule.length) * 100 : 0;
     return { maxExposure, maxExposureDay, lastDayExposed, profit, dealTrueFactor, currentLeverage, totalCashInfusion, actualPaybackCollected, percentDaysInRed };
-  }, [dailySchedule, consolidationFees, totalCurrentDailyPayment, merchant.monthlyRevenue]);
+  }, [dailySchedule, consolidationFees, totalCurrentDailyPaymentAll, merchant.monthlyRevenue]);
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: 0, dailyPayment: 0, isOurPosition: false }]);
+    setPositions([...positions, { id: newId, entity: '', balance: 0, dailyPayment: 0, isOurPosition: false, includeInReverse: true }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
@@ -324,10 +352,13 @@ export default function Index() {
 
   // Calculate what the schedule would be with a given discount
   const calculateDaysWithDiscount = (discount: number): number => {
-    if (totalBalance === 0) return 0;
-    const testDailyPayment = totalCurrentDailyPayment * (1 - discount);
-    const testTotalFunding = (settings.newMoney + totalAdvanceAmount) / (1 - settings.feePercent);
+    if (includedBalance === 0 && settings.newMoney === 0) return 0;
+    const testDailyPayment = includedDailyPayment * (1 - discount);
+    const testTotalFunding = totalAdvanceAmount / (1 - settings.feePercent);
     const testFees = testTotalFunding * settings.feePercent;
+    
+    // Only use included positions for schedule calculation
+    const includedPositionsWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false);
     let cumNetFunded = 0;
     let cumDebits = 0;
     let days = 0;
@@ -342,8 +373,8 @@ export default function Index() {
       if (isPayDay) {
         if (day === 1) cashInfusion = settings.newMoney;
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
-          const dayPayment = positionsWithDays
-            .filter(p => !p.isOurPosition && p.balance > 0 && d <= p.daysLeft)
+          const dayPayment = includedPositionsWithDays
+            .filter(p => p.balance > 0 && d <= p.daysLeft)
             .reduce((sum, p) => sum + p.dailyPayment, 0);
           cashInfusion += dayPayment;
         }
@@ -571,7 +602,7 @@ export default function Index() {
   };
 
   const tabs: { key: TabType; label: string }[] = [
-    { key: 'positions', label: `Positions (${externalPositions.length})` },
+    { key: 'positions', label: `Positions (${includedPositions.length}/${allExternalPositions.length})` },
     { key: 'metrics', label: 'Metrics' },
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
@@ -735,8 +766,13 @@ export default function Index() {
               className="w-full p-2.5 border border-input rounded-md text-sm bg-card"
             >
               <option value="average">Average</option>
-              <option value="upfront">Fee Upfront</option>
+              <option value="upfront" disabled={settings.newMoney > 0}>
+                {settings.newMoney > 0 ? 'Fee Upfront (disabled w/ New Money)' : 'Fee Upfront'}
+              </option>
             </select>
+            {settings.newMoney > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">Upfront fees disabled when using New Money</p>
+            )}
           </div>
           <div>
             <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Fee %</label>
@@ -911,6 +947,7 @@ export default function Index() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-muted">
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
                       <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily Payment</th>
@@ -922,14 +959,22 @@ export default function Index() {
                   <tbody>
                     {positions.filter(p => !p.isOurPosition).map(p => {
                       const daysLeft = p.dailyPayment > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0;
+                      const isIncluded = p.includeInReverse !== false;
                       return (
-                        <tr key={p.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                        <tr key={p.id} className={`border-b border-border hover:bg-muted/50 transition-colors ${!isIncluded ? 'opacity-50' : ''}`}>
+                          <td className="p-2 text-center">
+                            <Checkbox
+                              checked={isIncluded}
+                              onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
+                              className="mx-auto"
+                            />
+                          </td>
                           <td className="p-2">
                             <input 
                               value={p.entity} 
                               onChange={e => updatePosition(p.id, 'entity', e.target.value)} 
                               placeholder="Funder name" 
-                              className="w-full p-2 border border-input rounded-md bg-background"
+                              className={`w-full p-2 border border-input rounded-md bg-background ${!isIncluded ? 'line-through text-muted-foreground' : ''}`}
                             />
                           </td>
                           <td className="p-2">
@@ -940,7 +985,7 @@ export default function Index() {
                                 value={p.balance || ''} 
                                 onChange={e => updatePosition(p.id, 'balance', parseFloat(e.target.value) || 0)} 
                                 placeholder="0.00" 
-                                className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
                               />
                             </div>
                           </td>
@@ -952,7 +997,7 @@ export default function Index() {
                                 value={p.dailyPayment || ''} 
                                 onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
                                 placeholder="0.00" 
-                                className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
                               />
                             </div>
                           </td>
@@ -982,7 +1027,12 @@ export default function Index() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-primary text-primary-foreground font-bold">
-                      <td className="p-3 rounded-bl-md">TOTAL ({externalPositions.length} positions)</td>
+                      <td className="p-3 rounded-bl-md"></td>
+                      <td className="p-3">
+                        {includedPositions.length === allExternalPositions.length 
+                          ? `TOTAL (${allExternalPositions.length} positions)` 
+                          : `REVERSING ${includedPositions.length} of ${allExternalPositions.length} positions`}
+                      </td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
                       <td className="p-3 text-center">-</td>
