@@ -911,10 +911,21 @@ export default function Index() {
           </TooltipProvider>
         </div>
         
-        {/* Early Pay Options Section */}
+        {/* White Label & Early Pay Options Section */}
         <div className="mt-4 p-4 bg-muted rounded-lg border border-border">
-          <div className="flex items-center gap-4 mb-3">
-            <label className="text-sm font-semibold text-muted-foreground uppercase">Early Pay Options</label>
+          <div className="flex flex-wrap items-center gap-4 mb-3">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-muted-foreground uppercase">White Label</label>
+              <input
+                type="text"
+                placeholder="Company Name (leave blank for Avion Funding)"
+                value={settings.whiteLabelCompany || ''}
+                onChange={(e) => setSettings({ ...settings, whiteLabelCompany: e.target.value })}
+                className="px-3 py-1.5 border border-input rounded-md text-sm bg-card min-w-[280px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-muted-foreground uppercase">Early Pay Options</label>
             <select
               value={settings.earlyPayOptions?.enabled ? 'yes' : 'no'}
               onChange={(e) => {
@@ -932,6 +943,7 @@ export default function Index() {
               <option value="no">No</option>
               <option value="yes">Yes</option>
             </select>
+            </div>
           </div>
           
           {settings.earlyPayOptions?.enabled && (

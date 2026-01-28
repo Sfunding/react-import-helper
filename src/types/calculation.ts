@@ -13,6 +13,7 @@ export type Settings = {
   newMoney: number;
   currentExposure: number;
   earlyPayOptions?: EarlyPaySettings;
+  whiteLabelCompany?: string;  // Custom company name for PDF export (defaults to "Avion Funding")
 };
 
 export type Position = {
