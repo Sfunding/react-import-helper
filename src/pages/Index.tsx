@@ -51,6 +51,16 @@ export default function Index() {
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
+  
+  // Local state for discount input to allow typing before confirmation
+  const [discountInputValue, setDiscountInputValue] = useState<string>(
+    (DEFAULT_SETTINGS.dailyPaymentDecrease * 100).toFixed(0)
+  );
+  
+  // Sync discount input value when settings change externally
+  useEffect(() => {
+    setDiscountInputValue((settings.dailyPaymentDecrease * 100).toFixed(0));
+  }, [settings.dailyPaymentDecrease]);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
@@ -418,6 +428,8 @@ export default function Index() {
 
   // Cancel the pending change
   const cancelChange = () => {
+    // Reset discount input to current value when cancelled
+    setDiscountInputValue((settings.dailyPaymentDecrease * 100).toFixed(0));
     setAdjustmentDialogOpen(false);
     setPendingChange(null);
   };
@@ -723,16 +735,14 @@ export default function Index() {
                 min="5" 
                 max="50" 
                 step="1" 
-                value={(settings.dailyPaymentDecrease * 100).toFixed(0)} 
+                value={discountInputValue}
+                onChange={e => setDiscountInputValue(e.target.value)}
                 onBlur={e => {
                   const newValue = (parseFloat(e.target.value) || 0) / 100;
-                  if (newValue !== settings.dailyPaymentDecrease) {
+                  if (Math.abs(newValue - settings.dailyPaymentDecrease) > 0.001) {
                     handleDiscountChange(newValue);
                   }
                 }}
-                onChange={e => {}} // Controlled but we only trigger on blur
-                defaultValue={(settings.dailyPaymentDecrease * 100).toFixed(0)}
-                key={settings.dailyPaymentDecrease} // Force re-render when value changes
                 className="w-16 p-2 border-2 border-destructive rounded-md text-lg font-bold text-center text-destructive bg-card"
               />
               <span className="font-bold text-destructive">%</span>
