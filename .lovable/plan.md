@@ -1,139 +1,215 @@
 
 
-## Feature 1: Export Without Saving + Weekly/Daily Payment Input
+## Feature: "Our Position" Marker + Unknown Balance Support
 
 ### Overview
 
-Two improvements to streamline the workflow:
-1. **Export directly from calculator** - Add Excel and PDF export buttons without requiring a save first
-2. **Weekly OR Daily payment input** - Enter either value and auto-calculate the other
+Two additions to position tracking:
+1. **Mark positions as "our own"** - These are your company's existing positions on this merchant. They appear in the table but are never included in the reverse (you're not buying out yourself).
+2. **Unknown balance** - Track positions where you know they exist but don't know the exact balance. Shows "Unknown" in UI and excluded from calculations.
 
 ---
 
-### Feature 1: Export Without Saving
+### Feature 1: "Our Position" Toggle
 
-**The Problem**: Currently you must save a calculation before you can export it to Excel or PDF. This is inefficient when you just want to quickly generate a proposal.
+**The Problem**: The `isOurPosition` field exists in the data model but there's no UI to set it.
 
-**The Solution**: Add export buttons directly in the calculator header that create a temporary `SavedCalculation` object from the current state and pass it to the existing export functions.
+**The Solution**: Add a toggle/checkbox to mark positions as "ours" with visual distinction.
 
-#### Technical Changes
+#### How It Will Work
 
-**File: `src/pages/Index.tsx`**
-
-1. **Add a helper function** to create a `SavedCalculation` from current state:
-```typescript
-const createExportData = (): SavedCalculation => ({
-  id: loadedCalculationId || 'temp',
-  user_id: 'export',
-  name: merchant.name ? `${merchant.name} Consolidation` : 'Consolidation Proposal',
-  merchant_name: merchant.name,
-  merchant_business_type: merchant.businessType,
-  merchant_monthly_revenue: merchant.monthlyRevenue,
-  settings,
-  positions,
-  total_balance: totalBalance,
-  total_daily_payment: totalCurrentDailyPayment,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString()
-});
-```
-
-2. **Add export buttons** next to the Save button in the header:
-```tsx
-<div className="flex gap-2">
-  <Button variant="outline" onClick={handleNewCalculation}>
-    <FilePlus className="w-4 h-4 mr-2" />
-    New
-  </Button>
-  <Button 
-    variant="outline" 
-    onClick={() => exportToExcel(createExportData())}
-    disabled={positions.length === 0}
-  >
-    <FileSpreadsheet className="w-4 h-4 mr-2" />
-    Excel
-  </Button>
-  <Button 
-    variant="outline" 
-    onClick={() => exportToPDF(createExportData())}
-    disabled={positions.length === 0}
-  >
-    <FileText className="w-4 h-4 mr-2" />
-    PDF
-  </Button>
-  <Button onClick={() => setSaveDialogOpen(true)}>
-    <Save className="w-4 h-4 mr-2" />
-    Save
-  </Button>
-</div>
-```
+- Add an "Ours" checkbox column to the positions table
+- When checked, the position is visually highlighted (different background color)
+- "Our positions" are automatically excluded from the reverse (they don't need the "Include" checkbox)
+- They still count toward leverage metrics (merchant's total debt picture)
 
 ---
 
-### Feature 2: Weekly OR Daily Payment Input
+### Feature 2: Unknown Balance
 
-**The Problem**: Currently you can only enter daily payment per position. Sometimes you know the weekly payment amount instead.
+**The Problem**: Sometimes you know a merchant has a position but don't know the exact balance.
 
-**The Solution**: Add a toggle or dual-input that allows entering either daily or weekly payment, with automatic calculation of the other.
+**The Solution**: Allow entering "unknown" or leaving balance blank with a special indicator.
 
 #### Technical Approach
 
-**Option A: Add Weekly Payment Column (Recommended)**
-Add a "Weekly Payment" column that auto-calculates when daily is entered, and vice versa.
+Change the `balance` field in Position type to allow `null`:
+- `balance: number | null` where `null` means "unknown"
+- Display "Unknown" badge in the UI when balance is null
+- Unknown balances are excluded from total calculations
+- Show a warning if unknown positions exist
 
-**Option B: Toggle Between Daily/Weekly**
-Single input field with a toggle to switch between daily and weekly entry mode.
+---
 
-#### Technical Changes
+### Technical Changes
 
-**File: `src/pages/Index.tsx`**
+#### File: `src/types/calculation.ts`
 
-1. **Add a state for input mode per position** (optional) or just add both columns:
-   - Daily Payment column (existing)
-   - Weekly Payment column (new, = daily × 5)
+Update Position type to allow null balance:
+```typescript
+export type Position = {
+  id: number;
+  entity: string;
+  balance: number | null;  // null = unknown
+  dailyPayment: number;
+  isOurPosition: boolean;
+  includeInReverse: boolean;
+};
+```
 
-2. **Update the positions table** to include both columns with bi-directional sync:
+---
 
-```tsx
-// Daily Payment column
-<td className="p-2">
-  <div className="relative">
-    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-    <input 
-      type="number" 
-      value={p.dailyPayment || ''} 
-      onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
-      placeholder="0.00" 
-      className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
-    />
-  </div>
+#### File: `src/pages/Index.tsx`
+
+**Change 1: Add "Ours" checkbox column**
+
+Update table header:
+```typescript
+<th className="p-3 text-center border-b-2 border-border font-semibold w-16">Ours</th>
+<th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
+// ... rest of columns
+```
+
+Add checkbox for each position:
+```typescript
+<td className="p-2 text-center">
+  <Checkbox
+    checked={p.isOurPosition}
+    onCheckedChange={(checked) => updatePosition(p.id, 'isOurPosition', !!checked)}
+    className="mx-auto"
+  />
 </td>
+```
 
-// Weekly Payment column (NEW)
+**Change 2: Show ALL positions in table (not just external)**
+
+Remove the filter that hides our positions:
+```typescript
+// Before: positions.filter(p => !p.isOurPosition).map(...)
+// After: positions.map(...)
+```
+
+**Change 3: Conditional "Include" checkbox**
+
+Only show Include checkbox for non-our positions:
+```typescript
+<td className="p-2 text-center">
+  {!p.isOurPosition ? (
+    <Checkbox
+      checked={isIncluded}
+      onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
+    />
+  ) : (
+    <span className="text-xs text-muted-foreground">-</span>
+  )}
+</td>
+```
+
+**Change 4: Visual distinction for "our" positions**
+
+Apply a distinct style for our positions:
+```typescript
+<tr className={`border-b border-border hover:bg-muted/50 transition-colors 
+  ${p.isOurPosition ? 'bg-primary/10 border-l-4 border-l-primary' : ''} 
+  ${!isIncluded && !p.isOurPosition ? 'opacity-50' : ''}`}
+>
+```
+
+**Change 5: Unknown balance input handling**
+
+Change balance input to support null:
+```typescript
 <td className="p-2">
   <div className="relative">
-    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-    <input 
-      type="number" 
-      value={p.dailyPayment ? (p.dailyPayment * 5) : ''} 
-      onChange={e => {
-        const weekly = parseFloat(e.target.value) || 0;
-        updatePosition(p.id, 'dailyPayment', weekly / 5);
-      }} 
-      placeholder="0.00" 
-      className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
-    />
+    {p.balance === null ? (
+      <div className="flex items-center gap-2">
+        <span className="px-2 py-1 bg-warning/10 text-warning rounded text-xs font-semibold">
+          Unknown
+        </span>
+        <button 
+          onClick={() => updatePosition(p.id, 'balance', 0)}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Set value
+        </button>
+      </div>
+    ) : (
+      <>
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+        <input 
+          type="number" 
+          value={p.balance || ''} 
+          onChange={e => {
+            const val = e.target.value;
+            updatePosition(p.id, 'balance', val === '' ? null : parseFloat(val) || 0);
+          }} 
+          placeholder="Unknown" 
+          className="w-full p-2 pl-5 border border-input rounded-md text-right bg-background"
+        />
+      </>
+    )}
   </div>
 </td>
 ```
 
-3. **Update table header** to include both columns:
-```tsx
-<th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
-<th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
+**Change 6: Add "Unknown Balance" button**
+
+Add a small button or option to explicitly set balance as unknown:
+```typescript
+// In the balance cell, add a right-click context or small icon
+<button 
+  onClick={() => updatePosition(p.id, 'balance', null)}
+  className="ml-1 text-xs text-muted-foreground hover:text-warning"
+  title="Mark as unknown"
+>
+  ?
+</button>
 ```
 
-4. **Update table footer** to show both daily and weekly totals.
+**Change 7: Update calculations to handle null balances**
+
+```typescript
+// Filter out null balances from calculations
+const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance !== null);
+const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
+
+// Count unknown positions for warning
+const unknownBalanceCount = positions.filter(p => p.balance === null).length;
+```
+
+**Change 8: Update footer to show our positions count**
+
+```typescript
+<td className="p-3">
+  {`REVERSING ${includedPositions.length} of ${allExternalPositions.length} positions`}
+  {ourPositionsCount > 0 && ` (${ourPositionsCount} ours)`}
+  {unknownBalanceCount > 0 && ` (${unknownBalanceCount} unknown)`}
+</td>
+```
+
+---
+
+### UI Preview
+
+**Positions table with Ours column and Unknown balance:**
+
+```text
++------+----------+----------+-----------+--------+--------+------+---------+
+| Ours | Include  | Entity   | Balance   | Daily  | Weekly | Days | Actions |
++------+----------+----------+-----------+--------+--------+------+---------+
+|  [ ] |   [✓]    | Funder A | $50,000   | $2,500 |$12,500 |  20  | Delete  |
+|  [ ] |   [✓]    | Funder B | $30,000   | $1,500 | $7,500 |  20  | Delete  |
+|  [ ] |   [ ]    | Funder C | [Unknown] | $1,000 | $5,000 |  ?   | Delete  | <- faded
+|  [✓] |    -     | Avion    | $25,000   | $1,250 | $6,250 |  20  | Delete  | <- highlighted
++------+----------+----------+-----------+--------+--------+------+---------+
+| REVERSING 2 of 3 positions (1 ours, 1 unknown)                             |
++------+----------+----------+-----------+--------+--------+------+---------+
+```
+
+- **Ours checkbox**: Marks your company's position on this merchant
+- **Include checkbox**: Only shown for external positions (not ours)
+- **Unknown badge**: Shown when balance is null
+- **Highlighted row**: "Our" positions have a distinct background/border
 
 ---
 
@@ -141,38 +217,19 @@ Single input field with a toggle to switch between daily and weekly entry mode.
 
 | File | Changes |
 |------|---------|
-| `src/pages/Index.tsx` | Add export buttons in header, add weekly payment column to positions table |
-
----
-
-### UI Preview
-
-**Header with export buttons:**
-```text
-+--------------------------------------------------+
-| Reverse Consolidation Calculator                 |
-|                    [New] [Excel] [PDF] [Save]    |
-+--------------------------------------------------+
-```
-
-**Positions table with both payment columns:**
-```text
-+--------+----------+---------+--------+--------+------+----------+---------+
-|Include | Entity   | Balance | Daily  | Weekly | Days | Last Pay | Actions |
-+--------+----------+---------+--------+--------+------+----------+---------+
-|  [✓]   | Funder A | $50,000 | $2,500 | $12,500|  20  | Feb 28   | Delete  |
-|  [✓]   | Funder B | $30,000 | $1,500 | $7,500 |  20  | Feb 28   | Delete  |
-+--------+----------+---------+--------+--------+------+----------+---------+
-```
-
-When you enter $2,500 in Daily, Weekly auto-fills to $12,500.
-When you enter $12,500 in Weekly, Daily auto-fills to $2,500.
+| `src/types/calculation.ts` | Change `balance: number` to `balance: number \| null` |
+| `src/pages/Index.tsx` | Add Ours column, show all positions, handle unknown balance UI, update calculations |
+| `src/lib/exportUtils.ts` | Handle null balance in exports (show "Unknown") |
 
 ---
 
 ### Summary
 
-1. **Export without saving**: Add Excel and PDF buttons in header that export current state directly
-2. **Weekly/Daily input**: Add weekly payment column that syncs bi-directionally with daily payment
-3. No database changes needed - all UI/logic changes in `src/pages/Index.tsx`
+1. Add "Ours" checkbox column to mark your company's positions
+2. Show all positions in table (our positions highlighted with border)
+3. "Include" checkbox only appears for external (non-ours) positions
+4. Allow clearing balance input to set as "Unknown" (null)
+5. Display "Unknown" badge for null balances
+6. Exclude unknown balances from calculations
+7. Update footer to show position breakdown (reversing X, Y ours, Z unknown)
 
