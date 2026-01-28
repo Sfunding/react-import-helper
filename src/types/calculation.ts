@@ -12,6 +12,7 @@ export type Settings = {
   brokerCommission: number;
   newMoney: number;
   currentExposure: number;
+  earlyPayOptions?: EarlyPaySettings;
 };
 
 export type Position = {
@@ -52,6 +53,26 @@ export const DEFAULT_MERCHANT: Merchant = {
   monthlyRevenue: 0
 };
 
+export type EarlyPayTier = {
+  id: number;
+  daysAfterFalloff: number;  // Days after all positions fall off
+  discountPercent: number;   // Discount on remaining balance (0.10 = 10%)
+};
+
+export type EarlyPaySettings = {
+  enabled: boolean;
+  tiers: EarlyPayTier[];
+};
+
+export const DEFAULT_EPO_SETTINGS: EarlyPaySettings = {
+  enabled: false,
+  tiers: [
+    { id: 1, daysAfterFalloff: 30, discountPercent: 0.10 },
+    { id: 2, daysAfterFalloff: 60, discountPercent: 0.07 },
+    { id: 3, daysAfterFalloff: 90, discountPercent: 0.05 },
+  ]
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   dailyPaymentDecrease: 0.30,
   feeSchedule: 'average',
@@ -59,7 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   rate: 1.499,
   brokerCommission: 0.00,
   newMoney: 0,
-  currentExposure: 0
+  currentExposure: 0,
+  earlyPayOptions: DEFAULT_EPO_SETTINGS
 };
 
 export type ScheduleBreakdown = {

@@ -7,7 +7,8 @@ import {
   Settings, 
   Position, 
   DayScheduleExport, 
-  WeekScheduleExport 
+  WeekScheduleExport,
+  EarlyPaySettings
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, calculateRemainingBalance } from '@/lib/dateUtils';
 import { format } from 'date-fns';
@@ -806,6 +807,81 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
     styles: { fontSize: 10, cellPadding: 4 },
     margin: { left: margin, right: margin },
   });
+
+  currentY = (doc as any).lastAutoTable.finalY + 15;
+
+  // Early Payoff Options Section (if enabled)
+  if (settings.earlyPayOptions?.enabled && (settings.earlyPayOptions?.tiers || []).length > 0) {
+    // Calculate when positions fall off
+    const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
+    const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
+    
+    // Helper to get RTR balance at a specific day
+    const getRtrAtDay = (day: number): number => {
+      const { dailySchedule } = calculateSchedules(positions, settings, merchantRevenue);
+      if (dailySchedule.length === 0) return 0;
+      if (day >= dailySchedule.length) {
+        const lastDay = dailySchedule[dailySchedule.length - 1];
+        const daysAfterSchedule = day - dailySchedule.length;
+        return Math.max(0, lastDay.rtrBalance - (daysAfterSchedule * metrics.newDailyPayment));
+      }
+      return dailySchedule[day - 1]?.rtrBalance || 0;
+    };
+    
+    const tiers = (settings.earlyPayOptions?.tiers || []).sort((a, b) => a.daysAfterFalloff - b.daysAfterFalloff);
+    
+    // Check if we need a new page
+    if (currentY > pageHeight - 100) {
+      doc.addPage();
+      currentY = 20;
+    }
+    
+    // EPO Header
+    doc.setFillColor(...successColor);
+    doc.rect(margin, currentY, pageWidth - margin * 2, 12, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('💸 EARLY PAYOFF OPTIONS', margin + 5, currentY + 8);
+    currentY += 12;
+    
+    // EPO description
+    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Pay off your balance early after positions clear and save:', margin, currentY + 8);
+    currentY += 15;
+    
+    // EPO table
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Pay By', 'Payoff Amount', 'You Save']],
+      body: tiers.map(tier => {
+        const payoffDeadline = falloffDay + tier.daysAfterFalloff;
+        const rtrAtDeadline = getRtrAtDay(payoffDeadline);
+        const discountedPayoff = rtrAtDeadline * (1 - tier.discountPercent);
+        const savings = rtrAtDeadline * tier.discountPercent;
+        
+        return [
+          `Day ${payoffDeadline} (${tier.daysAfterFalloff} days after)`,
+          fmtNoDecimals(discountedPayoff),
+          `${fmtNoDecimals(savings)} (${(tier.discountPercent * 100).toFixed(0)}% off)`
+        ];
+      }),
+      theme: 'striped',
+      headStyles: { fillColor: successColor, fontSize: 10 },
+      bodyStyles: { fontSize: 10 },
+      styles: { cellPadding: 4 },
+      margin: { left: margin, right: margin },
+    });
+    
+    currentY = (doc as any).lastAutoTable.finalY + 5;
+    
+    // EPO footnote
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`* Positions fall off on Day ${falloffDay}. Days are business days from deal start.`, margin, currentY + 5);
+  }
 
   // Footer
   doc.setFontSize(8);
