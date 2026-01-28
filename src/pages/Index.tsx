@@ -1085,13 +1085,19 @@ export default function Index() {
                   </label>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[250px]">
-                  <p>The advance amount equals the sum of all position balances and updates automatically when positions change.</p>
+                  <p>The gross contract amount including origination fees.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <div className="text-2xl font-bold text-primary-foreground text-right">
-              {fmt(totalAdvanceAmount)}
+              {fmt(totalFunding)}
             </div>
+          </div>
+          
+          {/* Net to Merchant - Display */}
+          <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Net to Merchant</div>
+            <div className="text-2xl font-bold text-primary-foreground">{fmt(totalAdvanceAmount)}</div>
           </div>
           
           {/* Factor Rate - Display */}
@@ -1575,10 +1581,10 @@ export default function Index() {
                 <div className="p-4 text-center text-lg font-bold">{settings.rate.toFixed(3)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalFunding * settings.rate)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(newDailyPayment)}</div>
-                <div className="p-4 text-center text-lg font-bold">{newDailyPayment > 0 ? Math.ceil((totalFunding * settings.rate) / newDailyPayment) : 0}</div>
+                <div className="p-4 text-center text-lg font-bold">{totalDays}</div>
               </div>
               <div className="grid grid-cols-5 border-t-2 border-secondary">
-                {['Orig Fee', 'ORG Amount', 'Net Funding', 'Financing Cost', 'Our Profit'].map(h => (
+                {['Orig Fee', 'ORG Amount', 'Net to Merchant', 'Financing Cost', 'Our Profit'].map(h => (
                   <div key={h} className="p-2 bg-secondary font-semibold text-sm text-center text-secondary-foreground">{h}</div>
                 ))}
               </div>
