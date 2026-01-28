@@ -190,11 +190,35 @@ export default function Index() {
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
   
-  const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
+  // Total Payback for display (anchor value - always derived from funding × rate)
+  const totalPayback = totalFunding * settings.rate;
+  
+  // Determine Daily Payment and Term based on which is set
+  // Priority: dailyPaymentOverride > termDays > discount-based calculation
+  let newDailyPayment: number;
+  let calculatedNumberOfDebits: number;
+  
+  if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
+    // User specified daily payment → derive term
+    newDailyPayment = settings.dailyPaymentOverride;
+    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+  } else if (settings.termDays !== null && settings.termDays > 0) {
+    // User specified term → derive daily payment
+    calculatedNumberOfDebits = settings.termDays;
+    newDailyPayment = calculatedNumberOfDebits > 0 ? totalPayback / calculatedNumberOfDebits : 0;
+  } else {
+    // Default: use discount to calculate payment, derive term
+    newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
+    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+  }
+  
+  // Derive the implied discount for display
+  const impliedDiscount = includedDailyPayment > 0 
+    ? 1 - (newDailyPayment / includedDailyPayment) 
+    : 0;
+  
   const newWeeklyPayment = newDailyPayment * 5;
   
-  // Total Payback for display
-  const totalPayback = totalFunding * settings.rate;
   // Use ALL positions for leverage/SP calculations to show true merchant leverage
   const sp = merchant.monthlyRevenue > 0 ? (newDailyPayment * 22) / merchant.monthlyRevenue : 0;
   
@@ -384,9 +408,9 @@ export default function Index() {
     return { maxExposure, maxExposureDay, lastDayExposed, profit, dealTrueFactor, currentLeverage, totalCashInfusion, actualPaybackCollected, percentDaysInRed };
   }, [dailySchedule, consolidationFees, totalCurrentDailyPaymentAll, merchant.monthlyRevenue]);
   
-  // Count actual debit days from simulation (excludes Day 1, counts only days with withdrawals)
+  // Note: calculatedNumberOfDebits is now derived mathematically at line ~199 for tie-out
+  // The simulation's actual debit count may differ slightly due to partial last payments
   const actualDebitCount = dailySchedule.filter(d => d.dailyWithdrawal > 0).length;
-  const calculatedNumberOfDebits = actualDebitCount;
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
@@ -813,38 +837,62 @@ export default function Index() {
 
       {/* Settings Section */}
       <div className="mb-4 p-4 bg-accent rounded-lg border-2 border-secondary">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
-          <div className="col-span-2 md:col-span-1">
-            <label className="block mb-2 font-bold text-foreground">
-              Discount %: <span className="text-xs text-muted-foreground ml-1">(SP: {(sp * 100).toFixed(1)}%)</span>
-            </label>
-            <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-8 gap-4 items-end">
+          {/* Term (# of Debits) - Editable */}
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Term (Debits)</label>
+            <input 
+              type="number" 
+              min="1" 
+              step="1" 
+              value={settings.termDays ?? calculatedNumberOfDebits}
+              onChange={e => {
+                const term = parseInt(e.target.value) || 0;
+                if (term > 0) {
+                  setSettings({
+                    ...settings, 
+                    termDays: term,
+                    dailyPaymentOverride: null // Clear payment override when term is set
+                  });
+                }
+              }}
+              className="w-full p-2.5 border-2 border-primary rounded-md text-sm font-bold bg-card"
+            />
+          </div>
+          
+          {/* Daily Payment - Editable */}
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Daily Payment</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
               <input 
                 type="number" 
-                min="5" 
-                max="50" 
-                step="1" 
-                value={discountInputValue}
-                onChange={e => setDiscountInputValue(e.target.value)}
-                onBlur={e => {
-                  const newValue = (parseFloat(e.target.value) || 0) / 100;
-                  if (Math.abs(newValue - settings.dailyPaymentDecrease) > 0.001) {
-                    handleDiscountChange(newValue);
+                min="0" 
+                step="100" 
+                value={settings.dailyPaymentOverride !== null ? settings.dailyPaymentOverride : Math.round(newDailyPayment * 100) / 100}
+                onChange={e => {
+                  const payment = parseFloat(e.target.value) || 0;
+                  if (payment > 0) {
+                    setSettings({
+                      ...settings, 
+                      dailyPaymentOverride: payment,
+                      termDays: null // Clear term override when payment is set
+                    });
                   }
                 }}
-                className="w-16 p-2 border-2 border-destructive rounded-md text-lg font-bold text-center text-destructive bg-card"
+                className="w-full p-2.5 pl-7 border-2 border-primary rounded-md text-sm font-bold bg-card"
               />
-              <span className="font-bold text-destructive">%</span>
             </div>
-            <input 
-              type="range" 
-              min="0.05" 
-              max="0.50" 
-              step="0.01" 
-              value={settings.dailyPaymentDecrease} 
-              onChange={e => handleDiscountChange(parseFloat(e.target.value))} 
-              className="w-full mt-2 accent-destructive"
-            />
+          </div>
+          
+          {/* Implied Discount % - Display Only */}
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">
+              Discount % <span className="text-xs">(SP: {(sp * 100).toFixed(1)}%)</span>
+            </label>
+            <div className="flex items-center gap-1 p-2.5 border border-input rounded-md bg-muted">
+              <span className="text-lg font-bold text-destructive">{(impliedDiscount * 100).toFixed(1)}%</span>
+            </div>
           </div>
           <div>
             <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Fee Schedule</label>
