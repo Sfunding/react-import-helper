@@ -1,61 +1,51 @@
 
 
-## Plan: Fix Daily Payment & # of Debits Mathematical Consistency
+## Plan: Fix Mathematical Consistency for Daily Payment × # of Debits = Total Payback
 
-### Problem Analysis
+### Root Cause Analysis
 
-The current calculations are mathematically inconsistent:
+I traced through the calculations and found **two distinct problems**:
 
-| Metric | Current Value | How It's Calculated |
-|--------|--------------|---------------------|
-| Total Payback | $1,000,137.64 | `totalFunding × rate` |
-| Daily Payment | $8,664.75 | `includedDailyPayment × (1 - discount)` |
-| # of Debits | 118 | From schedule simulation |
+**Problem 1: # of Debits calculation is wrong**
 
-**Math Check:** $1,000,137.64 ÷ 118 = **$8,475.74** (not $8,664.75)
+| What We Have | Issue |
+|--------------|-------|
+| `calculatedNumberOfDebits = Math.ceil(totalPayback / newDailyPayment)` | Ceiling rounds up, causing overshoot |
 
-The issue: Daily Payment is calculated from the discount, but # of Debits comes from the simulation which runs until RTR hits zero. These two approaches give inconsistent results.
-
-### User's Requirement
-
-The numbers must be mathematically consistent:
-- **Daily Payment** = Derived from the discount percentage (user's primary input)
-- **# of Debits** = `Math.ceil(Total Payback / Daily Payment)` (mathematical derivation)
-
-Using the example:
+Example with your numbers:
 - Total Payback: $1,000,137.64
-- Daily Payment (25% discount): $8,664.75
-- # of Debits: $1,000,137.64 ÷ $8,664.75 = **115.5 → 116 days** (not 118)
+- Daily Payment: $8,664.75
+- Division: $1,000,137.64 ÷ $8,664.75 = **115.43**
+- With `Math.ceil`: **116 debits**
+- Check: $8,664.75 × 116 = $1,005,111 (overshoots by ~$5,000!)
 
-OR if we want a clean payoff:
-- # of Debits: 117
-- Daily Payment: $1,000,137.64 ÷ 117 = **$8,548.18**
+The correct approach: Use `Math.floor` + 1 partial last payment, OR calculate the exact daily payment that makes it tie out.
+
+**Problem 2: "Our Profit" in Offer tab uses wrong formula**
+
+Line 1600 currently calculates:
+```typescript
+{fmt((totalFunding * settings.rate) - totalFunding - (totalFunding * settings.brokerCommission))}
+```
+
+This is: `Total Payback - Advance Amount - Broker Commission`
+
+But this **ignores** what we actually fund out (cash infusion to merchant). The correct profit should come from the simulation: `actualPaybackCollected - totalCashInfusion` which is what `metrics.profit` already calculates.
 
 ---
 
-### Solution Design
+### Solution: Make Numbers Mathematically Consistent
 
-**Option A: Derive # of Debits from Daily Payment (Recommended)**
+**Approach**: Instead of calculating `# of Debits` from a simple division, we derive it properly:
 
-Keep the discount-driven daily payment as the primary calculation, then derive # of debits:
+1. **# of Debits** = number of actual withdrawal days (Day 2 onwards until RTR is paid off)
+2. Since the last payment can differ, we count: `floor(Total Payback / Daily Payment)` full payments + 1 partial
+3. This ensures: `(# of Debits - 1) × Daily Payment + Last Payment = Total Payback`
 
-```typescript
-// Current
-const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-const totalDays = dailySchedule.length; // From simulation
-
-// Proposed
-const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-const totalPayback = totalFunding * settings.rate;
-const numberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
-```
-
-**Displayed Values:**
-- Daily Payment: $8,664.75 (from discount)
-- # of Debits: 116 (calculated: $1,000,137 / $8,664.75 = 115.5 → 116)
-- Total Payback: $1,000,137.64 (unchanged)
-
-**Note:** The last payment would be partial (~$4,622) to make the math work exactly.
+Or more simply:
+- **# of Debits** = `Math.ceil(totalPayback / newDailyPayment)` is correct
+- But we acknowledge the **last payment is partial**
+- The displayed numbers are mathematically consistent because: `(# Debits - 1) × Payment + Remainder = Total`
 
 ---
 
@@ -63,69 +53,94 @@ const numberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPa
 
 **File: `src/pages/Index.tsx`**
 
-**Change 1: Add calculated # of debits (after line 193)**
+**Change 1: Fix # of Debits calculation (around line 196-198)**
+
+Replace the current ceiling calculation with one that excludes Day 1 and handles the math correctly:
 
 ```typescript
-// Line 193 - existing
-const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-
-// Add new calculated value
-const totalPayback = totalFunding * settings.rate;
+// Current
 const calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+
+// Fixed: Use floor for full payments, the last one is partial
+// Also exclude Day 1 since no debit happens on funding day
+const fullDebits = newDailyPayment > 0 ? Math.floor(totalPayback / newDailyPayment) : 0;
+const remainder = totalPayback - (fullDebits * newDailyPayment);
+const calculatedNumberOfDebits = fullDebits + (remainder > 0.01 ? 1 : 0);
 ```
 
-**Change 2: Update header display (line 1124)**
+Actually, simpler approach - the issue is that we want:
+- **Daily Payment × (# Debits - 1) + Last Payment = Total Payback**
 
-Replace `totalDays` with `calculatedNumberOfDebits`:
+So `# of Debits` should be `Math.ceil(totalPayback / newDailyPayment)` BUT since ceiling can overshoot by almost a full payment, we use the simulation-derived count which is more accurate.
+
+**Best Fix**: Use the simulation's actual debit count (days with withdrawal > 0):
 
 ```typescript
-// Before
-<div className="text-2xl font-bold text-primary-foreground">{totalDays}</div>
-
-// After
-<div className="text-2xl font-bold text-primary-foreground">{calculatedNumberOfDebits}</div>
+// Count actual debit days from simulation (days with withdrawal > 0)
+const actualDebitCount = dailySchedule.filter(d => d.dailyWithdrawal > 0).length;
 ```
 
-**Change 3: Update Offer tab display (line 1584)**
+This is the **accurate** number because it's derived from the simulation that runs until RTR = 0.
 
-Replace `totalDays` with `calculatedNumberOfDebits`:
+**Change 2: Fix "Our Profit" display (line 1600)**
+
+Replace the incorrect formula with the simulation-derived profit:
 
 ```typescript
-// Before
-<div className="p-4 text-center text-lg font-bold">{totalDays}</div>
+// Current (WRONG)
+{fmt((totalFunding * settings.rate) - totalFunding - (totalFunding * settings.brokerCommission))}
 
-// After
-<div className="p-4 text-center text-lg font-bold">{calculatedNumberOfDebits}</div>
+// Fixed - use actual profit from simulation
+{fmt(metrics.profit || 0)}
 ```
 
 ---
 
-### Important Notes
+### Complete Technical Changes
 
-1. **The simulation (`dailySchedule`) remains unchanged** - it's still used for exposure tracking, daily/weekly schedule views, and profit calculations
+| Location | Current | Fixed |
+|----------|---------|-------|
+| Line 196-198 | `Math.ceil(totalPayback / newDailyPayment)` | `dailySchedule.filter(d => d.dailyWithdrawal > 0).length` |
+| Line 1600 | Complex formula | `{fmt(metrics.profit || 0)}` |
 
-2. **Only the displayed "# of Debits" changes** - it now shows the mathematically consistent value rather than the simulation length
+**New calculation block (replace lines 196-198):**
 
-3. **The simulation and calculated debits may differ slightly** because:
-   - Simulation accounts for partial last payment
-   - Simulation tracks actual RTR balance depletion
-   - The calculated value is a clean mathematical division
+```typescript
+// Count actual debit days from simulation (excludes Day 1, counts only days with withdrawals)
+const actualDebitCount = dailySchedule.filter(d => d.dailyWithdrawal > 0).length;
+const calculatedNumberOfDebits = actualDebitCount;
+```
 
-4. **This ensures:** `Total Payback ÷ Daily Payment = # of Debits` (exactly)
+**Fixed Offer tab profit (line 1600):**
+
+```typescript
+<div className="p-4 text-center text-lg font-bold text-success">{fmt(metrics.profit || 0)}</div>
+```
 
 ---
 
-### Summary
+### Math Verification
 
-| Location | Change |
-|----------|--------|
-| After line 193 | Add `totalPayback` and `calculatedNumberOfDebits` calculations |
-| Line 1124 | Change `{totalDays}` to `{calculatedNumberOfDebits}` |
-| Line 1584 | Change `{totalDays}` to `{calculatedNumberOfDebits}` |
+After these changes, the numbers will tie out:
 
-After these changes:
-- **Daily Payment** = $8,664.75 (from 25% discount on $11,553)
-- **# of Debits** = 116 (from $1,000,137 ÷ $8,664.75)
-- **Total Payback** = $1,000,137.64 (unchanged)
-- Math checks out: $8,664.75 × 116 = $1,005,111 (slightly over due to ceiling, last payment partial)
+| Metric | Source | Value |
+|--------|--------|-------|
+| Total Payback | `totalFunding × rate` | $1,000,137.64 |
+| Daily Payment | `includedDailyPayment × (1 - discount)` | $8,664.75 |
+| # of Debits | Simulation (actual days with withdrawals) | ~116-117 |
+| Total Collected | Sum of all `dailyWithdrawal` from simulation | ~$1,000,137 |
+| Last Payment | Partial (remainder amount) | ~$4,000-$5,000 |
+| Profit | `actualPaybackCollected - totalCashInfusion` | Actual calculated |
+
+The simulation already handles the partial last payment (line 264: `Math.min(newDailyPayment, rtrBeforeDebit)`), so the count from simulation is accurate.
+
+---
+
+### Why This Works
+
+1. **# of Debits** comes from the actual simulation, not a simple division
+2. **Day 1 is excluded** because the simulation starts debits on Day 2+
+3. **Last payment is partial** - the simulation caps it at `Math.min(newDailyPayment, rtrBalance)`
+4. **Profit is accurate** - derived from actual cash in vs cash collected
+5. **Math ties out** - because we're using simulation results, not approximations
 
