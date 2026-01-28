@@ -74,7 +74,37 @@ export function calculateSchedules(
   const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
   const netAdvance = totalFunding * (1 - settings.feePercent);
   const consolidationFees = totalFunding * settings.feePercent;
-  const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
+  
+  // Base payback calculation from funding × rate (used as default reference)
+  const basePayback = totalFunding * settings.rate;
+
+  // Determine Daily Payment and Term based on which is set
+  // Priority: dailyPaymentOverride > termDays > discount-based calculation
+  let newDailyPayment: number;
+  let numberOfDebits: number;
+
+  if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
+    // User specified daily payment → derive term from base payback
+    newDailyPayment = settings.dailyPaymentOverride;
+    numberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+  } else if (settings.termDays !== null && settings.termDays > 0) {
+    // User specified term → derive daily payment from base payback
+    numberOfDebits = settings.termDays;
+    newDailyPayment = numberOfDebits > 0 ? basePayback / numberOfDebits : 0;
+  } else {
+    // Default: use discount to calculate payment, derive term
+    newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
+    numberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+  }
+
+  // CRITICAL: Total Payback ALWAYS equals Daily Payment × # of Debits
+  const totalPayback = newDailyPayment * numberOfDebits;
+
+  // Derive the implied discount for display
+  const impliedDiscount = includedDailyPayment > 0 
+    ? 1 - (newDailyPayment / includedDailyPayment) 
+    : 0;
+
   const newWeeklyPayment = newDailyPayment * 5;
   const sp = merchantMonthlyRevenue > 0 ? (newDailyPayment * 22) / merchantMonthlyRevenue : 0;
   
@@ -179,6 +209,9 @@ export function calculateSchedules(
       consolidationFees,
       newDailyPayment,
       newWeeklyPayment,
+      totalPayback,
+      numberOfDebits,
+      impliedDiscount,
       dailySavings,
       weeklySavings,
       monthlySavings,
@@ -236,7 +269,7 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['NEW PAYMENT TERMS'],
     ['New Daily Payment', fmtNoDecimals(metrics.newDailyPayment)],
     ['New Weekly Payment', fmtNoDecimals(metrics.newWeeklyPayment)],
-    ['Payment Reduction', fmtPct(settings.dailyPaymentDecrease * 100)],
+    ['Payment Reduction', fmtPct(metrics.impliedDiscount * 100)],
     [''],
     ['SAVINGS'],
     ['Daily Savings', fmtNoDecimals(metrics.dailySavings)],
@@ -329,6 +362,8 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Net Advance', fmtNoDecimals(metrics.netAdvance)],
     ['Consolidation Fees', fmtNoDecimals(metrics.consolidationFees)],
     ['Rate', settings.rate.toFixed(3)],
+    ['Total Payback', fmtNoDecimals(metrics.totalPayback)],
+    ['# of Debits', metrics.numberOfDebits],
     ['Days to Payoff', metrics.totalDays],
     [''],
     ['EXPOSURE ANALYSIS'],
@@ -832,10 +867,10 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
     head: [['Amount Funded', 'Total Payback', 'Factor Rate', 'Origination Fee', '# of Payments']],
     body: [[
       fmtNoDecimals(metrics.totalFunding),
-      fmtNoDecimals(metrics.totalFunding * settings.rate),
+      fmtNoDecimals(metrics.totalPayback),
       settings.rate.toFixed(3),
       `${(settings.feePercent * 100).toFixed(1)}%`,
-      metrics.totalDays.toString()
+      metrics.numberOfDebits.toString()
     ]],
     theme: 'grid',
     headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9, halign: 'center' },
