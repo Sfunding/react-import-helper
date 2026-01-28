@@ -1552,43 +1552,37 @@ export default function Index() {
               </span>
             </div>
 
-            {/* Cash & Savings Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Cash You Receive */}
-              <div className="bg-primary/10 border-2 border-primary/30 rounded-lg p-6 text-center">
-                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Cash You Receive</div>
-                {settings.newMoney > 0 ? (
-                  <>
-                    <div className="text-3xl font-bold text-primary">{fmt(settings.newMoney)}</div>
-                    <div className="text-sm text-muted-foreground">on Day 1</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-xl font-semibold text-muted-foreground">Consolidation Only</div>
-                    <div className="text-sm text-muted-foreground">No additional cash</div>
-                  </>
-                )}
-              </div>
-
-              {/* Your Savings */}
-              <div className="bg-info/10 border-2 border-info/30 rounded-lg p-6">
-                <div className="text-sm text-muted-foreground font-medium uppercase mb-3 text-center">Your Savings</div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Daily:</span>
-                    <span className="font-bold text-info">{fmt(dailySavings)}/day</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Weekly:</span>
-                    <span className="font-bold text-info">{fmt(weeklySavings)}/week</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Monthly:</span>
-                    <span className="font-bold text-info">{fmt(monthlySavings)}/month</span>
-                  </div>
+            {/* HIGHLIGHTED SAVINGS SECTION */}
+            <div className="bg-gradient-to-r from-success/20 via-success/10 to-success/20 border-4 border-success rounded-xl p-6 shadow-lg">
+              <h3 className="text-center text-success font-bold text-xl mb-4 uppercase tracking-wide">
+                💰 Your Savings 💰
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
+                  <div className="text-sm text-muted-foreground uppercase mb-1">Daily Savings</div>
+                  <div className="text-3xl font-bold text-success">{fmt(dailySavings)}</div>
+                  <div className="text-xs text-muted-foreground">per day</div>
+                </div>
+                <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
+                  <div className="text-sm text-muted-foreground uppercase mb-1">Weekly Savings</div>
+                  <div className="text-3xl font-bold text-success">{fmt(weeklySavings)}</div>
+                  <div className="text-xs text-muted-foreground">per week</div>
+                </div>
+                <div className="bg-success text-success-foreground rounded-lg p-4 text-center shadow-md">
+                  <div className="text-sm uppercase mb-1 opacity-90">Monthly Savings</div>
+                  <div className="text-4xl font-bold">{fmt(monthlySavings)}</div>
+                  <div className="text-xs opacity-90">per month</div>
                 </div>
               </div>
             </div>
+
+            {/* Cash You Receive */}
+            {settings.newMoney > 0 && (
+              <div className="bg-primary/10 border-2 border-primary/30 rounded-lg p-6 text-center">
+                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Cash You Receive on Day 1</div>
+                <div className="text-4xl font-bold text-primary">{fmt(settings.newMoney)}</div>
+              </div>
+            )}
 
             {/* Deal Terms */}
             <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden">
@@ -1618,6 +1612,53 @@ export default function Index() {
                 </div>
               </div>
             </div>
+
+            {/* Positions NOT Included in Reverse */}
+            {(() => {
+              const excludedPositions = allExternalPositions.filter(p => p.includeInReverse === false);
+              if (excludedPositions.length === 0) return null;
+              
+              const excludedBalance = excludedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
+              const excludedDailyPayment = excludedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+              
+              return (
+                <div className="bg-muted/50 rounded-lg p-4 border border-border">
+                  <h3 className="font-semibold text-muted-foreground mb-3 uppercase text-sm tracking-wide">
+                    Positions Not Included in This Consolidation
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    The following positions will remain separate and continue their existing payment schedules:
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left p-2 font-semibold text-muted-foreground">Funder</th>
+                          <th className="text-right p-2 font-semibold text-muted-foreground">Balance</th>
+                          <th className="text-right p-2 font-semibold text-muted-foreground">Daily Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {excludedPositions.map(p => (
+                          <tr key={p.id} className="border-b border-border/50">
+                            <td className="p-2 text-muted-foreground">{p.entity || 'Unknown Funder'}</td>
+                            <td className="p-2 text-right text-muted-foreground">{fmt(getEffectiveBalance(p) || 0)}</td>
+                            <td className="p-2 text-right text-muted-foreground">{fmt(p.dailyPayment)}/day</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted font-semibold text-muted-foreground">
+                          <td className="p-2 rounded-bl-md">SUBTOTAL (Not Included)</td>
+                          <td className="p-2 text-right">{fmt(excludedBalance)}</td>
+                          <td className="p-2 text-right rounded-br-md">{fmt(excludedDailyPayment)}/day</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
