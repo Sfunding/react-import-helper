@@ -445,6 +445,22 @@ export default function Index() {
     setLastSavedState('');
   };
 
+  // Create export data from current state (for exporting without saving)
+  const createExportData = (): SavedCalculation => ({
+    id: loadedCalculationId || 'temp',
+    user_id: 'export',
+    name: merchant.name ? `${merchant.name} Consolidation` : 'Consolidation Proposal',
+    merchant_name: merchant.name,
+    merchant_business_type: merchant.businessType,
+    merchant_monthly_revenue: merchant.monthlyRevenue,
+    settings,
+    positions,
+    total_balance: totalBalance,
+    total_daily_payment: totalCurrentDailyPayment,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+
   const handleSave = async (name: string) => {
     const result = await saveCalculation({
       name,
@@ -621,6 +637,22 @@ export default function Index() {
             <Button variant="outline" onClick={handleNewCalculation}>
               <FilePlus className="w-4 h-4 mr-2" />
               New
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => exportToExcel(createExportData())}
+              disabled={positions.length === 0}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Excel
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => exportToPDF(createExportData())}
+              disabled={positions.length === 0}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              PDF
             </Button>
             <Button onClick={() => setSaveDialogOpen(true)}>
               <Save className="w-4 h-4 mr-2" />
@@ -950,7 +982,8 @@ export default function Index() {
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
                       <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
-                      <th className="p-3 text-right border-b-2 border-border font-semibold">Daily Payment</th>
+                      <th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
+                      <th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Last Payment</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Actions</th>
@@ -1001,6 +1034,21 @@ export default function Index() {
                               />
                             </div>
                           </td>
+                          <td className="p-2">
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <input 
+                                type="number" 
+                                value={p.dailyPayment ? (p.dailyPayment * 5).toFixed(2) : ''} 
+                                onChange={e => {
+                                  const weekly = parseFloat(e.target.value) || 0;
+                                  updatePosition(p.id, 'dailyPayment', weekly / 5);
+                                }} 
+                                placeholder="0.00" 
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
+                              />
+                            </div>
+                          </td>
                           <td className="p-2 text-center">
                             <span className={`px-3 py-1 rounded-full font-semibold text-sm ${
                               daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
@@ -1035,6 +1083,7 @@ export default function Index() {
                       </td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
+                      <td className="p-3 text-right">{fmt(totalCurrentWeeklyPayment)}</td>
                       <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center rounded-br-md">-</td>
