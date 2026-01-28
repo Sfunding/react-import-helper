@@ -615,3 +615,209 @@ export async function exportToPDF(calculation: SavedCalculation) {
   const filename = `${sanitizeFilename(calculation.merchant_name || calculation.name)}_Reverse_Proposal_${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(filename);
 }
+
+// Export Merchant-facing PDF (hides internal metrics)
+export async function exportMerchantPDF(calculation: SavedCalculation) {
+  const settings = calculation.settings as Settings;
+  const positions = calculation.positions as Position[];
+  const merchantRevenue = calculation.merchant_monthly_revenue || 0;
+  
+  const { positionsWithDays, includedPositions, metrics } = calculateSchedules(
+    positions,
+    settings,
+    merchantRevenue
+  );
+
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Colors - Avion branding
+  const primaryColor: [number, number, number] = [30, 58, 138]; // Avion dark blue
+  const successColor: [number, number, number] = [22, 163, 74]; // Green
+  const lightBlue: [number, number, number] = [239, 246, 255]; // Light blue bg
+  const lightGreen: [number, number, number] = [220, 252, 231]; // Light green bg
+
+  // Page 1: Main Offer
+  // Header bar
+  doc.setFillColor(...primaryColor);
+  doc.rect(0, 0, pageWidth, 45, 'F');
+  
+  // Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.text('AVION FUNDING', margin, 25);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Your Consolidation Offer', margin, 35);
+
+  // Merchant info
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(calculation.merchant_name || 'Merchant Proposal', margin, 60);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Prepared: ${dateStr}`, margin, 70);
+
+  let currentY = 85;
+
+  // Payment Comparison Section
+  const boxWidth = (pageWidth - margin * 2 - 15) / 2;
+  const boxHeight = 45;
+
+  // Old Payment Box
+  doc.setFillColor(254, 226, 226); // Light red
+  doc.roundedRect(margin, currentY, boxWidth, boxHeight, 3, 3, 'F');
+  doc.setTextColor(185, 28, 28); // Red
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('OLD PAYMENT', margin + boxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment)}/day`, margin + boxWidth/2, currentY + 28, { align: 'center' });
+  doc.setFontSize(12);
+  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment * 5)}/week`, margin + boxWidth/2, currentY + 40, { align: 'center' });
+
+  // New Payment Box
+  doc.setFillColor(...lightGreen);
+  doc.roundedRect(margin + boxWidth + 15, currentY, boxWidth, boxHeight, 3, 3, 'F');
+  doc.setTextColor(...successColor);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('NEW PAYMENT', margin + boxWidth + 15 + boxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day`, margin + boxWidth + 15 + boxWidth/2, currentY + 28, { align: 'center' });
+  doc.setFontSize(12);
+  doc.text(`${fmtNoDecimals(metrics.newWeeklyPayment)}/week`, margin + boxWidth + 15 + boxWidth/2, currentY + 40, { align: 'center' });
+
+  currentY += boxHeight + 10;
+
+  // Payment Reduction Badge
+  doc.setFillColor(...successColor);
+  const badgeWidth = 100;
+  doc.roundedRect((pageWidth - badgeWidth) / 2, currentY, badgeWidth, 15, 3, 3, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${(settings.dailyPaymentDecrease * 100).toFixed(0)}% PAYMENT REDUCTION`, pageWidth / 2, currentY + 10, { align: 'center' });
+
+  currentY += 25;
+
+  // Cash & Savings Row
+  const smallBoxWidth = (pageWidth - margin * 2 - 15) / 2;
+  const smallBoxHeight = 50;
+
+  // Cash You Receive
+  doc.setFillColor(...lightBlue);
+  doc.roundedRect(margin, currentY, smallBoxWidth, smallBoxHeight, 3, 3, 'F');
+  doc.setTextColor(...primaryColor);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('CASH YOU RECEIVE', margin + smallBoxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  if (settings.newMoney > 0) {
+    doc.text(fmtNoDecimals(settings.newMoney), margin + smallBoxWidth/2, currentY + 30, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('on Day 1', margin + smallBoxWidth/2, currentY + 42, { align: 'center' });
+  } else {
+    doc.setFontSize(14);
+    doc.text('Consolidation Only', margin + smallBoxWidth/2, currentY + 32, { align: 'center' });
+  }
+
+  // Your Savings
+  doc.setFillColor(...lightGreen);
+  doc.roundedRect(margin + smallBoxWidth + 15, currentY, smallBoxWidth, smallBoxHeight, 3, 3, 'F');
+  doc.setTextColor(...successColor);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('YOUR SAVINGS', margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text(`Daily: ${fmtNoDecimals(metrics.dailySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 26, { align: 'center' });
+  doc.text(`Weekly: ${fmtNoDecimals(metrics.weeklySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 36, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Monthly: ${fmtNoDecimals(metrics.monthlySavings)}`, margin + smallBoxWidth + 15 + smallBoxWidth/2, currentY + 46, { align: 'center' });
+
+  currentY += smallBoxHeight + 15;
+
+  // Deal Terms Section
+  doc.setFillColor(...primaryColor);
+  doc.rect(margin, currentY, pageWidth - margin * 2, 12, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DEAL TERMS', margin + 5, currentY + 8);
+  currentY += 12;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Amount Funded', 'Total Payback', 'Factor Rate', 'Origination Fee', '# of Payments']],
+    body: [[
+      fmtNoDecimals(metrics.totalFunding),
+      fmtNoDecimals(metrics.totalFunding * settings.rate),
+      settings.rate.toFixed(3),
+      `${(settings.feePercent * 100).toFixed(1)}%`,
+      metrics.totalDays.toString()
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9, halign: 'center' },
+    bodyStyles: { fontSize: 12, fontStyle: 'bold', halign: 'center' },
+    margin: { left: margin, right: margin },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 20;
+
+  // Positions Being Consolidated Section
+  doc.setFillColor(...primaryColor);
+  doc.rect(margin, currentY, pageWidth - margin * 2, 12, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('POSITIONS BEING CONSOLIDATED', margin + 5, currentY + 8);
+  currentY += 12;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Funder', 'Current Balance', 'Daily Payment']],
+    body: includedPositions.map(p => {
+      const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+      return [
+        p.entity || 'Unknown Funder',
+        fmtNoDecimals(posWithDays?.balance || 0),
+        `${fmtNoDecimals(p.dailyPayment)}/day`
+      ];
+    }),
+    foot: [[
+      'TOTAL',
+      fmtNoDecimals(metrics.totalBalance),
+      `${fmtNoDecimals(metrics.totalCurrentDailyPayment)}/day`
+    ]],
+    theme: 'striped',
+    headStyles: { fillColor: primaryColor, fontSize: 10 },
+    footStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold' },
+    styles: { fontSize: 10, cellPadding: 4 },
+    margin: { left: margin, right: margin },
+  });
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(
+    `Avion Funding | ${calculation.merchant_name || calculation.name} | ${dateStr}`,
+    pageWidth / 2,
+    pageHeight - 10,
+    { align: 'center' }
+  );
+
+  // Save PDF
+  const filename = `${sanitizeFilename(calculation.merchant_name || calculation.name)}_Merchant_Offer_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(filename);
+}
