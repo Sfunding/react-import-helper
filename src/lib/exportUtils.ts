@@ -732,7 +732,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('💰  YOUR SAVINGS  💰', pageWidth / 2, currentY + 12, { align: 'center' });
+  doc.text('YOUR SAVINGS', pageWidth / 2, currentY + 12, { align: 'center' });
   
   // Savings boxes inside
   const innerPadding = 10;
@@ -785,7 +785,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   doc.setTextColor(...darkGreen);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('★ MONTHLY ★', monthlyX + savingsColWidth/2, innerY + 12, { align: 'center' });
+  doc.text('MONTHLY', monthlyX + savingsColWidth/2, innerY + 12, { align: 'center' });
   doc.setTextColor(...successColor);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
