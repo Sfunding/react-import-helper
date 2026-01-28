@@ -33,8 +33,8 @@ export function calculateSchedules(
 ) {
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  // Use deal-level advance amount from settings, defaulting to totalBalance
-  const totalAdvanceAmount = settings.advanceAmount ?? totalBalance;
+  // Advance amount is always equal to totalBalance (auto-calculated)
+  const totalAdvanceAmount = totalBalance;
   const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
   const positionsWithDays = positions.map(p => ({

@@ -135,8 +135,8 @@ export default function Index() {
   const externalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
   
   const totalBalance = externalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
-  // Use deal-level advance amount from settings, defaulting to totalBalance
-  const totalAdvanceAmount = settings.advanceAmount ?? totalBalance;
+  // Advance amount is always equal to totalBalance (auto-calculated)
+  const totalAdvanceAmount = totalBalance;
   const totalCurrentDailyPayment = externalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
@@ -386,41 +386,11 @@ export default function Index() {
     setAdjustmentDialogOpen(true);
   };
 
-  // Handle deal-level advance amount change with confirmation
-  const handleAdvanceChange = (newAdvance: number) => {
-    const oldAdvance = settings.advanceAmount ?? totalBalance;
-    if (Math.abs(oldAdvance - newAdvance) < 0.01) return;
-    
-    // Calculate funding impact
-    const oldTotalFunding = (settings.newMoney + oldAdvance) / (1 - settings.feePercent);
-    const newTotalFunding = (settings.newMoney + newAdvance) / (1 - settings.feePercent);
-    const oldRtr = oldTotalFunding * settings.rate;
-    const newRtr = newTotalFunding * settings.rate;
-    
-    setPendingChange({
-      type: 'advance',
-      oldAdvance,
-      newAdvance,
-      totalBalance,
-      oldTotalFunding,
-      newTotalFunding,
-      oldRtr,
-      newRtr,
-      newDailyPayment,
-      daysToPayoff: totalDays,
-    });
-    setAdjustmentDialogOpen(true);
-  };
-
   // Confirm the pending change
   const confirmChange = () => {
     if (!pendingChange) return;
     
-    if (pendingChange.type === 'discount') {
-      setSettings({ ...settings, dailyPaymentDecrease: pendingChange.newValue });
-    } else {
-      setSettings({ ...settings, advanceAmount: pendingChange.newAdvance });
-    }
+    setSettings({ ...settings, dailyPaymentDecrease: pendingChange.newValue });
     
     setAdjustmentDialogOpen(false);
     setPendingChange(null);
@@ -860,27 +830,12 @@ export default function Index() {
                   </label>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[250px]">
-                  <p>The advance amount controls total funding and RTR calculations. Defaults to total position balance but can be adjusted.</p>
+                  <p>The advance amount equals the sum of all position balances and updates automatically when positions change.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary-foreground/70 text-sm font-medium">$</span>
-              <input 
-                type="number" 
-                defaultValue={totalAdvanceAmount || ''}
-                key={`advance-${settings.advanceAmount ?? totalBalance}`}
-                onBlur={e => {
-                  const newValue = parseFloat(e.target.value) || 0;
-                  const currentAdvance = settings.advanceAmount ?? totalBalance;
-                  if (Math.abs(newValue - currentAdvance) > 0.01) {
-                    handleAdvanceChange(newValue);
-                  }
-                }}
-                onChange={() => {}}
-                placeholder="0"
-                className="w-full p-2 pl-5 bg-primary-foreground text-primary rounded-md text-lg font-bold text-right border-2 border-primary-foreground/30 focus:border-primary-foreground"
-              />
+            <div className="text-2xl font-bold text-primary-foreground text-right">
+              {fmt(totalAdvanceAmount)}
             </div>
           </div>
           

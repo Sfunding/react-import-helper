@@ -12,7 +12,6 @@ export type Settings = {
   brokerCommission: number;
   newMoney: number;
   currentExposure: number;
-  advanceAmount?: number; // Deal-level advance amount - defaults to totalBalance if not set
 };
 
 export type Position = {
