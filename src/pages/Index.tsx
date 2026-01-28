@@ -192,6 +192,10 @@ export default function Index() {
   
   const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
   const newWeeklyPayment = newDailyPayment * 5;
+  
+  // Mathematically consistent # of debits: Total Payback / Daily Payment
+  const totalPayback = totalFunding * settings.rate;
+  const calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
   // Use ALL positions for leverage/SP calculations to show true merchant leverage
   const sp = merchant.monthlyRevenue > 0 ? (newDailyPayment * 22) / merchant.monthlyRevenue : 0;
   
@@ -1121,7 +1125,7 @@ export default function Index() {
           {/* Number of Debits - Display */}
           <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
             <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1"># of Debits</div>
-            <div className="text-2xl font-bold text-primary-foreground">{totalDays}</div>
+            <div className="text-2xl font-bold text-primary-foreground">{calculatedNumberOfDebits}</div>
           </div>
         </div>
       </div>
@@ -1581,7 +1585,7 @@ export default function Index() {
                 <div className="p-4 text-center text-lg font-bold">{settings.rate.toFixed(3)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalFunding * settings.rate)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(newDailyPayment)}</div>
-                <div className="p-4 text-center text-lg font-bold">{totalDays}</div>
+                <div className="p-4 text-center text-lg font-bold">{calculatedNumberOfDebits}</div>
               </div>
               <div className="grid grid-cols-5 border-t-2 border-secondary">
                 {['Orig Fee', 'ORG Amount', 'Net to Merchant', 'Financing Cost', 'Our Profit'].map(h => (
