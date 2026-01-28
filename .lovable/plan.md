@@ -1,90 +1,146 @@
 
 
-## Revert: Make Advance Amount Auto-Calculate from Balance + New Money
+## Updated Plan: Partial Reverse + Smart Fee Schedule + Corrected Advance Amount
 
-### The Problem
-Currently, the Advance Amount is stored separately in `settings.advanceAmount` and doesn't update when positions are added. The user wants to revert this behavior so that:
+### Summary of Changes
 
-**Advance Amount = Total Position Balance + New Money (always)**
-
-This means removing the editable nature of the advance amount and making it purely calculated.
+This plan combines three improvements:
+1. **Advance Amount includes New Money** - Shows total cash going to merchant
+2. **Partial Reverse feature** - Select which positions to include
+3. **Smart Fee Schedule** - Auto-switch to "Average" when New Money is used
 
 ---
 
-### What Will Change
+### Why Force "Average" Fees with New Money?
 
-| Current (Adjustable) | Fixed (Auto-Calculate) |
-|---------------------|------------------------|
-| Advance Amount stored in `settings.advanceAmount` | Advance Amount calculated as `totalBalance + newMoney` |
-| Doesn't update when positions added | Automatically updates when positions change |
-| User can edit it in Deal Summary | Display-only (not editable) |
-| Triggers confirmation dialog on change | No dialog needed - it's automatic |
+When you have New Money and use Upfront fees, the entire consolidation fee comes off the Day 1 cash infusion. This means the new money gets eaten up by fees before the merchant sees it.
+
+| Fee Schedule | What Happens |
+|--------------|--------------|
+| **Upfront** | Full fee deducted from Day 1 cash → merchant gets less new money |
+| **Average** | Fee spread across all cash infusions → fair distribution |
+
+**Rule**: If New Money > 0, force "Average" fee schedule and disable "Upfront" option
+
+---
+
+### Updated Calculations
+
+| Metric | Formula |
+|--------|---------|
+| **Advance Amount** | Included Position Balances + New Money |
+| **Total Funding** | Advance Amount / (1 - Fee%) |
+| **Total Payback (RTR)** | Total Funding × Factor Rate |
 
 ---
 
 ### Technical Changes
 
 #### File: `src/types/calculation.ts`
-- Remove `advanceAmount?: number` from the `Settings` type
-- No longer needed since it will be calculated
+Add `includeInReverse` to Position type:
+```typescript
+export type Position = {
+  id: number;
+  entity: string;
+  balance: number;
+  dailyPayment: number;
+  isOurPosition: boolean;
+  includeInReverse: boolean; // NEW - defaults to true
+};
+```
 
 ---
 
 #### File: `src/pages/Index.tsx`
 
-**Change 1: Update totalAdvanceAmount calculation**
-```typescript
-// Current:
-const totalAdvanceAmount = settings.advanceAmount ?? totalBalance;
+**Change 1: Position filtering for partial reverse**
+- Create `allExternalPositions` (all non-ourPosition, for leverage metrics)
+- Create `includedPositions` (only those with `includeInReverse: true`, for reverse calculations)
 
-// Fixed:
-const totalAdvanceAmount = totalBalance; // Just use balance directly
+**Change 2: Update Advance Amount calculation**
+```typescript
+const includedBalance = includedPositions.reduce((sum, p) => sum + p.balance, 0);
+const totalAdvanceAmount = includedBalance + settings.newMoney;
 ```
 
-The Total Funding calculation already adds `settings.newMoney`:
+**Change 3: Update Total Funding calculation**
 ```typescript
-const totalFunding = (settings.newMoney + totalAdvanceAmount) / (1 - settings.feePercent);
+// New money is now part of advance amount
+const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
 ```
 
-So `totalAdvanceAmount` should just equal `totalBalance` (which updates automatically).
+**Change 4: Auto-force Average fees when New Money exists**
+Add a `useEffect` that watches `settings.newMoney`:
+```typescript
+useEffect(() => {
+  if (settings.newMoney > 0 && settings.feeSchedule === 'upfront') {
+    setSettings(prev => ({ ...prev, feeSchedule: 'average' }));
+  }
+}, [settings.newMoney, settings.feeSchedule]);
+```
 
-**Change 2: Remove handleAdvanceChange function**
-- Delete the `handleAdvanceChange` function (no longer needed)
+**Change 5: Disable Upfront option when New Money > 0**
+Update the Fee Schedule dropdown:
+```typescript
+<select 
+  value={settings.feeSchedule} 
+  onChange={e => setSettings({...settings, feeSchedule: e.target.value})}
+  disabled={settings.newMoney > 0 && e.target.value === 'upfront'}
+>
+  <option value="average">Average</option>
+  <option value="upfront" disabled={settings.newMoney > 0}>
+    Fee Upfront {settings.newMoney > 0 ? '(disabled with New Money)' : ''}
+  </option>
+</select>
+```
 
-**Change 3: Update Deal Summary section**
-- Make the Advance Amount field display-only (not an input)
-- Or remove it if it's redundant with "Total Funding"
+**Change 6: Add checkbox column to positions table**
+- Add "Include" column header
+- Add checkbox for each external position row
+- Style excluded rows with `opacity-60`
 
-**Change 4: Update confirmation dialog references**
-- Remove advance-related confirmation logic
-- Keep only discount confirmation
+**Change 7: Update addPosition function**
+Default new positions to `includeInReverse: true`
 
-**Change 5: Remove advance-related state from pending changes**
-- Simplify the `PendingChange` type to only handle discount changes
+**Change 8: Split calculations by purpose**
+- Leverage/SP metrics → use ALL external positions
+- Advance/Funding/Schedule → use only INCLUDED positions
 
----
-
-#### File: `src/components/AdjustmentConfirmDialog.tsx`
-- Remove `AdvanceChange` type and related UI
-- Keep only `DiscountChange` type and UI
+**Change 9: Update footer summary**
+Show "Reversing X of Y positions" in the table footer
 
 ---
 
 #### File: `src/lib/exportUtils.ts`
-- Remove any references to `settings.advanceAmount`
-- Use `totalBalance` directly in exports
+- Add "Include" column to position exports
+- Use included positions for funding calculations
+- Still show all positions in exports (marked as included/excluded)
 
 ---
 
-### Result After Fix
+### UI Changes
 
-| Metric | Source |
-|--------|--------|
-| **Advance Amount** | Auto-calculated: Sum of all position balances |
-| **Total Funding** | (Advance Amount + New Money) / (1 - Fee %) |
-| **Total Payback (RTR)** | Total Funding × Factor Rate |
+**Fee Schedule dropdown with New Money warning:**
+```text
++----------------------------------+
+| Fee Schedule                     |
+| [Average              ▼]         |
++----------------------------------+
+  ℹ️ Upfront fees disabled when using New Money
+```
 
-When you add/remove positions, the Advance Amount and all dependent calculations will automatically update.
+**Positions table with Include column:**
+```text
++----------+----------+---------+--------+------+---------+
+| Include  | Entity   | Balance | Daily  | Days | Actions |
++----------+----------+---------+--------+------+---------+
+|   [✓]    | Funder A | $50,000 | $2,500 |  20  | Delete  |
+|   [✓]    | Funder B | $30,000 | $1,500 |  20  | Delete  |
+|   [ ]    | Funder C | $20,000 | $1,000 |  20  | Delete  | <- faded
++----------+----------+---------+--------+------+---------+
+| Reversing 2 of 3    | $80,000 | $4,000 | ...             |
++----------+----------+---------+--------+------+---------+
+```
 
 ---
 
@@ -92,20 +148,17 @@ When you add/remove positions, the Advance Amount and all dependent calculations
 
 | File | Changes |
 |------|---------|
-| `src/types/calculation.ts` | Remove `advanceAmount` from Settings type |
-| `src/pages/Index.tsx` | Remove advance editing logic, make it auto-calculate |
-| `src/components/AdjustmentConfirmDialog.tsx` | Remove advance change UI (keep discount only) |
-| `src/lib/exportUtils.ts` | Remove settings.advanceAmount references |
+| `src/types/calculation.ts` | Add `includeInReverse` boolean to Position type |
+| `src/pages/Index.tsx` | Add partial reverse checkboxes, update advance amount calculation, add fee schedule auto-switch, disable upfront option with new money |
+| `src/lib/exportUtils.ts` | Handle partial reverse in exports, add Include column |
 
 ---
 
-### Summary
+### Result
 
-1. Remove `advanceAmount` field from Settings type
-2. Change `totalAdvanceAmount` to simply equal `totalBalance`
-3. Make the Advance Amount in Deal Summary display-only (shows totalBalance)
-4. Remove the advance amount confirmation dialog logic
-5. Keep the discount % confirmation dialog (still useful)
-
-The advance amount will now always equal the sum of position balances and will update automatically when positions are added or removed.
+1. **Advance Amount** = Included position balances + New Money
+2. **Fee Schedule** = Auto-switches to "Average" when New Money > 0
+3. **Upfront Option** = Disabled when New Money is used
+4. **Partial Reverse** = Checkbox to include/exclude each position
+5. **Leverage Metrics** = Still use all positions for accurate merchant picture
 
