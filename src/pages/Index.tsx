@@ -17,6 +17,8 @@ import {
   Position, 
   DEFAULT_MERCHANT, 
   DEFAULT_SETTINGS,
+  DEFAULT_EPO_SETTINGS,
+  EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
@@ -909,6 +911,132 @@ export default function Index() {
           </TooltipProvider>
         </div>
         
+        {/* Early Pay Options Section */}
+        <div className="mt-4 p-4 bg-muted rounded-lg border border-border">
+          <div className="flex items-center gap-4 mb-3">
+            <label className="text-sm font-semibold text-muted-foreground uppercase">Early Pay Options</label>
+            <select
+              value={settings.earlyPayOptions?.enabled ? 'yes' : 'no'}
+              onChange={(e) => {
+                const enabled = e.target.value === 'yes';
+                setSettings({
+                  ...settings,
+                  earlyPayOptions: {
+                    enabled,
+                    tiers: settings.earlyPayOptions?.tiers || DEFAULT_EPO_SETTINGS.tiers
+                  }
+                });
+              }}
+              className="px-3 py-1.5 border border-input rounded-md text-sm bg-card"
+            >
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+          
+          {settings.earlyPayOptions?.enabled && (
+            <div className="bg-card rounded-lg border-2 border-primary/20 p-4">
+              <h4 className="font-semibold text-primary mb-3 text-sm uppercase tracking-wide">Early Payoff Discount Tiers</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                After all positions fall off, if the merchant pays the remaining balance within X days, they receive a discount.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-2 font-semibold">Days After Positions Fall Off</th>
+                      <th className="text-left p-2 font-semibold">Discount on Balance</th>
+                      <th className="text-center p-2 font-semibold w-20">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(settings.earlyPayOptions?.tiers || []).map((tier) => (
+                      <tr key={tier.id} className="border-b border-border/50">
+                        <td className="p-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              value={tier.daysAfterFalloff}
+                              onChange={(e) => {
+                                const newTiers = (settings.earlyPayOptions?.tiers || []).map(t =>
+                                  t.id === tier.id ? { ...t, daysAfterFalloff: parseInt(e.target.value) || 0 } : t
+                                );
+                                setSettings({
+                                  ...settings,
+                                  earlyPayOptions: { ...settings.earlyPayOptions!, tiers: newTiers }
+                                });
+                              }}
+                              className="w-20 p-2 border border-input rounded-md bg-background"
+                            />
+                            <span className="text-muted-foreground">days</span>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="1"
+                              value={(tier.discountPercent * 100).toFixed(0)}
+                              onChange={(e) => {
+                                const newTiers = (settings.earlyPayOptions?.tiers || []).map(t =>
+                                  t.id === tier.id ? { ...t, discountPercent: (parseFloat(e.target.value) || 0) / 100 } : t
+                                );
+                                setSettings({
+                                  ...settings,
+                                  earlyPayOptions: { ...settings.earlyPayOptions!, tiers: newTiers }
+                                });
+                              }}
+                              className="w-20 p-2 border border-input rounded-md bg-background"
+                            />
+                            <span className="text-muted-foreground">%</span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center">
+                          <button
+                            onClick={() => {
+                              const newTiers = (settings.earlyPayOptions?.tiers || []).filter(t => t.id !== tier.id);
+                              setSettings({
+                                ...settings,
+                                earlyPayOptions: { ...settings.earlyPayOptions!, tiers: newTiers }
+                              });
+                            }}
+                            className="text-destructive hover:text-destructive/80 transition-colors px-2 py-1"
+                            disabled={(settings.earlyPayOptions?.tiers || []).length <= 1}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                onClick={() => {
+                  const currentTiers = settings.earlyPayOptions?.tiers || [];
+                  const newId = currentTiers.length > 0 ? Math.max(...currentTiers.map(t => t.id)) + 1 : 1;
+                  const lastTier = currentTiers[currentTiers.length - 1];
+                  const newTier: EarlyPayTier = {
+                    id: newId,
+                    daysAfterFalloff: lastTier ? lastTier.daysAfterFalloff + 30 : 30,
+                    discountPercent: lastTier ? Math.max(0.01, lastTier.discountPercent - 0.02) : 0.05
+                  };
+                  setSettings({
+                    ...settings,
+                    earlyPayOptions: { ...settings.earlyPayOptions!, tiers: [...currentTiers, newTier] }
+                  });
+                }}
+                className="mt-3 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90 transition-opacity"
+              >
+                + Add Tier
+              </button>
+            </div>
+          )}
+        </div>
+        
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 p-4 bg-card rounded-lg border-2 border-secondary shadow-sm">
           <div className="text-center p-3 bg-destructive/10 rounded-lg">
@@ -1612,6 +1740,78 @@ export default function Index() {
                 </div>
               </div>
             </div>
+
+            {/* Early Payoff Options Section */}
+            {settings.earlyPayOptions?.enabled && (settings.earlyPayOptions?.tiers || []).length > 0 && (() => {
+              // Calculate when positions fall off (max days left among included positions)
+              const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
+              const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
+              
+              // Get RTR balance at falloff day from schedule
+              const getRtrAtDay = (day: number): number => {
+                if (dailySchedule.length === 0) return 0;
+                if (day >= dailySchedule.length) {
+                  // Extrapolate: keep debiting at newDailyPayment until balance is 0
+                  const lastDay = dailySchedule[dailySchedule.length - 1];
+                  const daysAfterSchedule = day - dailySchedule.length;
+                  const extrapolatedBalance = Math.max(0, lastDay.rtrBalance - (daysAfterSchedule * newDailyPayment));
+                  return extrapolatedBalance;
+                }
+                return dailySchedule[day - 1]?.rtrBalance || 0;
+              };
+              
+              const tiers = (settings.earlyPayOptions?.tiers || []).sort((a, b) => a.daysAfterFalloff - b.daysAfterFalloff);
+              
+              return (
+                <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border-4 border-primary rounded-xl p-6 shadow-lg">
+                  <h3 className="text-center text-primary font-bold text-xl mb-2 uppercase tracking-wide">
+                    💸 Early Payoff Options 💸
+                  </h3>
+                  <p className="text-center text-sm text-muted-foreground mb-4">
+                    Once all your consolidated positions have been paid off, you can save even more by paying off your balance early:
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm bg-card rounded-lg overflow-hidden">
+                      <thead>
+                        <tr className="bg-primary text-primary-foreground">
+                          <th className="text-left p-3 font-semibold">Pay By</th>
+                          <th className="text-right p-3 font-semibold">Payoff Amount</th>
+                          <th className="text-right p-3 font-semibold">You Save</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tiers.map((tier) => {
+                          const payoffDeadline = falloffDay + tier.daysAfterFalloff;
+                          const rtrAtDeadline = getRtrAtDay(payoffDeadline);
+                          const discountedPayoff = rtrAtDeadline * (1 - tier.discountPercent);
+                          const savings = rtrAtDeadline * tier.discountPercent;
+                          
+                          return (
+                            <tr key={tier.id} className="border-b border-border/50 hover:bg-muted/50">
+                              <td className="p-3">
+                                <div className="font-semibold">Day {payoffDeadline}</div>
+                                <div className="text-xs text-muted-foreground">({tier.daysAfterFalloff} days after positions clear)</div>
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="font-bold text-lg">{fmt(discountedPayoff)}</div>
+                                <div className="text-xs text-muted-foreground line-through">{fmt(rtrAtDeadline)}</div>
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="font-bold text-lg text-success">{fmt(savings)}</div>
+                                <div className="text-xs text-success">({(tier.discountPercent * 100).toFixed(0)}% off)</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 text-center">
+                    * Days shown are business days from deal start. Positions fall off on Day {falloffDay}.
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Positions NOT Included in Reverse */}
             {(() => {
