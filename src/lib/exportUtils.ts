@@ -31,8 +31,8 @@ export function calculateSchedules(
   settings: Settings,
   merchantMonthlyRevenue: number
 ) {
-  // All external positions (for leverage calculations)
-  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
+  // All external positions with known balances (for leverage calculations)
+  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance !== null && p.balance > 0);
   // Only included positions (for reverse calculations)
   const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
   
@@ -237,27 +237,31 @@ export function exportToExcel(calculation: SavedCalculation) {
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
 
   // Tab 2: Current Positions (show all positions with Include status)
+  const ourPositions = positions.filter(p => p.isOurPosition);
+  const unknownBalancePositions = positions.filter(p => p.balance === null);
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
-    ...allExternalPositions.map(p => {
+    ['Ours', 'Include', 'Entity', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ...positions.map(p => {
       const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+      const isOurs = p.isOurPosition;
+      const isUnknown = p.balance === null;
       return [
-        p.includeInReverse !== false ? 'Yes' : 'No',
+        isOurs ? 'Yes' : 'No',
+        isOurs ? '-' : (p.includeInReverse !== false ? 'Yes' : 'No'),
         p.entity || 'Unknown',
-        fmtNoDecimals(p.balance),
+        isUnknown ? 'Unknown' : fmtNoDecimals(p.balance || 0),
         fmtNoDecimals(p.dailyPayment),
-        posWithDays?.daysLeft || 0,
-        getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
+        isUnknown ? '?' : (posWithDays?.daysLeft || 0),
+        isUnknown ? '-' : getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
       ];
     }),
     [''],
-    ['', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}`, fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', ''],
-    ['', `TOTAL (all positions)`, fmtNoDecimals(totalBalanceAll), fmtNoDecimals(totalCurrentDailyPaymentAll), '', '']
+    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule

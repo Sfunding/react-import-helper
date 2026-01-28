@@ -133,10 +133,13 @@ export default function Index() {
     }
   }, [toast]);
 
-  // All external positions (for leverage calculations - merchant's full debt picture)
-  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance > 0);
+  // All external positions with known balances (for leverage calculations - merchant's full debt picture)
+  const allExternalPositions = positions.filter(p => !p.isOurPosition && p.balance !== null && p.balance > 0);
   // Only positions included in the reverse (for advance/funding calculations)
   const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
+  // Count "our" positions and unknown balance positions for display
+  const ourPositionsCount = positions.filter(p => p.isOurPosition).length;
+  const unknownBalanceCount = positions.filter(p => p.balance === null).length;
   
   // Use ALL positions for leverage metrics
   const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
@@ -340,7 +343,7 @@ export default function Index() {
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: 0, dailyPayment: 0, isOurPosition: false, includeInReverse: true }]);
+    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
@@ -617,8 +620,13 @@ export default function Index() {
     }
   };
 
+  // Build position counts for tab label
+  const positionCountParts = [`${includedPositions.length}/${allExternalPositions.length}`];
+  if (ourPositionsCount > 0) positionCountParts.push(`${ourPositionsCount} ours`);
+  if (unknownBalanceCount > 0) positionCountParts.push(`${unknownBalanceCount} ?`);
+
   const tabs: { key: TabType; label: string }[] = [
-    { key: 'positions', label: `Positions (${includedPositions.length}/${allExternalPositions.length})` },
+    { key: 'positions', label: `Positions (${positionCountParts.join(', ')})` },
     { key: 'metrics', label: 'Metrics' },
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
@@ -979,6 +987,7 @@ export default function Index() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-muted">
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Ours</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
                       <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
@@ -990,37 +999,88 @@ export default function Index() {
                     </tr>
                   </thead>
                   <tbody>
-                    {positions.filter(p => !p.isOurPosition).map(p => {
-                      const daysLeft = p.dailyPayment > 0 ? Math.ceil(p.balance / p.dailyPayment) : 0;
+                    {positions.map(p => {
+                      const daysLeft = p.dailyPayment > 0 && p.balance !== null && p.balance > 0 
+                        ? Math.ceil(p.balance / p.dailyPayment) 
+                        : 0;
                       const isIncluded = p.includeInReverse !== false;
+                      const isOurs = p.isOurPosition;
+                      const isUnknown = p.balance === null;
+                      const isExcluded = !isIncluded && !isOurs;
+                      
                       return (
-                        <tr key={p.id} className={`border-b border-border hover:bg-muted/50 transition-colors ${!isIncluded ? 'opacity-50' : ''}`}>
+                        <tr 
+                          key={p.id} 
+                          className={`border-b border-border hover:bg-muted/50 transition-colors 
+                            ${isOurs ? 'bg-primary/10 border-l-4 border-l-primary' : ''} 
+                            ${isExcluded ? 'opacity-50' : ''}`}
+                        >
+                          {/* Ours checkbox */}
                           <td className="p-2 text-center">
                             <Checkbox
-                              checked={isIncluded}
-                              onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
+                              checked={isOurs}
+                              onCheckedChange={(checked) => updatePosition(p.id, 'isOurPosition', !!checked)}
                               className="mx-auto"
                             />
+                          </td>
+                          {/* Include checkbox - only for non-ours positions */}
+                          <td className="p-2 text-center">
+                            {!isOurs ? (
+                              <Checkbox
+                                checked={isIncluded}
+                                onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
+                                className="mx-auto"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </td>
                           <td className="p-2">
                             <input 
                               value={p.entity} 
                               onChange={e => updatePosition(p.id, 'entity', e.target.value)} 
                               placeholder="Funder name" 
-                              className={`w-full p-2 border border-input rounded-md bg-background ${!isIncluded ? 'line-through text-muted-foreground' : ''}`}
+                              className={`w-full p-2 border border-input rounded-md bg-background ${isExcluded ? 'line-through text-muted-foreground' : ''}`}
                             />
                           </td>
+                          {/* Balance cell with unknown support */}
                           <td className="p-2">
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <input 
-                                type="number" 
-                                value={p.balance || ''} 
-                                onChange={e => updatePosition(p.id, 'balance', parseFloat(e.target.value) || 0)} 
-                                placeholder="0.00" 
-                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
-                              />
-                            </div>
+                            {isUnknown ? (
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
+                                  Unknown
+                                </span>
+                                <button 
+                                  onClick={() => updatePosition(p.id, 'balance', 0)}
+                                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                                >
+                                  Set
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="relative flex items-center gap-1">
+                                <div className="relative flex-1">
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                                  <input 
+                                    type="number" 
+                                    value={p.balance || ''} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      updatePosition(p.id, 'balance', val === '' ? null : parseFloat(val) || 0);
+                                    }} 
+                                    placeholder="0.00" 
+                                    className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => updatePosition(p.id, 'balance', null)}
+                                  className="text-xs text-muted-foreground hover:text-warning font-bold"
+                                  title="Mark as unknown"
+                                >
+                                  ?
+                                </button>
+                              </div>
+                            )}
                           </td>
                           <td className="p-2">
                             <div className="relative">
@@ -1030,7 +1090,7 @@ export default function Index() {
                                 value={p.dailyPayment || ''} 
                                 onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
                                 placeholder="0.00" 
-                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
                             </div>
                           </td>
@@ -1045,21 +1105,29 @@ export default function Index() {
                                   updatePosition(p.id, 'dailyPayment', weekly / 5);
                                 }} 
                                 placeholder="0.00" 
-                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${!isIncluded ? 'text-muted-foreground' : ''}`}
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
                             </div>
                           </td>
                           <td className="p-2 text-center">
-                            <span className={`px-3 py-1 rounded-full font-semibold text-sm ${
-                              daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
-                            }`}>
-                              {daysLeft}
-                            </span>
+                            {isUnknown ? (
+                              <span className="text-xs text-muted-foreground">?</span>
+                            ) : (
+                              <span className={`px-3 py-1 rounded-full font-semibold text-sm ${
+                                daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
+                              }`}>
+                                {daysLeft}
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 text-center">
-                            <span className="text-xs text-muted-foreground">
-                              {getFormattedLastPaymentDate(daysLeft)}
-                            </span>
+                            {isUnknown ? (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {getFormattedLastPaymentDate(daysLeft)}
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 text-center">
                             <button 
@@ -1076,10 +1144,11 @@ export default function Index() {
                   <tfoot>
                     <tr className="bg-primary text-primary-foreground font-bold">
                       <td className="p-3 rounded-bl-md"></td>
+                      <td className="p-3"></td>
                       <td className="p-3">
-                        {includedPositions.length === allExternalPositions.length 
-                          ? `TOTAL (${allExternalPositions.length} positions)` 
-                          : `REVERSING ${includedPositions.length} of ${allExternalPositions.length} positions`}
+                        {`REVERSING ${includedPositions.length} of ${allExternalPositions.length}`}
+                        {ourPositionsCount > 0 && <span className="ml-1 font-normal text-xs">({ourPositionsCount} ours)</span>}
+                        {unknownBalanceCount > 0 && <span className="ml-1 font-normal text-xs">({unknownBalanceCount} unknown)</span>}
                       </td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
