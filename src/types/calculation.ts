@@ -14,6 +14,8 @@ export type Settings = {
   currentExposure: number;
   earlyPayOptions?: EarlyPaySettings;
   whiteLabelCompany?: string;  // Custom company name for PDF export (defaults to "Avion Funding")
+  termDays: number | null;  // null = auto-calculate from discount, number = user-set term
+  dailyPaymentOverride: number | null;  // null = auto-calculate, number = user-set payment
 };
 
 export type Position = {
@@ -82,7 +84,9 @@ export const DEFAULT_SETTINGS: Settings = {
   brokerCommission: 0.00,
   newMoney: 0,
   currentExposure: 0,
-  earlyPayOptions: DEFAULT_EPO_SETTINGS
+  earlyPayOptions: DEFAULT_EPO_SETTINGS,
+  termDays: null,
+  dailyPaymentOverride: null
 };
 
 export type ScheduleBreakdown = {
