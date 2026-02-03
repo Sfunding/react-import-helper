@@ -1,149 +1,73 @@
 
+## Plan: Remove "New Money" Feature
 
-## Plan: Fix Excel/PDF Export to Use New Calculation Logic
+Since your system does not support adding extra cash on top of position consolidations, we'll remove this feature entirely from the application.
 
-### The Problem
+---
 
-The `calculateSchedules` function in `src/lib/exportUtils.ts` uses the **OLD calculation logic**:
+### What This Feature Did
 
-```typescript
-// Line 77 - OLD logic (ignores termDays/dailyPaymentOverride)
-const newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-```
-
-And the metrics don't include `totalPayback` or `numberOfDebits`, causing:
-- Line 835 to use `metrics.totalFunding * settings.rate` instead of the correct `totalPayback`
-- Math not tying out in exports
+The "New Money" feature allowed adding additional cash to the merchant on Day 1, on top of paying off their existing positions. It was factored into:
+- Total Advance Amount calculations
+- Day 1 cash infusion in payment schedules  
+- Breakdown dialogs
+- Excel and PDF exports
+- The Merchant's Offer tab display
 
 ---
 
 ### Files to Change
 
-**File: `src/lib/exportUtils.ts`**
+| File | Changes |
+|------|---------|
+| `src/types/calculation.ts` | Remove `newMoney` from Settings type and DEFAULT_SETTINGS |
+| `src/pages/Index.tsx` | Remove New Money input field, related logic, and conditional UI displays |
+| `src/lib/exportUtils.ts` | Remove New Money from calculations and exports |
+| `src/components/ScheduleBreakdownDialog.tsx` | Remove New Money display section |
 
 ---
 
-### Technical Changes
+### Technical Details
 
-**Change 1: Update `newDailyPayment` calculation (lines 73-83)**
+**1. `src/types/calculation.ts`**
+- Remove `newMoney: number;` from the `Settings` type (line 13)
+- Remove `newMoney: 0,` from `DEFAULT_SETTINGS` (line 85)
+- Remove `newMoney: number;` from `ScheduleBreakdown` type (line 93)
 
-Replace the old discount-based calculation with the new priority logic that respects `termDays` and `dailyPaymentOverride`:
+**2. `src/pages/Index.tsx`**
+- **Line 80**: Remove `settings.newMoney > 0` from unsaved changes check
+- **Line 173**: Change `totalAdvanceAmount` to just use `includedBalance` (no + newMoney)
+- **Lines 232-237**: Remove the `useEffect` that auto-forces Average fees when New Money exists
+- **Line 256**: Remove `&& settings.newMoney === 0` from early return condition
+- **Line 275**: Remove `if (day === 1) cashInfusion = settings.newMoney;` 
+- **Lines 355-357**: Remove adding new money on day 1 in breakdown
+- **Lines 384-386**: Remove adding new money on week 1 in breakdown
+- **Line 432**: Remove `&& settings.newMoney === 0` check
+- **Line 451**: Remove adding new money on day 1 in discount calculation
+- **Lines 906-914**: Remove disabled state and message for Upfront fees related to New Money
+- **Lines 946-969**: Remove the entire New Money input field section
+- **Lines 1783-1789**: Remove "Cash You Receive on Day 1" display in Merchant's Offer tab
+- **Line 1951**: Pass `newMoney={0}` instead of `settings.newMoney`
 
-```typescript
-// Total Funding = Advance Amount / (1 - Fee%)
-const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
-const netAdvance = totalFunding * (1 - settings.feePercent);
-const consolidationFees = totalFunding * settings.feePercent;
+**3. `src/lib/exportUtils.ts`**
+- **Line 59**: Change `totalAdvanceAmount = includedBalance + settings.newMoney` to just `includedBalance`
+- **Line 134**: Remove adding newMoney to cash infusion on day 1
+- **Line 267**: Remove New Money row from Excel summary
+- **Line 500**: Remove New Money from PDF summary table
+- **Lines 847-851**: Remove conditional New Money display in PDF export
 
-// Base payback calculation from funding × rate (used as default reference)
-const basePayback = totalFunding * settings.rate;
-
-// Determine Daily Payment and Term based on which is set
-// Priority: dailyPaymentOverride > termDays > discount-based calculation
-let newDailyPayment: number;
-let numberOfDebits: number;
-
-if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
-  // User specified daily payment → derive term from base payback
-  newDailyPayment = settings.dailyPaymentOverride;
-  numberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
-} else if (settings.termDays !== null && settings.termDays > 0) {
-  // User specified term → derive daily payment from base payback
-  numberOfDebits = settings.termDays;
-  newDailyPayment = numberOfDebits > 0 ? basePayback / numberOfDebits : 0;
-} else {
-  // Default: use discount to calculate payment, derive term
-  newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-  numberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
-}
-
-// CRITICAL: Total Payback ALWAYS equals Daily Payment × # of Debits
-const totalPayback = newDailyPayment * numberOfDebits;
-
-// Derive the implied discount for display
-const impliedDiscount = includedDailyPayment > 0 
-  ? 1 - (newDailyPayment / includedDailyPayment) 
-  : 0;
-
-const newWeeklyPayment = newDailyPayment * 5;
-```
-
-**Change 2: Add new metrics to the return object (lines 173-195)**
-
-Add `totalPayback`, `numberOfDebits`, and `impliedDiscount` to the metrics:
-
-```typescript
-metrics: {
-  totalBalance,
-  totalAdvanceAmount,
-  totalCurrentDailyPayment,
-  totalFunding,
-  netAdvance,
-  consolidationFees,
-  newDailyPayment,
-  newWeeklyPayment,
-  totalPayback,        // NEW
-  numberOfDebits,      // NEW
-  impliedDiscount,     // NEW
-  dailySavings,
-  weeklySavings,
-  monthlySavings,
-  sp,
-  totalDays,
-  maxExposure,
-  maxExposureDay,
-  lastDayExposed,
-  totalCashInfusion,
-  actualPaybackCollected,
-  profit,
-  dealTrueFactor,
-  currentLeverage
-}
-```
-
-**Change 3: Update Excel Summary tab to use new metrics (line 239)**
-
-Change the "Payment Reduction" line to show implied discount:
-
-```typescript
-['Payment Reduction', fmtPct(metrics.impliedDiscount * 100)],
-```
-
-**Change 4: Update Excel Offer Details tab (around line 332)**
-
-Add the number of debits and total payback to the metrics display.
-
-**Change 5: Fix PDF export Total Payback display (line 835)**
-
-Change from:
-```typescript
-fmtNoDecimals(metrics.totalFunding * settings.rate),
-```
-
-To:
-```typescript
-fmtNoDecimals(metrics.totalPayback),
-```
-
-**Change 6: Update other PDF displays using Rate formula**
-
-Search and replace any other instances of `settings.rate * totalFunding` to use `metrics.totalPayback`.
+**4. `src/components/ScheduleBreakdownDialog.tsx`**
+- **Line 28**: Remove `newMoney` prop
+- **Line 65**: Remove `hasNewMoney` calculation
+- **Lines 81-94**: Remove the "New Money" entry display section
+- **Line 163**: Update explanation text to remove mention of New Money
 
 ---
 
-### Summary
+### Result After Changes
 
-| Location | Old Code | New Code |
-|----------|----------|----------|
-| Line 77 | `includedDailyPayment * (1 - discount)` | Priority logic with overrides |
-| metrics object | Missing totalPayback | Add `totalPayback`, `numberOfDebits`, `impliedDiscount` |
-| Line 239 | `settings.dailyPaymentDecrease` | `metrics.impliedDiscount` |
-| Line 835 | `metrics.totalFunding * settings.rate` | `metrics.totalPayback` |
-
-### Result
-
-After these changes:
-- Excel export will show **$1,013,688** for Total Payback (matching 8,664 × 117)
-- PDF export will show the same correct value
-- Math will tie out in all exports just like it does in the UI
+- The "New Money" input field will be completely removed from the settings panel
+- All calculations will be based purely on existing position consolidation
+- Exports (Excel/PDF) will no longer include New Money references
+- The codebase will be cleaner and focused on your actual use case
 
