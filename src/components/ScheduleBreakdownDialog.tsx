@@ -6,7 +6,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { DollarSign, Building2, Banknote } from 'lucide-react';
+import { Building2, Banknote } from 'lucide-react';
 import { PositionDetailDialog } from './PositionDetailDialog';
 
 export type BreakdownEntry = {
@@ -25,7 +25,6 @@ type ScheduleBreakdownDialogProps = {
   onClose: () => void;
   day?: number;
   week?: number;
-  newMoney: number;
   entries: BreakdownEntry[];
   total: number;
   // RTR/Fee info for Day 1 breakdown
@@ -44,7 +43,6 @@ export function ScheduleBreakdownDialog({
   onClose,
   day,
   week,
-  newMoney,
   entries,
   total,
   originationFee = 0,
@@ -61,8 +59,6 @@ export function ScheduleBreakdownDialog({
     : week 
       ? `Sources of cash infusion for Week ${week}` 
       : 'Breakdown of cash sources';
-
-  const hasNewMoney = (day === 1 || week === 1) && newMoney > 0;
   
   return (
     <>
@@ -76,23 +72,7 @@ export function ScheduleBreakdownDialog({
             <SheetDescription>{description}</SheetDescription>
           </SheetHeader>
           
-          <div className="mt-6 space-y-4">
-            {/* New Money Entry */}
-            {hasNewMoney && (
-              <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg border border-success/20">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-success/20 rounded-full">
-                    <DollarSign className="h-4 w-4 text-success" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">New Money (Cash to Merchant)</p>
-                    <p className="text-xs text-muted-foreground">Additional cash on Day 1</p>
-                  </div>
-                </div>
-                <span className="font-bold text-success">{fmt(newMoney)}</span>
-              </div>
-            )}
-
+        <div className="mt-6 space-y-4">
             {/* Position Entries - now clickable */}
             {entries.map((entry, i) => (
               <div 
@@ -159,8 +139,8 @@ export function ScheduleBreakdownDialog({
             {(day === 1 || week === 1) && (
               <div className="p-3 bg-info/10 rounded-lg border border-info/20 mt-4">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Day 1 Explained:</strong> On the first day, you collect payments from existing funders for the entire first week (5 business days) 
-                  plus any New Money being provided to the merchant. This creates the initial cash pool to fund the consolidation.
+                  <strong>Day 1 Explained:</strong> On the first day, you collect payments from existing funders for the entire first week (5 business days). 
+                  This creates the initial cash pool to fund the consolidation.
                 </p>
               </div>
             )}

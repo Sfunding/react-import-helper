@@ -76,8 +76,7 @@ export default function Index() {
     // If we have data (positions or merchant name or settings changed from default)
     const hasData = positions.length > 0 || 
                     merchant.name !== '' || 
-                    merchant.monthlyRevenue > 0 ||
-                    settings.newMoney > 0;
+                    merchant.monthlyRevenue > 0;
     
     // If no data, no unsaved changes
     if (!hasData) return false;
@@ -169,8 +168,8 @@ export default function Index() {
   const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
-  // Advance Amount = Included positions + New Money
-  const totalAdvanceAmount = includedBalance + settings.newMoney;
+  // Advance Amount = Included positions only (no new money on top)
+  const totalAdvanceAmount = includedBalance;
   // For display purposes, keep totalBalance as included balance only
   const totalBalance = includedBalance;
   const totalCurrentDailyPayment = includedDailyPayment;
@@ -229,12 +228,6 @@ export default function Index() {
   const weeklySavings = dailySavings * 5;
   const monthlySavings = dailySavings * 22;
 
-  // Auto-force Average fees when New Money exists
-  useEffect(() => {
-    if (settings.newMoney > 0 && settings.feeSchedule === 'upfront') {
-      setSettings(prev => ({ ...prev, feeSchedule: 'average' }));
-    }
-  }, [settings.newMoney, settings.feeSchedule]);
 
   // Auto-populate balance when funding data is entered (only if balance is null or 0)
   useEffect(() => {
@@ -253,7 +246,7 @@ export default function Index() {
   }, [positions.map(p => `${p.fundedDate}-${p.amountFunded}-${p.dailyPayment}`).join(',')]);
 
   const dailySchedule = useMemo(() => {
-    if (includedBalance === 0 && settings.newMoney === 0) return [];
+    if (includedBalance === 0) return [];
     const schedule: any[] = [];
     let cumulativeNetFunded = 0;
     let cumulativeDebits = 0;
@@ -272,7 +265,6 @@ export default function Index() {
       
       let cashInfusion = 0;
       if (isPayDay) {
-        if (day === 1) cashInfusion = settings.newMoney;
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
           const dayPayment = includedPositionsWithDays
             .filter(p => p.balance > 0 && d <= p.daysLeft)
@@ -350,11 +342,6 @@ export default function Index() {
             total += p.dailyPayment * daysContributing;
           }
         });
-
-      // Add new money on day 1
-      if (day === 1 && settings.newMoney > 0) {
-        total += settings.newMoney;
-      }
     } else if (week !== undefined) {
       // For weekly breakdown
       const startDay = (week - 1) * 5 + 1;
@@ -376,14 +363,9 @@ export default function Index() {
               remainingBalance: p.balance,
               totalDaysLeft: p.daysLeft
             });
-            total += p.dailyPayment * daysContributing;
+          total += p.dailyPayment * daysContributing;
           }
         });
-
-      // Add new money on week 1
-      if (week === 1 && settings.newMoney > 0) {
-        total += settings.newMoney;
-      }
     }
 
     return { entries, total };
@@ -429,7 +411,7 @@ export default function Index() {
 
   // Calculate what the schedule would be with a given discount
   const calculateDaysWithDiscount = (discount: number): number => {
-    if (includedBalance === 0 && settings.newMoney === 0) return 0;
+    if (includedBalance === 0) return 0;
     const testDailyPayment = includedDailyPayment * (1 - discount);
     const testTotalFunding = totalAdvanceAmount / (1 - settings.feePercent);
     const testFees = testTotalFunding * settings.feePercent;
@@ -448,7 +430,6 @@ export default function Index() {
       
       let cashInfusion = 0;
       if (isPayDay) {
-        if (day === 1) cashInfusion = settings.newMoney;
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
           const dayPayment = includedPositionsWithDays
             .filter(p => p.balance > 0 && d <= p.daysLeft)
@@ -905,13 +886,8 @@ export default function Index() {
               className="w-full p-2.5 border border-input rounded-md text-sm bg-card"
             >
               <option value="average">Average</option>
-              <option value="upfront" disabled={settings.newMoney > 0}>
-                {settings.newMoney > 0 ? 'Fee Upfront (disabled w/ New Money)' : 'Fee Upfront'}
-              </option>
+              <option value="upfront">Fee Upfront</option>
             </select>
-            {settings.newMoney > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">Upfront fees disabled when using New Money</p>
-            )}
           </div>
           <div>
             <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Fee %</label>
@@ -943,30 +919,6 @@ export default function Index() {
               className="w-full p-2.5 border border-input rounded-md text-sm bg-card"
             />
           </div>
-          <TooltipProvider>
-            <div>
-              <label className="mb-1 text-xs font-semibold text-muted-foreground uppercase flex items-center gap-1">
-                New Money
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[250px]">
-                    <p>Additional cash paid to the merchant on Day 1, on top of paying off their existing positions.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
-                <input 
-                  type="number" 
-                  value={settings.newMoney} 
-                  onChange={e => setSettings({...settings, newMoney: parseFloat(e.target.value) || 0})} 
-                  className="w-full p-2.5 pl-7 border-2 border-success rounded-md text-sm bg-card font-medium"
-                />
-              </div>
-            </div>
-          </TooltipProvider>
         </div>
         
         {/* White Label & Early Pay Options Section */}
@@ -1780,14 +1732,6 @@ export default function Index() {
               </div>
             </div>
 
-            {/* Cash You Receive */}
-            {settings.newMoney > 0 && (
-              <div className="bg-primary/10 border-2 border-primary/30 rounded-lg p-6 text-center">
-                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Cash You Receive on Day 1</div>
-                <div className="text-4xl font-bold text-primary">{fmt(settings.newMoney)}</div>
-              </div>
-            )}
-
             {/* Deal Terms */}
             <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden">
               <div className="bg-secondary p-2">
@@ -1948,7 +1892,6 @@ export default function Index() {
           }}
           day={selectedBreakdown?.day}
           week={selectedBreakdown?.week}
-          newMoney={settings.newMoney}
           entries={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).entries : []}
           total={selectedBreakdown ? getBreakdownEntries(selectedBreakdown.day, selectedBreakdown.week).total : 0}
           originationFee={consolidationFees}

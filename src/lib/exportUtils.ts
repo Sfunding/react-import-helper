@@ -55,8 +55,8 @@ export function calculateSchedules(
   const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
   const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
   
-  // Advance Amount = Included positions + New Money
-  const totalAdvanceAmount = includedBalance + settings.newMoney;
+  // Advance Amount = Included positions only (no new money on top)
+  const totalAdvanceAmount = includedBalance;
   // For display purposes
   const totalBalance = includedBalance;
   const totalCurrentDailyPayment = includedDailyPayment;
@@ -131,7 +131,6 @@ export function calculateSchedules(
 
     let cashInfusion = 0;
     if (isPayDay) {
-      if (day === 1) cashInfusion = settings.newMoney;
       for (let d = day; d <= day + 4 && d <= maxDays; d++) {
         const dayPayment = includedPositionsWithDays
           .filter(p => p.balance > 0 && d <= p.daysLeft)
@@ -264,7 +263,7 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Consolidation Fees', fmtNoDecimals(metrics.consolidationFees)],
     ['Fee Percentage', fmtPct(settings.feePercent * 100)],
     ['Rate', settings.rate.toFixed(3)],
-    ['New Money', fmtNoDecimals(settings.newMoney)],
+    ['Rate', settings.rate.toFixed(3)],
     [''],
     ['NEW PAYMENT TERMS'],
     ['New Daily Payment', fmtNoDecimals(metrics.newDailyPayment)],
@@ -496,8 +495,8 @@ export async function exportToPDF(calculation: SavedCalculation) {
     body: [
       ['Net Advance', fmtNoDecimals(metrics.netAdvance), 'New Daily Payment', fmtNoDecimals(metrics.newDailyPayment)],
       ['Consolidation Fees', fmtNoDecimals(metrics.consolidationFees), 'New Weekly Payment', fmtNoDecimals(metrics.newWeeklyPayment)],
-      ['Rate', settings.rate.toFixed(3), 'Payment Reduction', fmtPct(settings.dailyPaymentDecrease * 100)],
-      ['New Money', fmtNoDecimals(settings.newMoney), 'Days to Payoff', metrics.totalDays.toString()],
+      ['Rate', settings.rate.toFixed(3), 'Payment Reduction', fmtPct(metrics.impliedDiscount * 100)],
+      ['Term (Days)', metrics.numberOfDebits.toString(), 'Total Payback', fmtNoDecimals(metrics.totalPayback)],
     ],
     theme: 'grid',
     styles: { fontSize: 10, cellPadding: 5 },
@@ -841,15 +840,10 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   doc.setTextColor(...primaryColor);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('CASH YOU RECEIVE ON DAY 1', cashX + cashBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
+  doc.text('CONSOLIDATION', cashX + cashBoxWidth/2, currentY + 12, { align: 'center' });
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  if (settings.newMoney > 0) {
-    doc.text(fmtNoDecimals(settings.newMoney), cashX + cashBoxWidth/2, currentY + 30, { align: 'center' });
-  } else {
-    doc.setFontSize(12);
-    doc.text('Consolidation Only', cashX + cashBoxWidth/2, currentY + 28, { align: 'center' });
-  }
+  doc.text('Position Buyout Only', cashX + cashBoxWidth/2, currentY + 28, { align: 'center' });
 
   currentY += cashBoxHeight + 15;
 
