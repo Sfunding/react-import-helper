@@ -10,7 +10,6 @@ export type Settings = {
   feePercent: number;
   rate: number;
   brokerCommission: number;
-  newMoney: number;
   currentExposure: number;
   earlyPayOptions?: EarlyPaySettings;
   whiteLabelCompany?: string;  // Custom company name for PDF export (defaults to "Avion Funding")
@@ -82,7 +81,6 @@ export const DEFAULT_SETTINGS: Settings = {
   feePercent: 0.09,
   rate: 1.499,
   brokerCommission: 0.00,
-  newMoney: 0,
   currentExposure: 0,
   earlyPayOptions: DEFAULT_EPO_SETTINGS,
   termDays: null,
@@ -90,7 +88,6 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export type ScheduleBreakdown = {
-  newMoney: number;
   entries: Array<{
     entity: string;
     dailyPayment: number;
