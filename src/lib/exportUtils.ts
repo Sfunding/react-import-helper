@@ -33,10 +33,10 @@ export function calculateSchedules(
   settings: Settings,
   merchantMonthlyRevenue: number
 ) {
-  // Helper to get effective balance (auto-calculated or manual)
+  // Helper to get effective balance - use the stored balance directly
+  // This matches the UI behavior where balance is the source of truth
   const getEffectiveBalance = (p: Position): number | null => {
-    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-    return autoCalc !== null ? autoCalc : p.balance;
+    return p.balance;
   };
 
   // All external positions with known balances (for leverage calculations)
