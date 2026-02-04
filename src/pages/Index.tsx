@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -22,7 +22,8 @@ import {
   SavedCalculation
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
-import { exportToExcel, exportToPDF, exportMerchantPDF } from '@/lib/exportUtils';
+import { exportToExcel, exportToPDF, exportMerchantPDF, exportMerchantCashReport } from '@/lib/exportUtils';
+import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -1626,33 +1627,57 @@ export default function Index() {
 
         {activeTab === 'merchantOffer' && (
           <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
-              <Button
-                onClick={() => {
-                  // Create a temporary calculation object for PDF export
-                  const tempCalc = {
-                    id: '',
-                    user_id: '',
-                    name: merchant.name || 'Merchant Offer',
-                    merchant_name: merchant.name,
-                    merchant_business_type: merchant.businessType,
-                    merchant_monthly_revenue: merchant.monthlyRevenue,
-                    settings,
-                    positions,
-                    total_balance: totalBalance,
-                    total_daily_payment: totalCurrentDailyPayment,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                  };
-                  exportMerchantPDF(tempCalc);
-                  toast({ title: 'Merchant PDF exported', description: 'File downloaded successfully.' });
-                }}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Export Merchant PDF
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const tempCalc = {
+                      id: '',
+                      user_id: '',
+                      name: merchant.name || 'Merchant Offer',
+                      merchant_name: merchant.name,
+                      merchant_business_type: merchant.businessType,
+                      merchant_monthly_revenue: merchant.monthlyRevenue,
+                      settings,
+                      positions,
+                      total_balance: totalBalance,
+                      total_daily_payment: totalCurrentDailyPayment,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    };
+                    exportMerchantCashReport(tempCalc);
+                    toast({ title: 'Cash Report exported', description: 'File downloaded successfully.' });
+                  }}
+                >
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  Cash Report
+                </Button>
+                <Button
+                  onClick={() => {
+                    const tempCalc = {
+                      id: '',
+                      user_id: '',
+                      name: merchant.name || 'Merchant Offer',
+                      merchant_name: merchant.name,
+                      merchant_business_type: merchant.businessType,
+                      merchant_monthly_revenue: merchant.monthlyRevenue,
+                      settings,
+                      positions,
+                      total_balance: totalBalance,
+                      total_daily_payment: totalCurrentDailyPayment,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    };
+                    exportMerchantPDF(tempCalc);
+                    toast({ title: 'Merchant PDF exported', description: 'File downloaded successfully.' });
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export Merchant PDF
+                </Button>
+              </div>
             </div>
 
             {/* Positions Being Consolidated */}
@@ -1731,6 +1756,17 @@ export default function Index() {
                 </div>
               </div>
             </div>
+
+            {/* Cash Buildup Section - Position Timeline & Weekly Projection */}
+            <CashBuildupSection
+              positions={positions}
+              totalCurrentDailyPayment={totalCurrentDailyPayment}
+              newDailyPayment={newDailyPayment}
+              dailySavings={dailySavings}
+              weeklySavings={weeklySavings}
+              monthlySavings={monthlySavings}
+              totalDays={totalDays}
+            />
 
             {/* Deal Terms */}
             <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden">
