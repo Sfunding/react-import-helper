@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table';
 import { TrendingUp, Calendar, PiggyBank } from 'lucide-react';
 import { Position } from '@/types/calculation';
-import { getFormattedLastPaymentDate, calculateRemainingBalance } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
 
 type CashBuildupSectionProps = {
   positions: Position[];
@@ -26,10 +26,10 @@ type CashBuildupSectionProps = {
 const fmt = (v: number) => 
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0);
 
-// Helper to get effective balance
+// Helper to get effective balance - use the stored balance directly
+// This matches the UI behavior where balance is the source of truth
 const getEffectiveBalance = (p: Position): number | null => {
-  const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-  return autoCalc !== null ? autoCalc : p.balance;
+  return p.balance;
 };
 
 export function CashBuildupSection({
