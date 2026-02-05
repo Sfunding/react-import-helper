@@ -1766,6 +1766,19 @@ export default function Index() {
               weeklySavings={weeklySavings}
               monthlySavings={monthlySavings}
               totalDays={totalDays}
+              totalPayback={totalPayback}
+              rtrAtFalloff={(() => {
+                // Calculate RTR at the day when all positions fall off
+                const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && (p.balance || 0) > 0);
+                const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft)) : 0;
+                return dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+              })()}
+              daysRemainingAfterFalloff={(() => {
+                const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && (p.balance || 0) > 0);
+                const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft)) : 0;
+                const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+                return rtrAtFalloff > 0 && newDailyPayment > 0 ? Math.ceil(rtrAtFalloff / newDailyPayment) : 0;
+              })()}
             />
 
             {/* Deal Terms */}
