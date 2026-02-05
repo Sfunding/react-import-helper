@@ -1352,7 +1352,111 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.setFont('helvetica', 'normal');
   doc.text(`(${totalWeeks} weeks)`, margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 44, { align: 'center' });
 
-  // ========== PAGE 4: THE BOTTOM LINE ==========
+  // ========== PAGE 4: THE FULL PICTURE (TRANSPARENCY) ==========
+  doc.addPage();
+  
+  // Header
+  doc.setFillColor(...primaryColor);
+  doc.rect(0, 0, pageWidth, 30, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('THE FULL PICTURE', margin, 20);
+
+  currentY = 50;
+
+  // Important Information Box
+  const infoBoxHeight = 85;
+  doc.setFillColor(255, 243, 205); // Light amber/warning
+  doc.roundedRect(margin, currentY, pageWidth - margin * 2, infoBoxHeight, 5, 5, 'F');
+  
+  // Header stripe
+  doc.setFillColor(245, 158, 11); // Amber color
+  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 22, 5, 5, 'F');
+  doc.rect(margin, currentY + 12, pageWidth - margin * 2, 10, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('IMPORTANT: WHAT YOU SHOULD KNOW', margin + 10, currentY + 14);
+  
+  // Info items
+  doc.setTextColor(92, 64, 0);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('✓ You can stop this consolidation at any time by contacting us', margin + 10, currentY + 35);
+  doc.text(`✓ Total you will pay back: ${fmtNoDecimals(metrics.totalPayback)}`, margin + 10, currentY + 50);
+  doc.setFontSize(9);
+  doc.text('   (This is more than your current balances due to fees and factor rate)', margin + 10, currentY + 60);
+  doc.setFontSize(10);
+  doc.text(`✓ However, your daily cash flow improves by ${fmtNoDecimals(metrics.dailySavings)}/day during this period`, margin + 10, currentY + 75);
+
+  currentY += infoBoxHeight + 20;
+
+  // Calculate falloff data
+  const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
+  const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
+  const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+  const cashAccumulatedAtFalloff = metrics.dailySavings * falloffDay;
+  const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
+    ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
+    : 0;
+
+  // "After Positions Fall Off" Section
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`AFTER ALL POSITIONS FALL OFF (Day ${falloffDay})`, pageWidth / 2, currentY, { align: 'center' });
+  currentY += 10;
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text(`On Day ${falloffDay}, all your existing funders will be paid off. Here's where you'll stand:`, pageWidth / 2, currentY, { align: 'center' });
+  currentY += 15;
+
+  // Stats boxes
+  const boxWidth = (pageWidth - margin * 2 - 15) / 2;
+  const boxHeight = 50;
+
+  // Cash Accumulated
+  doc.setFillColor(...lightGreen);
+  doc.roundedRect(margin, currentY, boxWidth, boxHeight, 5, 5, 'F');
+  doc.setTextColor(...successColor);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('CASH ACCUMULATED', margin + boxWidth/2, currentY + 15, { align: 'center' });
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(cashAccumulatedAtFalloff), margin + boxWidth/2, currentY + 35, { align: 'center' });
+
+  // Balance With Us
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(margin + boxWidth + 15, currentY, boxWidth, boxHeight, 5, 5, 'F');
+  doc.setTextColor(...primaryColor);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('BALANCE WITH US', margin + boxWidth + 15 + boxWidth/2, currentY + 15, { align: 'center' });
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(rtrAtFalloff), margin + boxWidth + 15 + boxWidth/2, currentY + 35, { align: 'center' });
+
+  currentY += boxHeight + 15;
+
+  // Your single payment going forward
+  doc.setFillColor(...successColor);
+  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 55, 5, 5, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('YOUR SINGLE PAYMENT GOING FORWARD', pageWidth / 2, currentY + 15, { align: 'center' });
+  doc.setFontSize(22);
+  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day for ${daysRemainingAfterFalloff} more days`, pageWidth / 2, currentY + 35, { align: 'center' });
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('No more multiple funders!', pageWidth / 2, currentY + 48, { align: 'center' });
+
+  // ========== PAGE 5: THE BOTTOM LINE ==========
   doc.addPage();
   
   // Header

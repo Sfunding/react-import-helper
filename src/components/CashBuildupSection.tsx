@@ -8,7 +8,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { TrendingUp, Calendar, PiggyBank } from 'lucide-react';
+import { TrendingUp, Calendar, PiggyBank, AlertCircle, CheckCircle } from 'lucide-react';
 import { Position } from '@/types/calculation';
 import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
 
@@ -20,6 +20,10 @@ type CashBuildupSectionProps = {
   weeklySavings: number;
   monthlySavings: number;
   totalDays: number;
+  // Transparency props
+  totalPayback: number;
+  rtrAtFalloff: number;
+  daysRemainingAfterFalloff: number;
 };
 
 // Helper to format currency
@@ -39,7 +43,10 @@ export function CashBuildupSection({
   dailySavings,
   weeklySavings,
   monthlySavings,
-  totalDays
+  totalDays,
+  totalPayback,
+  rtrAtFalloff,
+  daysRemainingAfterFalloff
 }: CashBuildupSectionProps) {
   // Get only included positions with known balances
   const includedPositions = positions.filter(p => {
@@ -92,6 +99,9 @@ export function CashBuildupSection({
   const month3Savings = Math.min(12, weeksToPayoff) * weeklySavings;
   const totalSavingsToPayoff = weeksToPayoff * weeklySavings;
 
+  // Calculate cash accumulated at falloff
+  const cashAccumulatedAtFalloff = dailySavings * maxDay;
+
   if (includedPositions.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -102,6 +112,68 @@ export function CashBuildupSection({
 
   return (
     <div className="space-y-6">
+      {/* Important Information Card - Transparency */}
+      <Card className="border-2 border-warning/30 bg-warning/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-warning">
+            <AlertCircle className="h-5 w-5" />
+            Important Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
+              <span>You can stop this consolidation at any time by contacting us</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
+              <span>Total payback: <strong>{fmt(totalPayback)}</strong> (includes fees & factor rate)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
+              <span>Your cash flow improves by <strong className="text-success">{fmt(dailySavings)}/day</strong> during the term</span>
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* After Positions Fall Off Card */}
+      <Card className="border-2 border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-primary">
+            <Calendar className="h-5 w-5" />
+            When All Positions Clear (Day {maxDay})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            On Day {maxDay}, all your existing funders will be paid off. Here's where you'll stand:
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-card rounded-lg p-3 text-center border">
+              <div className="text-xs text-muted-foreground uppercase mb-1">Cash Accumulated</div>
+              <div className="text-lg font-bold text-success">{fmt(cashAccumulatedAtFalloff)}</div>
+            </div>
+            <div className="bg-card rounded-lg p-3 text-center border">
+              <div className="text-xs text-muted-foreground uppercase mb-1">Balance With Us</div>
+              <div className="text-lg font-bold">{fmt(rtrAtFalloff)}</div>
+            </div>
+            <div className="bg-card rounded-lg p-3 text-center border">
+              <div className="text-xs text-muted-foreground uppercase mb-1">Your Payment</div>
+              <div className="text-lg font-bold">{fmt(newDailyPayment)}/day</div>
+            </div>
+            <div className="bg-card rounded-lg p-3 text-center border">
+              <div className="text-xs text-muted-foreground uppercase mb-1">Days Remaining</div>
+              <div className="text-lg font-bold">{daysRemainingAfterFalloff}</div>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4 text-center">
+            No more multiple funders! Just <strong>ONE</strong> simple payment going forward.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Key Milestones */}
       <Card className="border-2 border-success/30 bg-success/5">
         <CardHeader className="pb-3">
