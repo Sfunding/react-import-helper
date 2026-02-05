@@ -1,14 +1,26 @@
 
-## Plan: Fix Merchant Cash Report PDF Numbers
+## Plan: Add Honest Transparency Section to Cash Buildup Report
 
-### The Problem
+### Overview
 
-When you adjust the deal settings (Term Days, Daily Payment, Discount %), the PDF export shows **different numbers** than what you see in the UI. This happens because:
+Enhance the Merchant Cash Report to be fully transparent by adding:
+1. **Flexibility Notice**: Merchant can stop the reverse at any time
+2. **Full Picture Disclosure**: Total amount owed to your company over the life of the deal
+3. **"After Positions Fall Off" Section**: Shows their status when all existing funders are paid off:
+   - Cash flow accumulated to that point
+   - Remaining balance owed to your company
+   - Their new single payment going forward
+   - Days remaining on your consolidation
 
-1. **The UI (Index.tsx)** uses the **stored balance** directly from each position
-2. **The PDF export** tries to **auto-calculate** the balance from funded date/amount, which can produce different values
+---
 
-Additionally, the savings calculations depend on accurate `newDailyPayment` and `totalCurrentDailyPayment` values, which must be consistent between the UI and export.
+### Key Data Points at Position Falloff (Day X)
+
+When all positions are paid off:
+- **Cash Accumulated** = Daily Savings × Days to Falloff
+- **Balance Owed to Us** = RTR Balance at falloff day (from dailySchedule)
+- **Payments Remaining** = Math.ceil(rtrBalanceAtFalloff / newDailyPayment)
+- **Single Payment** = newDailyPayment (what they continue paying us)
 
 ---
 
@@ -16,65 +28,170 @@ Additionally, the savings calculations depend on accurate `newDailyPayment` and 
 
 | File | Changes |
 |------|---------|
-| `src/lib/exportUtils.ts` | Fix `getEffectiveBalance()` to match Index.tsx behavior - use stored balance |
-| `src/components/CashBuildupSection.tsx` | Fix `getEffectiveBalance()` to match Index.tsx behavior |
+| `src/components/CashBuildupSection.tsx` | Add "The Full Picture" transparency section and "After Positions Fall Off" snapshot |
+| `src/lib/exportUtils.ts` | Add transparency page to the Cash Report PDF with honest disclosures |
 
 ---
 
 ### Technical Details
 
-**Change 1: Fix `exportUtils.ts` - `getEffectiveBalance()` (line 37-40)**
+**1. CashBuildupSection.tsx - Add New Props and Sections**
 
-The export function should use the same logic as Index.tsx - prioritize the stored balance:
-
+Add new props for RTR tracking:
 ```typescript
-// CURRENT (incorrect):
-const getEffectiveBalance = (p: Position): number | null => {
-  const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-  return autoCalc !== null ? autoCalc : p.balance;
-};
-
-// FIXED:
-const getEffectiveBalance = (p: Position): number | null => {
-  // Use the stored balance directly - this matches the UI behavior
-  // The auto-calculation is only used during data entry in Index.tsx
-  return p.balance;
+type CashBuildupSectionProps = {
+  positions: Position[];
+  totalCurrentDailyPayment: number;
+  newDailyPayment: number;
+  dailySavings: number;
+  weeklySavings: number;
+  monthlySavings: number;
+  totalDays: number;
+  // NEW: For transparency section
+  totalPayback: number;        // Total amount merchant will pay back
+  rtrAtFalloff: number;        // Balance owed to us when positions clear
+  daysRemainingAfterFalloff: number;  // How many days left on our deal
 };
 ```
 
-**Change 2: Fix `CashBuildupSection.tsx` - `getEffectiveBalance()` (line 30-33)**
+Add new UI sections:
 
-Same fix - use the stored balance to match the UI:
+**Section 1: "Important Information" Card (at top)**
+- Info alert style box
+- "You can stop this consolidation at any time"
+- "Total cost of consolidation: $X (this is more than your current balances)"
 
+**Section 2: "After Positions Fall Off" Card**
+- Shows: "On Day X, all your existing funders are paid off"
+- Shows: "By that point, you'll have saved: $X"
+- Shows: "Your remaining balance with us: $X"
+- Shows: "Your single daily payment: $X"
+- Shows: "Days remaining: X"
+
+**2. Index.tsx - Pass Additional Props**
+
+Calculate and pass the new data:
 ```typescript
-// CURRENT (incorrect):
-const getEffectiveBalance = (p: Position): number | null => {
-  const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-  return autoCalc !== null ? autoCalc : p.balance;
-};
+// Find RTR at the day when all positions fall off
+const falloffDay = Math.max(...positionsWithDays
+  .filter(p => !p.isOurPosition && p.includeInReverse !== false)
+  .map(p => p.daysLeft));
 
-// FIXED:
-const getEffectiveBalance = (p: Position): number | null => {
-  return p.balance;
-};
+const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+const daysRemainingAfterFalloff = Math.ceil(rtrAtFalloff / newDailyPayment);
+const cashAccumulatedAtFalloff = dailySavings * falloffDay;
+```
+
+**3. exportMerchantCashReport() - Add Transparency Page**
+
+Add a new page or section titled "THE FULL PICTURE" that includes:
+
+**Honest Disclosure Box:**
+```text
+┌─────────────────────────────────────────────┐
+│ IMPORTANT: WHAT YOU SHOULD KNOW             │
+├─────────────────────────────────────────────┤
+│ ✓ You can stop this consolidation at any    │
+│   time by contacting us                     │
+│                                             │
+│ ✓ Total you will pay back: $XX,XXX          │
+│   (This is more than your current balances  │
+│   due to fees and factor rate)              │
+│                                             │
+│ ✓ However, your daily cash flow improves    │
+│   by $XXX/day during this period            │
+└─────────────────────────────────────────────┘
+```
+
+**"When Positions Clear" Snapshot:**
+```text
+┌─────────────────────────────────────────────┐
+│ AFTER ALL POSITIONS FALL OFF (Day XX)       │
+├─────────────────────────────────────────────┤
+│                                             │
+│ ┌──────────────┐  ┌──────────────┐          │
+│ │ Cash         │  │ Balance      │          │
+│ │ Accumulated  │  │ With Us      │          │
+│ │   $X,XXX     │  │   $X,XXX     │          │
+│ └──────────────┘  └──────────────┘          │
+│                                             │
+│ Your single payment going forward:          │
+│ $XXX/day for XX more days                   │
+│                                             │
+│ No more multiple funders!                   │
+└─────────────────────────────────────────────┘
 ```
 
 ---
 
-### Why This Works
+### Calculation Logic
 
-The balance auto-calculation in Index.tsx (lines 234-247) is a **one-time population** that only fills in `balance` when:
-- Balance is `null` or `0`
-- AND a calculated value exists and is `> 0`
+```typescript
+// At the point all positions fall off (maxDay):
 
-Once the balance is populated, it becomes the "source of truth" stored in the position. The UI then always reads from `p.balance`. By making the export and CashBuildupSection also read directly from `p.balance`, we ensure consistency.
+// 1. Cash accumulated from daily savings
+const cashAccumulatedAtFalloff = dailySavings * maxDay;
+
+// 2. RTR balance at that day (what they still owe us)
+const rtrAtFalloff = dailySchedule[maxDay - 1]?.rtrBalance || 0;
+
+// 3. Days remaining on our deal after positions clear
+const daysRemainingAfterFalloff = rtrAtFalloff > 0 
+  ? Math.ceil(rtrAtFalloff / newDailyPayment) 
+  : 0;
+
+// 4. Total payback comparison
+const totalPayback = newDailyPayment * numberOfDebits;
+const extraCost = totalPayback - totalBalance; // What they pay above current debt
+```
+
+---
+
+### UI Updates for CashBuildupSection
+
+**New Card 1: "Important Information"** (Yellow/warning style)
+```jsx
+<Card className="border-2 border-warning/30 bg-warning/5">
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2 text-warning">
+      <AlertCircle className="h-5 w-5" />
+      Important Information
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    <ul className="space-y-2 text-sm">
+      <li>✓ You can stop this consolidation at any time</li>
+      <li>✓ Total payback: {fmt(totalPayback)} (includes fees & factor rate)</li>
+      <li>✓ Your cash flow improves by {fmt(dailySavings)}/day during the term</li>
+    </ul>
+  </CardContent>
+</Card>
+```
+
+**New Card 2: "After Positions Fall Off"** (Blue/info style)
+```jsx
+<Card className="border-2 border-primary/30 bg-primary/5">
+  <CardHeader>
+    <CardTitle>When All Positions Clear (Day {maxDay})</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>Cash Accumulated: {fmt(cashAccumulatedAtFalloff)}</div>
+      <div>Balance With Us: {fmt(rtrAtFalloff)}</div>
+      <div>Your Payment: {fmt(newDailyPayment)}/day</div>
+      <div>Days Remaining: {daysRemainingAfterFalloff}</div>
+    </div>
+  </CardContent>
+</Card>
+```
 
 ---
 
 ### Result
 
-After these changes:
-- Daily Savings, Weekly Savings, and Monthly Savings in the PDF will match the UI exactly
-- Position balances will be consistent between UI and export
-- All "Money Back in Your Pocket" milestone calculations will be accurate
-- The Weekly Cash Flow Projection table will show correct values
+The merchant receives a transparent report that:
+- Clearly states they can stop at any time
+- Honestly shows the total cost of consolidation
+- Shows exactly where they stand when positions fall off
+- Displays their remaining obligation and payment with your company
+- Builds trust through transparency while still highlighting the cash flow benefits
