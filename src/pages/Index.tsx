@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon, TrendingUp } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon, TrendingUp, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -212,8 +212,8 @@ export default function Index() {
     calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
   }
   
-  // CRITICAL: Total Payback ALWAYS equals Daily Payment × # of Debits (math ties out exactly)
-  const totalPayback = newDailyPayment * calculatedNumberOfDebits;
+  // CRITICAL: Total Payback = Advance Amount × Factor Rate (exact, factor-based)
+  const totalPayback = totalFunding * settings.rate;
   
   // Derive the implied discount for display
   const impliedDiscount = includedDailyPayment > 0 
@@ -229,6 +229,14 @@ export default function Index() {
   const weeklySavings = dailySavings * 5;
   const monthlySavings = dailySavings * 22;
 
+  // Blocking warning: deal must be long enough to cover all positions
+  const maxPositionDays = Math.max(
+    ...positionsWithDays
+      .filter(p => !p.isOurPosition && p.includeInReverse !== false && (p.balance || 0) > 0)
+      .map(p => p.daysLeft),
+    0
+  );
+  const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
 
   // Auto-populate balance when funding data is entered (only if balance is null or 0)
   useEffect(() => {
@@ -1137,6 +1145,20 @@ export default function Index() {
         </div>
       </div>
 
+      {/* Blocking Warning: Deal too short */}
+      {dealTooShort && (
+        <div className="mb-4 p-4 bg-destructive/10 border-2 border-destructive rounded-lg flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-destructive">Deal Term Too Short</p>
+            <p className="text-sm text-destructive/80">
+              The deal ends in <strong>{calculatedNumberOfDebits} debits</strong> but the longest position needs <strong>{maxPositionDays} days</strong> to pay off. 
+              The deal must be at least as long as the longest position. Increase the term, lower the daily payment, or adjust the factor rate.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-0.5 border-b-2 border-border overflow-x-auto">
         {tabs.map(tab => (
           <button 
@@ -1456,7 +1478,7 @@ export default function Index() {
                   <tr><td className="py-2">Net Advance</td><td className="text-right font-semibold py-2">{fmt(netAdvance)}</td></tr>
                   <tr><td className="py-2">Fees</td><td className="text-right py-2">{fmt(consolidationFees)}</td></tr>
                   <tr><td className="py-2">Rate</td><td className="text-right py-2">{settings.rate}</td></tr>
-                  <tr className="bg-secondary/20"><td className="py-2 font-medium">Days to Payoff</td><td className="text-right font-bold py-2">{totalDays}</td></tr>
+                  <tr className="bg-secondary/20"><td className="py-2 font-medium"># of Debits</td><td className="text-right font-bold py-2">{calculatedNumberOfDebits}</td></tr>
                   <tr><td className="py-2">New Daily Payment</td><td className="text-right font-semibold py-2">{fmt(newDailyPayment)}</td></tr>
                   <tr><td className="py-2">Max Exposure</td><td className="text-right text-destructive py-2">({fmt(metrics.maxExposure || 0)})</td></tr>
                   <tr><td className="py-2">Max Exposure Day</td><td className="text-right font-semibold py-2">{metrics.maxExposureDay || 0}</td></tr>
@@ -1765,19 +1787,34 @@ export default function Index() {
               dailySavings={dailySavings}
               weeklySavings={weeklySavings}
               monthlySavings={monthlySavings}
-              totalDays={totalDays}
+              numberOfDebits={calculatedNumberOfDebits}
               totalPayback={totalPayback}
               rtrAtFalloff={(() => {
                 // Calculate RTR at the day when all positions fall off
                 const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && (p.balance || 0) > 0);
                 const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft)) : 0;
-                return dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+                if (falloffDay <= 0 || dailySchedule.length === 0) return 0;
+                if (falloffDay <= dailySchedule.length) {
+                  return dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+                }
+                // Extrapolate if falloff day exceeds simulation
+                const lastDay = dailySchedule[dailySchedule.length - 1];
+                const daysAfter = falloffDay - dailySchedule.length;
+                return Math.max(0, lastDay.rtrBalance - (daysAfter * newDailyPayment));
               })()}
               daysRemainingAfterFalloff={(() => {
                 const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && (p.balance || 0) > 0);
                 const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft)) : 0;
-                const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
-                return rtrAtFalloff > 0 && newDailyPayment > 0 ? Math.ceil(rtrAtFalloff / newDailyPayment) : 0;
+                if (falloffDay <= 0 || dailySchedule.length === 0) return 0;
+                let rtrAtFalloffVal: number;
+                if (falloffDay <= dailySchedule.length) {
+                  rtrAtFalloffVal = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+                } else {
+                  const lastDay = dailySchedule[dailySchedule.length - 1];
+                  const daysAfter = falloffDay - dailySchedule.length;
+                  rtrAtFalloffVal = Math.max(0, lastDay.rtrBalance - (daysAfter * newDailyPayment));
+                }
+                return rtrAtFalloffVal > 0 && newDailyPayment > 0 ? Math.ceil(rtrAtFalloffVal / newDailyPayment) : 0;
               })()}
             />
 
@@ -1805,7 +1842,7 @@ export default function Index() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground uppercase mb-1"># of Payments</div>
-                  <div className="text-lg font-bold">{totalDays}</div>
+                  <div className="text-lg font-bold">{calculatedNumberOfDebits}</div>
                 </div>
               </div>
             </div>
