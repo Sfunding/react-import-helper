@@ -19,7 +19,7 @@ type CashBuildupSectionProps = {
   dailySavings: number;
   weeklySavings: number;
   monthlySavings: number;
-  totalDays: number;
+  numberOfDebits: number;
   // Transparency props
   totalPayback: number;
   rtrAtFalloff: number;
@@ -43,7 +43,7 @@ export function CashBuildupSection({
   dailySavings,
   weeklySavings,
   monthlySavings,
-  totalDays,
+  numberOfDebits,
   totalPayback,
   rtrAtFalloff,
   daysRemainingAfterFalloff
@@ -70,7 +70,7 @@ export function CashBuildupSection({
     .sort((a, b) => a.daysUntilPayoff - b.daysUntilPayoff);
 
   // Calculate weekly cash flow projection (first 12 weeks)
-  const totalWeeks = Math.min(Math.ceil(totalDays / 5), 12);
+  const totalWeeks = Math.min(Math.ceil(numberOfDebits / 5), 12);
   const weeklyProjection = [];
   let cumulativeSavings = 0;
 

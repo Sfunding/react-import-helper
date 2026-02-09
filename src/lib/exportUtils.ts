@@ -97,8 +97,8 @@ export function calculateSchedules(
     numberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
   }
 
-  // CRITICAL: Total Payback ALWAYS equals Daily Payment × # of Debits
-  const totalPayback = newDailyPayment * numberOfDebits;
+  // CRITICAL: Total Payback = Advance Amount × Factor Rate (exact, factor-based)
+  const totalPayback = totalFunding * settings.rate;
 
   // Derive the implied discount for display
   const impliedDiscount = includedDailyPayment > 0 
@@ -276,8 +276,8 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Monthly Savings', fmtNoDecimals(metrics.monthlySavings)],
     [''],
     ['TIMELINE'],
-    ['Days to Payoff', metrics.totalDays],
-    ['Weeks to Payoff', Math.ceil(metrics.totalDays / 5)],
+    ['# of Debits', metrics.numberOfDebits],
+    ['Weeks to Payoff', Math.ceil(metrics.numberOfDebits / 5)],
   ];
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
   summarySheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
@@ -363,7 +363,7 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Rate', settings.rate.toFixed(3)],
     ['Total Payback', fmtNoDecimals(metrics.totalPayback)],
     ['# of Debits', metrics.numberOfDebits],
-    ['Days to Payoff', metrics.totalDays],
+    ['# of Debits (simulation)', metrics.totalDays],
     [''],
     ['EXPOSURE ANALYSIS'],
     ['Max Exposure', fmtNoDecimals(metrics.maxExposure)],
