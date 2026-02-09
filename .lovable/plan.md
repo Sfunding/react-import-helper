@@ -1,26 +1,33 @@
 
-## Plan: Add Honest Transparency Section to Cash Buildup Report
 
-### Overview
+## Plan: Fix All Calculation Tie-Outs (Total Payback, Debits, Days)
 
-Enhance the Merchant Cash Report to be fully transparent by adding:
-1. **Flexibility Notice**: Merchant can stop the reverse at any time
-2. **Full Picture Disclosure**: Total amount owed to your company over the life of the deal
-3. **"After Positions Fall Off" Section**: Shows their status when all existing funders are paid off:
-   - Cash flow accumulated to that point
-   - Remaining balance owed to your company
-   - Their new single payment going forward
-   - Days remaining on your consolidation
+### The Core Problem
 
----
+There are **two conflicting math systems** in the app right now:
 
-### Key Data Points at Position Falloff (Day X)
+1. **Factor-based**: Total Payback = Advance Amount x Factor Rate (the correct one)
+2. **Payment-based**: Total Payback = Daily Payment x # of Debits (the one currently used)
 
-When all positions are paid off:
-- **Cash Accumulated** = Daily Savings × Days to Falloff
-- **Balance Owed to Us** = RTR Balance at falloff day (from dailySchedule)
-- **Payments Remaining** = Math.ceil(rtrBalanceAtFalloff / newDailyPayment)
-- **Single Payment** = newDailyPayment (what they continue paying us)
+The payment-based approach rounds up the number of debits (ceil), which creates a Total Payback that's HIGHER than Advance x Rate. This also causes day counts to diverge across different views.
+
+### The Fix (Single Source of Truth)
+
+**Rule: Total Payback = Advance Amount (Total Funding) x Factor Rate. Always. Exactly.**
+
+The last debit is a partial payment to make the math tie out perfectly. The "# of Debits" includes that partial final debit.
+
+Using the user's example:
+- Advance Amount = $840,759.78
+- Factor Rate = 1.475
+- Total Payback = $840,759.78 x 1.475 = **$1,240,120.68** (exact)
+- Daily Payment = $11,200
+- Full debits = floor(1,240,120.68 / 11,200) = 110
+- Remainder = $8,120.68 (last partial debit)
+- **# of Debits = 111** (110 full + 1 partial)
+- This ties out: (110 x $11,200) + $8,120.68 = $1,240,120.68
+
+Additionally, if the # of Debits is fewer days than the longest position payoff, a **blocking warning** is shown requiring the user to adjust their inputs.
 
 ---
 
@@ -28,170 +35,112 @@ When all positions are paid off:
 
 | File | Changes |
 |------|---------|
-| `src/components/CashBuildupSection.tsx` | Add "The Full Picture" transparency section and "After Positions Fall Off" snapshot |
-| `src/lib/exportUtils.ts` | Add transparency page to the Cash Report PDF with honest disclosures |
+| `src/pages/Index.tsx` | Fix totalPayback formula, replace all merchant-facing "totalDays" with "calculatedNumberOfDebits", add blocking warning |
+| `src/lib/exportUtils.ts` | Fix totalPayback formula in calculateSchedules(), fix rtrAtFalloff lookup |
+| `src/components/CashBuildupSection.tsx` | Accept and use calculatedNumberOfDebits instead of totalDays |
 
 ---
 
 ### Technical Details
 
-**1. CashBuildupSection.tsx - Add New Props and Sections**
+**1. Index.tsx - Fix totalPayback (line 215-216)**
 
-Add new props for RTR tracking:
+Current (wrong):
 ```typescript
-type CashBuildupSectionProps = {
-  positions: Position[];
-  totalCurrentDailyPayment: number;
-  newDailyPayment: number;
-  dailySavings: number;
-  weeklySavings: number;
-  monthlySavings: number;
-  totalDays: number;
-  // NEW: For transparency section
-  totalPayback: number;        // Total amount merchant will pay back
-  rtrAtFalloff: number;        // Balance owed to us when positions clear
-  daysRemainingAfterFalloff: number;  // How many days left on our deal
-};
+const totalPayback = newDailyPayment * calculatedNumberOfDebits;
 ```
 
-Add new UI sections:
-
-**Section 1: "Important Information" Card (at top)**
-- Info alert style box
-- "You can stop this consolidation at any time"
-- "Total cost of consolidation: $X (this is more than your current balances)"
-
-**Section 2: "After Positions Fall Off" Card**
-- Shows: "On Day X, all your existing funders are paid off"
-- Shows: "By that point, you'll have saved: $X"
-- Shows: "Your remaining balance with us: $X"
-- Shows: "Your single daily payment: $X"
-- Shows: "Days remaining: X"
-
-**2. Index.tsx - Pass Additional Props**
-
-Calculate and pass the new data:
+Fixed:
 ```typescript
-// Find RTR at the day when all positions fall off
-const falloffDay = Math.max(...positionsWithDays
-  .filter(p => !p.isOurPosition && p.includeInReverse !== false)
-  .map(p => p.daysLeft));
-
-const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
-const daysRemainingAfterFalloff = Math.ceil(rtrAtFalloff / newDailyPayment);
-const cashAccumulatedAtFalloff = dailySavings * falloffDay;
+// Total Payback is ALWAYS Advance Amount x Factor Rate (exact)
+const totalPayback = totalFunding * settings.rate;
+// # of Debits includes partial last payment
+calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
 ```
 
-**3. exportMerchantCashReport() - Add Transparency Page**
+Note: When user sets `termDays`, the daily payment is derived from `totalPayback / termDays`, so it ties out exactly. When user sets `dailyPaymentOverride`, debits are ceil'd but totalPayback stays factor-based.
 
-Add a new page or section titled "THE FULL PICTURE" that includes:
+**2. Index.tsx - Add Blocking Warning**
 
-**Honest Disclosure Box:**
-```text
-┌─────────────────────────────────────────────┐
-│ IMPORTANT: WHAT YOU SHOULD KNOW             │
-├─────────────────────────────────────────────┤
-│ ✓ You can stop this consolidation at any    │
-│   time by contacting us                     │
-│                                             │
-│ ✓ Total you will pay back: $XX,XXX          │
-│   (This is more than your current balances  │
-│   due to fees and factor rate)              │
-│                                             │
-│ ✓ However, your daily cash flow improves    │
-│   by $XXX/day during this period            │
-└─────────────────────────────────────────────┘
-```
-
-**"When Positions Clear" Snapshot:**
-```text
-┌─────────────────────────────────────────────┐
-│ AFTER ALL POSITIONS FALL OFF (Day XX)       │
-├─────────────────────────────────────────────┤
-│                                             │
-│ ┌──────────────┐  ┌──────────────┐          │
-│ │ Cash         │  │ Balance      │          │
-│ │ Accumulated  │  │ With Us      │          │
-│ │   $X,XXX     │  │   $X,XXX     │          │
-│ └──────────────┘  └──────────────┘          │
-│                                             │
-│ Your single payment going forward:          │
-│ $XXX/day for XX more days                   │
-│                                             │
-│ No more multiple funders!                   │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### Calculation Logic
+After calculating `calculatedNumberOfDebits`, compare against the maximum position falloff day:
 
 ```typescript
-// At the point all positions fall off (maxDay):
+const maxPositionDays = Math.max(
+  ...positionsWithDays
+    .filter(p => !p.isOurPosition && p.includeInReverse !== false && (p.balance || 0) > 0)
+    .map(p => p.daysLeft),
+  0
+);
+const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
+```
 
-// 1. Cash accumulated from daily savings
-const cashAccumulatedAtFalloff = dailySavings * maxDay;
+Display a red warning banner in the settings area and merchant offer tab when `dealTooShort` is true.
 
-// 2. RTR balance at that day (what they still owe us)
-const rtrAtFalloff = dailySchedule[maxDay - 1]?.rtrBalance || 0;
+**3. Index.tsx - Replace "totalDays" with "calculatedNumberOfDebits" in merchant-facing displays**
 
-// 3. Days remaining on our deal after positions clear
-const daysRemainingAfterFalloff = rtrAtFalloff > 0 
-  ? Math.ceil(rtrAtFalloff / newDailyPayment) 
-  : 0;
+| Location | Current | Fixed |
+|----------|---------|-------|
+| "# of Payments" in Deal Terms (line 1808) | `{totalDays}` | `{calculatedNumberOfDebits}` |
+| "Days to Payoff" in Offer tab (line 1459) | `{totalDays}` | `{calculatedNumberOfDebits}` |
 
-// 4. Total payback comparison
+Keep `totalDays` (simulation length) for internal metrics only (exposure analysis, profit tracking).
+
+**4. Index.tsx - Fix rtrAtFalloff lookup (lines 1770-1781)**
+
+The falloff day can exceed the simulation length. Handle this by looking up the last available day or extrapolating:
+
+```typescript
+rtrAtFalloff={(() => {
+  const includedWithDays = positionsWithDays.filter(p => ...);
+  const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft)) : 0;
+  if (falloffDay <= 0 || dailySchedule.length === 0) return 0;
+  // If falloff day is within schedule, use it directly
+  if (falloffDay <= dailySchedule.length) {
+    return dailySchedule[falloffDay - 1]?.rtrBalance || 0;
+  }
+  // If falloff day exceeds schedule, extrapolate from last day
+  const lastDay = dailySchedule[dailySchedule.length - 1];
+  const daysAfter = falloffDay - dailySchedule.length;
+  return Math.max(0, lastDay.rtrBalance - (daysAfter * newDailyPayment));
+})()}
+```
+
+**5. exportUtils.ts - Same totalPayback fix (line 100-101)**
+
+Current:
+```typescript
 const totalPayback = newDailyPayment * numberOfDebits;
-const extraCost = totalPayback - totalBalance; // What they pay above current debt
 ```
+
+Fixed:
+```typescript
+const totalPayback = totalFunding * settings.rate;
+numberOfDebits = newDailyPayment > 0 ? Math.ceil(totalPayback / newDailyPayment) : 0;
+```
+
+Also fix the same rtrAtFalloff lookup issue (line 1399).
+
+**6. CashBuildupSection.tsx - Use # of Debits instead of totalDays**
+
+Rename prop from `totalDays` to `numberOfDebits` and use it for the weekly projection cap and any display that says "days" or "payments".
 
 ---
 
-### UI Updates for CashBuildupSection
+### What This Fixes
 
-**New Card 1: "Important Information"** (Yellow/warning style)
-```jsx
-<Card className="border-2 border-warning/30 bg-warning/5">
-  <CardHeader>
-    <CardTitle className="flex items-center gap-2 text-warning">
-      <AlertCircle className="h-5 w-5" />
-      Important Information
-    </CardTitle>
-  </CardHeader>
-  <CardContent>
-    <ul className="space-y-2 text-sm">
-      <li>✓ You can stop this consolidation at any time</li>
-      <li>✓ Total payback: {fmt(totalPayback)} (includes fees & factor rate)</li>
-      <li>✓ Your cash flow improves by {fmt(dailySavings)}/day during the term</li>
-    </ul>
-  </CardContent>
-</Card>
-```
+| Issue | Before | After |
+|-------|--------|-------|
+| Total Payback | $1,243,200 (payment x debits) | $1,240,120.68 (advance x rate, exact) |
+| # of Debits | 111 (from ceil of wrong payback) | 111 (from ceil of correct payback) |
+| "# of Payments" in Merchant Offer | Shows simulation days (113) | Shows # of Debits (111) |
+| "Days to Payoff" in Internal Offer | Shows simulation days (113) | Shows # of Debits (111) |
+| "When All Positions Clear" balance | $0 (out of bounds lookup) | Correct RTR at that day |
+| Deal shorter than positions | Silently broken | Blocked with warning |
 
-**New Card 2: "After Positions Fall Off"** (Blue/info style)
-```jsx
-<Card className="border-2 border-primary/30 bg-primary/5">
-  <CardHeader>
-    <CardTitle>When All Positions Clear (Day {maxDay})</CardTitle>
-  </CardHeader>
-  <CardContent>
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div>Cash Accumulated: {fmt(cashAccumulatedAtFalloff)}</div>
-      <div>Balance With Us: {fmt(rtrAtFalloff)}</div>
-      <div>Your Payment: {fmt(newDailyPayment)}/day</div>
-      <div>Days Remaining: {daysRemainingAfterFalloff}</div>
-    </div>
-  </CardContent>
-</Card>
-```
+### Summary
 
----
+Three simple rules enforced everywhere:
+1. **Total Payback = Advance Amount x Factor Rate** (never payment x debits)
+2. **# of Debits = ceil(Total Payback / Daily Payment)** (last debit is partial)
+3. **If # of Debits < longest position, block with warning** (deal can never end before positions fall off)
 
-### Result
-
-The merchant receives a transparent report that:
-- Clearly states they can stop at any time
-- Honestly shows the total cost of consolidation
-- Shows exactly where they stand when positions fall off
-- Displays their remaining obligation and payment with your company
-- Builds trust through transparency while still highlighting the cash flow benefits
