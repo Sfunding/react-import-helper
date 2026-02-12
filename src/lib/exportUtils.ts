@@ -134,7 +134,13 @@ export function calculateSchedules(
       for (let d = day; d <= day + 4 && d <= maxDays; d++) {
         const dayPayment = includedPositionsWithDays
           .filter(p => p.balance > 0 && d <= p.daysLeft)
-          .reduce((sum, p) => sum + p.dailyPayment, 0);
+          .reduce((sum, p) => {
+            if (d === p.daysLeft) {
+              const remainder = p.balance % p.dailyPayment;
+              return sum + (remainder === 0 ? p.dailyPayment : remainder);
+            }
+            return sum + p.dailyPayment;
+          }, 0);
         cashInfusion += dayPayment;
       }
     }
