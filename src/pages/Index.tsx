@@ -1787,8 +1787,9 @@ export default function Index() {
               dailySavings={dailySavings}
               weeklySavings={weeklySavings}
               monthlySavings={monthlySavings}
-              numberOfDebits={calculatedNumberOfDebits}
+               numberOfDebits={calculatedNumberOfDebits}
               totalPayback={totalPayback}
+              weeklySchedule={weeklySummary}
               rtrAtFalloff={(() => {
                 // Calculate RTR at the day when all positions fall off
                 const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && (p.balance || 0) > 0);
