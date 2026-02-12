@@ -1,107 +1,77 @@
 
 
-## Plan: Fix Weekly Cash Flow Projection to Use Real Schedule Data
+## Plan: Fix Position Over-Collection in Weekly Schedule
 
 ### The Problem
 
-The "Weekly Cash Flow Projection" on the Merchant's Offer tab shows **the same flat numbers every week** (e.g., $97K old payment, same savings). But the Weekly tab shows the real simulation where cash infusion drops as positions get paid off. These two views directly contradict each other.
+The simulation collects a **full daily payment on every day** of a position's life, including the last day — even when the remaining balance is less than one full payment.
 
-**Root cause** in `CashBuildupSection.tsx` (lines 77-89):
-```
-for (let week = 1; week <= totalWeeks; week++) {
-  const oldPayment = totalCurrentDailyPayment * 5;  // STATIC - same every week
-  const newPayment = newDailyPayment * 5;            // STATIC - same every week
-  const savings = weeklySavings;                     // STATIC - same every week
-}
-```
+Example for one position:
+- Balance: $53,000 | Daily Payment: $5,000
+- Days Left: ceil(53000 / 5000) = 11
+- Collected: 11 x $5,000 = $55,000
+- Actual owed: $53,000
+- **Over-collected: $2,000**
 
-The real weekly schedule (used on the Weekly tab) already has the correct declining cash infusion values. The fix is to pass the real weekly schedule data to the Merchant Offer tab and use it.
-
----
+This happens for every position where the balance doesn't divide evenly by the daily payment. The sum of all over-collections explains the $9,033 gap ($1,069,626 collected vs $1,060,593 net amount).
 
 ### The Fix
 
-Pass the actual `weeklySummary` data into `CashBuildupSection` and use real cash infusion numbers instead of fabricated flat ones.
+On the **last day** of each position's payoff (`d == daysLeft`), collect only the **remainder** (`balance % dailyPayment`) instead of the full payment. If balance divides evenly, the remainder is zero, so the full payment is correct.
 
-**What changes per week:**
-- **Old Payment** = the actual weekly cash infusion from the simulation (declines as positions fall off)
-- **New Payment** = `newDailyPayment x 5` (stays flat, this is the reverse payment)
-- **Savings** = Old Payment - New Payment (declines as positions fall off)
-
----
+```
+lastDayPayment = balance % dailyPayment
+if lastDayPayment == 0:
+    lastDayPayment = dailyPayment  // evenly divisible
+```
 
 ### Files to Change
 
-| File | Changes |
-|------|---------|
-| `src/components/CashBuildupSection.tsx` | Accept weekly schedule data as a prop, replace flat projection with real numbers |
-| `src/pages/Index.tsx` | Pass `weeklySummary` to the `CashBuildupSection` component |
-
----
+| File | Change |
+|------|--------|
+| `src/pages/Index.tsx` | Fix cash infusion loop (line ~278) and breakdown loop (line ~340, ~364) to cap last-day payment |
+| `src/lib/exportUtils.ts` | Same fix in the PDF schedule generation |
 
 ### Technical Details
 
-**1. CashBuildupSection.tsx - New prop and updated projection**
+**1. Index.tsx - Main simulation loop (line 278-281)**
 
-Add a new prop for the real weekly data:
+Current:
 ```typescript
-type WeeklyData = {
-  week: number;
-  cashInfusion: number;
-  totalDebits: number;
-  endExposure: number;
-};
-
-type CashBuildupSectionProps = {
-  // ... existing props
-  weeklySchedule: WeeklyData[];  // Real weekly schedule from simulation
-};
+const dayPayment = includedPositionsWithDays
+  .filter(p => p.balance > 0 && d <= p.daysLeft)
+  .reduce((sum, p) => sum + p.dailyPayment, 0);
 ```
 
-Replace the static loop (lines 72-90) with real data:
+Fixed:
 ```typescript
-const weeklyProjection = weeklySchedule
-  .slice(0, 12)  // Show first 12 weeks
-  .map((w, i) => {
-    const oldPayment = w.cashInfusion;  // What funders take (declines over time)
-    const newPayment = newDailyPayment * 5;  // What we take (stays flat)
-    const savings = oldPayment - newPayment;  // Real savings that week
-    cumulativeSavings += savings;
-    return {
-      week: w.week,
-      oldPayment,
-      newPayment,
-      savings,
-      cumulativeSavings
-    };
-  });
+const dayPayment = includedPositionsWithDays
+  .filter(p => p.balance > 0 && d <= p.daysLeft)
+  .reduce((sum, p) => {
+    if (d === p.daysLeft) {
+      // Last day: collect only the remainder
+      const remainder = p.balance % p.dailyPayment;
+      return sum + (remainder === 0 ? p.dailyPayment : remainder);
+    }
+    return sum + p.dailyPayment;
+  }, 0);
 ```
 
-Also update the milestone savings (lines 98-100) to use real cumulative numbers instead of flat `weeklySavings` multiplied by weeks.
+**2. Same fix in the second simulation loop** (line ~442-446, the "what-if" scenario loop).
 
-**2. Index.tsx - Pass weeklySummary**
+**3. Same fix in the breakdown helpers** (lines ~338-351 and ~362-375) where `totalContribution = p.dailyPayment * daysContributing` needs to account for a partial last day.
 
-In the CashBuildupSection usage, add:
-```typescript
-<CashBuildupSection
-  // ... existing props
-  weeklySchedule={weeklySummary}
-/>
-```
-
----
+**4. exportUtils.ts** - Apply the same partial-last-day logic in the PDF schedule generation loop.
 
 ### What This Fixes
 
-| Issue | Before | After |
-|-------|--------|-------|
-| Weekly projection | Same $97K "old payment" every week | Real declining amounts matching the Weekly tab |
-| Weekly savings | Same flat amount every week | Declines as positions fall off |
-| Cumulative savings | Inflated (flat rate x weeks) | Accurate running total |
-| Milestone savings (1mo, 3mo) | Overstated | Based on real schedule data |
-| Consistency with Weekly tab | Contradicts it | Matches exactly |
+| Metric | Before | After |
+|--------|--------|-------|
+| Total Weekly Credits | $1,069,626 (over-collected) | $1,060,593 (matches net amount exactly) |
+| Individual position payoffs | Collect more than owed | Collect exactly the balance |
+| Weekly tab vs Deal Summary | Contradicts | Ties out |
 
-### Summary
+### Verification
 
-One simple rule: **The Merchant Offer tab must use the same underlying data as the Weekly tab.** No more fabricated flat projections.
+After the fix, the sum of all cash infusions across the entire schedule will equal the sum of all included position balances (the "Net to Merchant" / net advance amount). Every number ties out.
 
