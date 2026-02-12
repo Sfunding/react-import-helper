@@ -277,7 +277,13 @@ export default function Index() {
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
           const dayPayment = includedPositionsWithDays
             .filter(p => p.balance > 0 && d <= p.daysLeft)
-            .reduce((sum, p) => sum + p.dailyPayment, 0);
+            .reduce((sum, p) => {
+              if (d === p.daysLeft) {
+                const remainder = p.balance % p.dailyPayment;
+                return sum + (remainder === 0 ? p.dailyPayment : remainder);
+              }
+              return sum + p.dailyPayment;
+            }, 0);
           cashInfusion += dayPayment;
         }
       }
@@ -336,19 +342,31 @@ export default function Index() {
         .filter(p => p.balance > 0)
         .forEach(p => {
           let daysContributing = 0;
+          let lastDayInRange = false;
           for (let d = startDay; d <= endDay; d++) {
-            if (d <= p.daysLeft) daysContributing++;
+            if (d <= p.daysLeft) {
+              daysContributing++;
+              if (d === p.daysLeft) lastDayInRange = true;
+            }
           }
           if (daysContributing > 0) {
+            // Account for partial last-day payment
+            let totalContribution = p.dailyPayment * daysContributing;
+            if (lastDayInRange) {
+              const remainder = p.balance % p.dailyPayment;
+              if (remainder !== 0) {
+                totalContribution -= (p.dailyPayment - remainder);
+              }
+            }
             entries.push({
               entity: p.entity,
               dailyPayment: p.dailyPayment,
               daysContributing,
-              totalContribution: p.dailyPayment * daysContributing,
+              totalContribution,
               remainingBalance: p.balance,
               totalDaysLeft: p.daysLeft
             });
-            total += p.dailyPayment * daysContributing;
+            total += totalContribution;
           }
         });
     } else if (week !== undefined) {
@@ -360,19 +378,30 @@ export default function Index() {
         .filter(p => p.balance > 0)
         .forEach(p => {
           let daysContributing = 0;
+          let lastDayInRange = false;
           for (let d = startDay; d <= endDay; d++) {
-            if (d <= p.daysLeft) daysContributing++;
+            if (d <= p.daysLeft) {
+              daysContributing++;
+              if (d === p.daysLeft) lastDayInRange = true;
+            }
           }
           if (daysContributing > 0) {
+            let totalContribution = p.dailyPayment * daysContributing;
+            if (lastDayInRange) {
+              const remainder = p.balance % p.dailyPayment;
+              if (remainder !== 0) {
+                totalContribution -= (p.dailyPayment - remainder);
+              }
+            }
             entries.push({
               entity: p.entity,
               dailyPayment: p.dailyPayment,
               daysContributing,
-              totalContribution: p.dailyPayment * daysContributing,
+              totalContribution,
               remainingBalance: p.balance,
               totalDaysLeft: p.daysLeft
             });
-          total += p.dailyPayment * daysContributing;
+            total += totalContribution;
           }
         });
     }
@@ -442,7 +471,13 @@ export default function Index() {
         for (let d = day; d <= day + 4 && d <= maxDays; d++) {
           const dayPayment = includedPositionsWithDays
             .filter(p => p.balance > 0 && d <= p.daysLeft)
-            .reduce((sum, p) => sum + p.dailyPayment, 0);
+            .reduce((sum, p) => {
+              if (d === p.daysLeft) {
+                const remainder = p.balance % p.dailyPayment;
+                return sum + (remainder === 0 ? p.dailyPayment : remainder);
+              }
+              return sum + p.dailyPayment;
+            }, 0);
           cashInfusion += dayPayment;
         }
       }
