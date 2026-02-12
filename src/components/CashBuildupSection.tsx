@@ -9,7 +9,7 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { TrendingUp, Calendar, PiggyBank, AlertCircle, CheckCircle } from 'lucide-react';
-import { Position } from '@/types/calculation';
+import { Position, WeekScheduleExport } from '@/types/calculation';
 import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
 
 type CashBuildupSectionProps = {
@@ -24,6 +24,8 @@ type CashBuildupSectionProps = {
   totalPayback: number;
   rtrAtFalloff: number;
   daysRemainingAfterFalloff: number;
+  // Real weekly schedule from simulation
+  weeklySchedule: WeekScheduleExport[];
 };
 
 // Helper to format currency
@@ -46,7 +48,8 @@ export function CashBuildupSection({
   numberOfDebits,
   totalPayback,
   rtrAtFalloff,
-  daysRemainingAfterFalloff
+  daysRemainingAfterFalloff,
+  weeklySchedule
 }: CashBuildupSectionProps) {
   // Get only included positions with known balances
   const includedPositions = positions.filter(p => {
@@ -69,35 +72,43 @@ export function CashBuildupSection({
     })
     .sort((a, b) => a.daysUntilPayoff - b.daysUntilPayoff);
 
-  // Calculate weekly cash flow projection (first 12 weeks)
-  const totalWeeks = Math.min(Math.ceil(numberOfDebits / 5), 12);
-  const weeklyProjection = [];
+  // Calculate weekly cash flow projection using REAL schedule data
   let cumulativeSavings = 0;
-
-  for (let week = 1; week <= totalWeeks; week++) {
-    const oldPayment = totalCurrentDailyPayment * 5;
-    const newPayment = newDailyPayment * 5;
-    const savings = weeklySavings;
-    cumulativeSavings += savings;
-    
-    weeklyProjection.push({
-      week,
-      oldPayment,
-      newPayment,
-      savings,
-      cumulativeSavings
+  const weeklyProjection = weeklySchedule
+    .slice(0, 12)
+    .map((w) => {
+      const oldPayment = w.cashInfusion;
+      const newPayment = newDailyPayment * 5;
+      const savings = oldPayment - newPayment;
+      cumulativeSavings += savings;
+      return {
+        week: w.week,
+        oldPayment,
+        newPayment,
+        savings,
+        cumulativeSavings
+      };
     });
-  }
 
-  // Calculate milestone savings
+  // Calculate milestone savings from real cumulative data
   const maxDay = positionTimeline.length > 0 
     ? Math.max(...positionTimeline.map(p => p.daysUntilPayoff)) 
     : 0;
-  const weeksToPayoff = Math.ceil(maxDay / 5);
+
+  // Month 1 = first 4 weeks, Month 3 = first 12 weeks
+  const month1Savings = weeklyProjection.length >= 4 
+    ? weeklyProjection[3].cumulativeSavings 
+    : weeklyProjection.length > 0 ? weeklyProjection[weeklyProjection.length - 1].cumulativeSavings : 0;
+  const month3Savings = weeklyProjection.length >= 12 
+    ? weeklyProjection[11].cumulativeSavings 
+    : weeklyProjection.length > 0 ? weeklyProjection[weeklyProjection.length - 1].cumulativeSavings : 0;
   
-  const month1Savings = Math.min(4, weeksToPayoff) * weeklySavings;
-  const month3Savings = Math.min(12, weeksToPayoff) * weeklySavings;
-  const totalSavingsToPayoff = weeksToPayoff * weeklySavings;
+  // Total savings uses ALL weeks from schedule, not just first 12
+  let totalSavingsToPayoff = 0;
+  weeklySchedule.forEach((w) => {
+    totalSavingsToPayoff += w.cashInfusion - (newDailyPayment * 5);
+  });
+  const weeksToPayoff = weeklySchedule.length;
 
   // Calculate cash accumulated at falloff
   const cashAccumulatedAtFalloff = dailySavings * maxDay;
