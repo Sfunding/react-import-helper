@@ -289,7 +289,9 @@ export default function Index() {
       }
       
       cumulativeNetFunded += cashInfusion;
-      const cumulativeGross = cumulativeNetFunded + originationFee;
+      const cumulativeGross = settings.feeSchedule === 'upfront'
+        ? cumulativeNetFunded + originationFee
+        : cumulativeNetFunded / (1 - settings.feePercent);
       const rtrBeforeDebit = (cumulativeGross * settings.rate) - cumulativeDebits;
       
       let dailyWithdrawal = 0;
