@@ -1,77 +1,73 @@
 
-
-## Plan: Fix Position Over-Collection in Weekly Schedule
+## Plan: Make Fee Schedule Actually Affect the Daily Simulation
 
 ### The Problem
 
-The simulation collects a **full daily payment on every day** of a position's life, including the last day — even when the remaining balance is less than one full payment.
+The "Fee Schedule" dropdown (Upfront vs Average) changes a label in the Day 1 Summary Card but has **zero effect** on the actual simulation math. Both modes produce identical daily schedules, RTR balances, and cash flows.
 
-Example for one position:
-- Balance: $53,000 | Daily Payment: $5,000
-- Days Left: ceil(53000 / 5000) = 11
-- Collected: 11 x $5,000 = $55,000
-- Actual owed: $53,000
-- **Over-collected: $2,000**
-
-This happens for every position where the balance doesn't divide evenly by the daily payment. The sum of all over-collections explains the $9,033 gap ($1,069,626 collected vs $1,060,593 net amount).
-
-### The Fix
-
-On the **last day** of each position's payoff (`d == daysLeft`), collect only the **remainder** (`balance % dailyPayment`) instead of the full payment. If balance divides evenly, the remainder is zero, so the full payment is correct.
-
+**Root cause** in Index.tsx line 292 and exportUtils.ts line 149:
+```typescript
+const cumulativeGross = cumulativeNetFunded + originationFee;  // ALWAYS adds full fee from Day 1
 ```
-lastDayPayment = balance % dailyPayment
-if lastDayPayment == 0:
-    lastDayPayment = dailyPayment  // evenly divisible
-```
+
+This is the "upfront" behavior hardcoded regardless of the setting.
+
+### How It Should Work
+
+- **Upfront**: Full fee is added to gross on Day 1. RTR is larger from the start.
+  - `cumulativeGross = cumulativeNetFunded + totalFee`
+- **Average**: Fee accumulates proportionally as cash is infused. RTR grows gradually.
+  - `cumulativeGross = cumulativeNetFunded / (1 - feePercent)`
+  - This spreads the fee proportionally across all cash infusions
+
+Both modes produce the same total fee by the end of the deal, but the RTR trajectory differs.
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/pages/Index.tsx` | Fix cash infusion loop (line ~278) and breakdown loop (line ~340, ~364) to cap last-day payment |
-| `src/lib/exportUtils.ts` | Same fix in the PDF schedule generation |
+| `src/pages/Index.tsx` | Line ~292: Branch `cumulativeGross` calculation based on `settings.feeSchedule` |
+| `src/lib/exportUtils.ts` | Line ~149: Same branch in the PDF export simulation |
 
 ### Technical Details
 
-**1. Index.tsx - Main simulation loop (line 278-281)**
+**1. Index.tsx - Main simulation loop (line 292)**
 
-Current:
+Replace:
 ```typescript
-const dayPayment = includedPositionsWithDays
-  .filter(p => p.balance > 0 && d <= p.daysLeft)
-  .reduce((sum, p) => sum + p.dailyPayment, 0);
+const cumulativeGross = cumulativeNetFunded + originationFee;
 ```
 
-Fixed:
+With:
 ```typescript
-const dayPayment = includedPositionsWithDays
-  .filter(p => p.balance > 0 && d <= p.daysLeft)
-  .reduce((sum, p) => {
-    if (d === p.daysLeft) {
-      // Last day: collect only the remainder
-      const remainder = p.balance % p.dailyPayment;
-      return sum + (remainder === 0 ? p.dailyPayment : remainder);
-    }
-    return sum + p.dailyPayment;
-  }, 0);
+const cumulativeGross = settings.feeSchedule === 'upfront'
+  ? cumulativeNetFunded + originationFee          // Full fee from Day 1
+  : cumulativeNetFunded / (1 - settings.feePercent); // Fee proportional to cash infused
 ```
 
-**2. Same fix in the second simulation loop** (line ~442-446, the "what-if" scenario loop).
+**2. Index.tsx - Second simulation loop (line ~460)**
 
-**3. Same fix in the breakdown helpers** (lines ~338-351 and ~362-375) where `totalContribution = p.dailyPayment * daysContributing` needs to account for a partial last day.
+Apply the same branching logic to the "what-if" scenario loop if it exists.
 
-**4. exportUtils.ts** - Apply the same partial-last-day logic in the PDF schedule generation loop.
+**3. exportUtils.ts - PDF schedule generation (line 149)**
+
+Same fix:
+```typescript
+const cumulativeGross = settings.feeSchedule === 'upfront'
+  ? cumulativeNetFunded + originationFee
+  : cumulativeNetFunded / (1 - settings.feePercent);
+```
+
+**4. Day1SummaryCard.tsx - Already correct**
+
+The Day1SummaryCard receives `grossContract` from `dailySchedule[0]?.cumulativeGross`, so once the simulation math changes, the card will automatically show different values for each mode.
 
 ### What This Fixes
 
-| Metric | Before | After |
+| Aspect | Before | After |
 |--------|--------|-------|
-| Total Weekly Credits | $1,069,626 (over-collected) | $1,060,593 (matches net amount exactly) |
-| Individual position payoffs | Collect more than owed | Collect exactly the balance |
-| Weekly tab vs Deal Summary | Contradicts | Ties out |
-
-### Verification
-
-After the fix, the sum of all cash infusions across the entire schedule will equal the sum of all included position balances (the "Net to Merchant" / net advance amount). Every number ties out.
-
+| Switching fee schedule | No visible change anywhere | RTR trajectory, Day 1 gross, and daily schedule all update |
+| Upfront mode | Same as average | Full fee front-loaded, larger Day 1 RTR |
+| Average mode | Same as upfront | Fee spreads proportionally, smaller Day 1 RTR |
+| Day 1 Summary Card | Shows correct label but wrong numbers | Numbers match the selected mode |
+| PDF export | Ignores fee schedule | Matches dashboard exactly |
