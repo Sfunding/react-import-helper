@@ -1,58 +1,104 @@
 
 
-## Plan: Fix Weekly Savings Display and Add Crossover Point Card
+## Plan: Rebuild Cash Report with Accurate Math and Better Design
 
-### Issues to Fix
+### The Core Math Problems
 
-**1. "+- $27,960" formatting bug (line 282)**
-The savings column hardcodes a "+" prefix: `+{fmt(w.savings)}`. When savings goes negative, `fmt()` adds a minus sign, producing "+- $27,960". Fix: conditionally show "+" only when positive, and use proper red/green coloring based on sign.
+The cash report has **three major calculation bugs** that produce fake numbers:
 
-**2. Colors always green even when negative**
-Both the "Weekly Savings" and "Cumulative Savings" columns always use `text-success` (green). When savings turn negative or cumulative drops, these should turn red.
+**Bug 1: "New Payment" uses a flat estimate instead of actual debits**
+- Current: `newPayment = newDailyPayment * 5` (constant every week)
+- Reality: The simulation already calculates actual weekly debits (`w.totalDebits`) which handles partial payments, early termination, etc.
+- Fix: Use `w.totalDebits` from the weekly schedule
 
-**3. Add a "Crossover Point" info card**
-When positions start falling off and cash infused drops below the new payment, the merchant needs reassurance. Add a card that detects the crossover week and explains:
-- How much cash they already accumulated before the crossover
-- How much their total debt/leverage was reduced by that point
-- That even though they're now paying more than they receive, their business is stable because the debt burden is significantly lower
+**Bug 2: "Cash Accumulated at Falloff" uses a flat daily savings multiplied by days**
+- Current: `cashAccumulatedAtFalloff = dailySavings * maxDay` (line 115) -- assumes savings is constant every day
+- Reality: As positions fall off, the cash infused drops, so savings change every week
+- Fix: Sum actual `(cashInfusion - totalDebits)` from the weekly schedule up to the falloff week
+
+**Bug 3: "Total Savings to Payoff" also uses `newDailyPayment * 5` instead of actual debits**
+- Current: `totalSavingsToPayoff += w.cashInfusion - (newDailyPayment * 5)`
+- Fix: `totalSavingsToPayoff += w.cashInfusion - w.totalDebits`
+
+All three bugs stem from the same root cause: using a static approximation (`newDailyPayment * 5`) when the actual simulation data (`w.totalDebits`) is already available as a prop.
+
+### Design Improvements
+
+The current layout has 6 separate cards stacked vertically which feels cluttered. Here is the improved structure:
+
+1. **Hero Summary Bar** -- Single compact banner at the top with 3-4 key stats (daily savings, total saved, deal term) instead of the wordy "Important Information" card
+2. **Position Payoff Timeline** -- Move up to be the first detailed section (most relevant to the merchant)
+3. **Savings Milestones** -- Cleaner 3-column layout with subtle progress indicators
+4. **Crossover Point** -- Keep but refine the messaging
+5. **Weekly Cash Flow Table** -- Keep at bottom as the detailed breakdown, but show fewer rows by default with an expand option
+
+Remove the "Important Information" card (generic warnings) and the "When All Positions Clear" card (fold those stats into the crossover/timeline sections where they're more contextual).
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/CashBuildupSection.tsx` | Fix formatting, colors, and add crossover card |
+| `src/components/CashBuildupSection.tsx` | Fix all 3 math bugs, redesign layout |
 
 ### Technical Details
 
-**1. Fix savings formatting (line 282)**
+**1. Fix weekly projection math (lines 77-92)**
 
 Replace:
 ```typescript
-<TableCell className="text-right font-semibold text-success">+{fmt(w.savings)}</TableCell>
+const oldPayment = w.cashInfusion;
+const newPayment = newDailyPayment * 5;
+const savings = oldPayment - newPayment;
 ```
-With conditional formatting:
+With:
 ```typescript
-<TableCell className={cn("text-right font-semibold", w.savings >= 0 ? "text-success" : "text-destructive")}>
-  {w.savings >= 0 ? `+${fmt(w.savings)}` : fmt(w.savings)}
-</TableCell>
+const oldPayment = w.cashInfusion;
+const newPayment = w.totalDebits;  // Actual debits from simulation
+const savings = oldPayment - newPayment;
 ```
 
-**2. Fix cumulative savings color (line 283)**
+**2. Fix cash accumulated at falloff (line 115)**
 
-Same pattern -- green when positive, red when negative.
+Replace:
+```typescript
+const cashAccumulatedAtFalloff = dailySavings * maxDay;
+```
+With:
+```typescript
+const falloffWeek = Math.ceil(maxDay / 5);
+const cashAccumulatedAtFalloff = weeklySchedule
+  .filter(w => w.week <= falloffWeek)
+  .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
+```
 
-**3. Fix summary bar color** -- the "After 12 weeks" bar at the bottom should also reflect positive/negative.
+**3. Fix total savings to payoff (lines 108-111)**
 
-**4. Add Crossover Point card**
+Replace:
+```typescript
+totalSavingsToPayoff += w.cashInfusion - (newDailyPayment * 5);
+```
+With:
+```typescript
+totalSavingsToPayoff += w.cashInfusion - w.totalDebits;
+```
 
-Detect the first week where `oldPayment < newPayment` (savings goes negative). Calculate:
-- `cashAccumulatedAtCrossover`: cumulative savings up to that point (the peak)
-- `totalDebtReduced`: sum of all position balances that were fully paid off before crossover
-- `positionsClearedByCrossover`: count of positions cleared
+**4. Redesign the layout**
 
-Insert a new card between the "Money Back in Your Pocket" and "Position Payoff Timeline" sections with a calming message like:
+- Replace the 6-card stack with a cleaner flow:
+  - Top: Compact hero bar with key numbers (daily savings, total term, total saved)
+  - Position Timeline table (currently card 5, move to top)
+  - Savings milestones (1 month, 3 months, full payoff) in a cleaner grid
+  - Crossover point card (when applicable)
+  - Weekly projection table with a "Show all weeks" toggle (default to 8 rows)
+- Remove the "Important Information" card (the info is covered elsewhere in the offer)
+- Fold "When All Positions Clear" stats into the position timeline footer
 
-> **Around Week 9, your savings peak at $286,395**
-> By this point, X of your Y positions are fully paid off, reducing your total debt by $Z. Yes, your new payment now exceeds what we're paying out -- but that's because your old debts are gone. Your business keeps that accumulated cash and operates with far less leverage.
+### What This Fixes
 
-This card only appears when a crossover actually exists (i.e., when positions fall off before the deal ends).
+| Metric | Before (Fake) | After (Accurate) |
+|--------|---------------|-------------------|
+| Weekly "New Payment" | Static `dailyPayment * 5` every week | Actual debits from simulation (handles partials, last day) |
+| Cash at Falloff | `dailySavings * maxDay` (flat) | Sum of real weekly net savings from schedule |
+| Total Savings | Uses flat weekly estimate | Uses actual schedule debits |
+| Crossover detection | Based on flat estimate | Based on real schedule data |
+
