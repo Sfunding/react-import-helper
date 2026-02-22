@@ -8,8 +8,9 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { TrendingUp, Calendar, PiggyBank, AlertCircle, CheckCircle } from 'lucide-react';
+import { TrendingUp, Calendar, PiggyBank, AlertCircle, CheckCircle, ShieldCheck } from 'lucide-react';
 import { Position, WeekScheduleExport } from '@/types/calculation';
+import { cn } from '@/lib/utils';
 import { getFormattedLastPaymentDate } from '@/lib/dateUtils';
 
 type CashBuildupSectionProps = {
@@ -113,6 +114,22 @@ export function CashBuildupSection({
   // Calculate cash accumulated at falloff
   const cashAccumulatedAtFalloff = dailySavings * maxDay;
 
+  // Detect crossover point: first week where savings go negative
+  const crossoverWeekData = weeklyProjection.find(w => w.savings < 0);
+  const crossoverWeekIndex = crossoverWeekData ? weeklyProjection.findIndex(w => w.savings < 0) : -1;
+  const cashAccumulatedAtCrossover = crossoverWeekIndex > 0 
+    ? weeklyProjection[crossoverWeekIndex - 1].cumulativeSavings 
+    : crossoverWeekIndex === 0 ? 0 : null;
+  
+  // Calculate positions cleared before crossover
+  const crossoverDay = crossoverWeekData ? crossoverWeekData.week * 5 : null;
+  const positionsClearedByCrossover = crossoverDay !== null 
+    ? positionTimeline.filter(p => p.daysUntilPayoff <= crossoverDay).length 
+    : 0;
+  const totalDebtReduced = crossoverDay !== null 
+    ? positionTimeline.filter(p => p.daysUntilPayoff <= crossoverDay).reduce((sum, p) => sum + p.balance, 0) 
+    : 0;
+
   if (includedPositions.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -214,6 +231,43 @@ export function CashBuildupSection({
         </CardContent>
       </Card>
 
+      {/* Crossover Point Card - only shows when crossover exists */}
+      {crossoverWeekData && cashAccumulatedAtCrossover !== null && (
+        <Card className="border-2 border-blue-500/30 bg-blue-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+              <ShieldCheck className="h-5 w-5" />
+              Around Week {crossoverWeekData.week}, Your Savings Peak at {fmt(cashAccumulatedAtCrossover)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              By this point, <strong>{positionsClearedByCrossover}</strong> of your <strong>{includedPositions.length}</strong> positions 
+              are fully paid off, reducing your total debt by <strong className="text-success">{fmt(totalDebtReduced)}</strong>.
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Yes, your new payment now exceeds what we're paying out — but that's because your old debts are gone. 
+              Your business keeps that <strong className="text-success">{fmt(cashAccumulatedAtCrossover)}</strong> in accumulated cash 
+              and operates with far less leverage.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-card rounded-lg p-3 text-center border">
+                <div className="text-xs text-muted-foreground uppercase mb-1">Cash Saved</div>
+                <div className="text-lg font-bold text-success">{fmt(cashAccumulatedAtCrossover)}</div>
+              </div>
+              <div className="bg-card rounded-lg p-3 text-center border">
+                <div className="text-xs text-muted-foreground uppercase mb-1">Debt Eliminated</div>
+                <div className="text-lg font-bold text-success">{fmt(totalDebtReduced)}</div>
+              </div>
+              <div className="bg-card rounded-lg p-3 text-center border">
+                <div className="text-xs text-muted-foreground uppercase mb-1">Positions Cleared</div>
+                <div className="text-lg font-bold">{positionsClearedByCrossover} of {includedPositions.length}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Position Payoff Timeline */}
       <Card>
         <CardHeader className="pb-3">
@@ -279,17 +333,21 @@ export function CashBuildupSection({
                     <TableCell className="font-medium">Week {w.week}</TableCell>
                     <TableCell className="text-right text-destructive">{fmt(w.oldPayment)}</TableCell>
                     <TableCell className="text-right text-success">{fmt(w.newPayment)}</TableCell>
-                    <TableCell className="text-right font-semibold text-success">+{fmt(w.savings)}</TableCell>
-                    <TableCell className="text-right font-bold text-success">{fmt(w.cumulativeSavings)}</TableCell>
+                    <TableCell className={cn("text-right font-semibold", w.savings >= 0 ? "text-success" : "text-destructive")}>
+                      {w.savings >= 0 ? `+${fmt(w.savings)}` : fmt(w.savings)}
+                    </TableCell>
+                    <TableCell className={cn("text-right font-bold", w.cumulativeSavings >= 0 ? "text-success" : "text-destructive")}>
+                      {fmt(w.cumulativeSavings)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
-          <div className="mt-4 p-3 bg-success/10 rounded-lg border border-success/20">
+          <div className={cn("mt-4 p-3 rounded-lg border", cumulativeSavings >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
             <p className="text-center text-sm">
               <span className="text-muted-foreground">After {weeklyProjection.length} weeks:</span>{' '}
-              <span className="font-bold text-success text-lg">{fmt(cumulativeSavings)} saved</span>
+              <span className={cn("font-bold text-lg", cumulativeSavings >= 0 ? "text-success" : "text-destructive")}>{fmt(cumulativeSavings)} saved</span>
             </p>
           </div>
         </CardContent>
