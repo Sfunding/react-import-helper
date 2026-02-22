@@ -753,7 +753,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${(settings.dailyPaymentDecrease * 100).toFixed(0)}% PAYMENT REDUCTION`, pageWidth / 2, currentY + 10, { align: 'center' });
+  doc.text(`${(metrics.impliedDiscount * 100).toFixed(1)}% PAYMENT REDUCTION`, pageWidth / 2, currentY + 10, { align: 'center' });
 
   currentY += 25;
 

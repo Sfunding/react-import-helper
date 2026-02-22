@@ -1777,7 +1777,7 @@ export default function Index() {
             {/* Reduction Badge */}
             <div className="text-center">
               <span className="inline-block bg-success text-success-foreground px-6 py-2 rounded-full font-bold text-lg">
-                ▼ {(settings.dailyPaymentDecrease * 100).toFixed(0)}% PAYMENT REDUCTION ▼
+                ▼ {(impliedDiscount * 100).toFixed(1)}% PAYMENT REDUCTION ▼
               </span>
             </div>
 
