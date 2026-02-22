@@ -1710,35 +1710,35 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
 
   // Payment Comparison Boxes
   const compBoxWidth = (pageWidth - margin * 2 - 15) / 2;
-  const compBoxHeight = 45;
+  const compBoxHeight = 36;
 
   // Old Payment
   doc.setFillColor(254, 226, 226);
   doc.roundedRect(margin, currentY, compBoxWidth, compBoxHeight, 3, 3, 'F');
   doc.setTextColor(185, 28, 28);
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('OLD PAYMENT', margin + compBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
+  doc.text('OLD PAYMENT', margin + compBoxWidth/2, currentY + 10, { align: 'center' });
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment)}/day`, margin + compBoxWidth/2, currentY + 28, { align: 'center' });
-  doc.setFontSize(12);
-  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment * 5)}/week`, margin + compBoxWidth/2, currentY + 40, { align: 'center' });
+  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment)}/day`, margin + compBoxWidth/2, currentY + 23, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment * 5)}/week`, margin + compBoxWidth/2, currentY + 33, { align: 'center' });
 
   // New Payment
   doc.setFillColor(...lightGreen);
   doc.roundedRect(margin + compBoxWidth + 15, currentY, compBoxWidth, compBoxHeight, 3, 3, 'F');
   doc.setTextColor(...successColor);
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('NEW PAYMENT', margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
+  doc.text('NEW PAYMENT', margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 10, { align: 'center' });
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 28, { align: 'center' });
-  doc.setFontSize(12);
-  doc.text(`${fmtNoDecimals(metrics.newWeeklyPayment)}/week`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 40, { align: 'center' });
+  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 23, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text(`${fmtNoDecimals(metrics.newWeeklyPayment)}/week`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 33, { align: 'center' });
 
-  currentY += compBoxHeight + 10;
+  currentY += compBoxHeight + 8;
 
   // Reduction badge
   doc.setFillColor(...successColor);
@@ -1748,24 +1748,24 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text(`${(metrics.impliedDiscount * 100).toFixed(1)}% PAYMENT REDUCTION`, pageWidth / 2, currentY + 10, { align: 'center' });
-  currentY += 25;
+  currentY += 18;
 
   // Savings section
-  const savingsBoxHeight = 70;
+  const savingsBoxHeight = 58;
   const savingsFullWidth = pageWidth - margin * 2;
   doc.setFillColor(...successColor);
   doc.roundedRect(margin, currentY, savingsFullWidth, savingsBoxHeight, 5, 5, 'F');
   doc.setFillColor(...darkGreen);
-  doc.roundedRect(margin, currentY, savingsFullWidth, 18, 5, 5, 'F');
-  doc.rect(margin, currentY + 10, savingsFullWidth, 8, 'F');
+  doc.roundedRect(margin, currentY, savingsFullWidth, 16, 5, 5, 'F');
+  doc.rect(margin, currentY + 8, savingsFullWidth, 8, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('YOUR SAVINGS', pageWidth / 2, currentY + 12, { align: 'center' });
+  doc.text('YOUR SAVINGS', pageWidth / 2, currentY + 11, { align: 'center' });
 
-  const innerPadding = 10;
-  const innerY = currentY + 22;
-  const innerHeight = savingsBoxHeight - 28;
+  const innerPadding = 8;
+  const innerY = currentY + 19;
+  const innerHeight = savingsBoxHeight - 23;
   const savingsColWidth = (savingsFullWidth - innerPadding * 4) / 3;
 
   // Daily
@@ -1773,34 +1773,26 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(dailyX, innerY, savingsColWidth, innerHeight, 3, 3, 'F');
   doc.setTextColor(100, 100, 100);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('DAILY', dailyX + savingsColWidth/2, innerY + 12, { align: 'center' });
-  doc.setTextColor(...successColor);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(metrics.dailySavings), dailyX + savingsColWidth/2, innerY + 28, { align: 'center' });
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text('per day', dailyX + savingsColWidth/2, innerY + 38, { align: 'center' });
+  doc.text('DAILY', dailyX + savingsColWidth/2, innerY + 10, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.dailySavings), dailyX + savingsColWidth/2, innerY + 24, { align: 'center' });
 
   // Weekly
   const weeklyX = dailyX + savingsColWidth + innerPadding;
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(weeklyX, innerY, savingsColWidth, innerHeight, 3, 3, 'F');
   doc.setTextColor(100, 100, 100);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('WEEKLY', weeklyX + savingsColWidth/2, innerY + 12, { align: 'center' });
-  doc.setTextColor(...successColor);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(metrics.weeklySavings), weeklyX + savingsColWidth/2, innerY + 28, { align: 'center' });
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text('per week', weeklyX + savingsColWidth/2, innerY + 38, { align: 'center' });
+  doc.text('WEEKLY', weeklyX + savingsColWidth/2, innerY + 10, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.weeklySavings), weeklyX + savingsColWidth/2, innerY + 24, { align: 'center' });
 
   // Monthly
   const monthlyX = weeklyX + savingsColWidth + innerPadding;
@@ -1810,34 +1802,30 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.setLineWidth(2);
   doc.roundedRect(monthlyX, innerY, savingsColWidth, innerHeight, 3, 3, 'S');
   doc.setTextColor(...darkGreen);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text('MONTHLY', monthlyX + savingsColWidth/2, innerY + 12, { align: 'center' });
-  doc.setTextColor(...successColor);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(metrics.monthlySavings), monthlyX + savingsColWidth/2, innerY + 28, { align: 'center' });
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text('per month', monthlyX + savingsColWidth/2, innerY + 38, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text('MONTHLY', monthlyX + savingsColWidth/2, innerY + 10, { align: 'center' });
+  doc.setTextColor(...successColor);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtNoDecimals(metrics.monthlySavings), monthlyX + savingsColWidth/2, innerY + 24, { align: 'center' });
 
-  currentY += savingsBoxHeight + 12;
+  currentY += savingsBoxHeight + 8;
 
   // Position Buyout Only label
   const cashBoxWidth = 140;
-  const cashBoxH = 40;
+  const cashBoxH = 28;
   const cashX = (pageWidth - cashBoxWidth) / 2;
   doc.setFillColor(...lightBlue);
   doc.roundedRect(cashX, currentY, cashBoxWidth, cashBoxH, 3, 3, 'F');
   doc.setTextColor(...primaryColor);
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('CONSOLIDATION', cashX + cashBoxWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(14);
+  doc.text('CONSOLIDATION', cashX + cashBoxWidth/2, currentY + 10, { align: 'center' });
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Position Buyout Only', cashX + cashBoxWidth/2, currentY + 28, { align: 'center' });
-  currentY += cashBoxH + 15;
+  doc.text('Position Buyout Only', cashX + cashBoxWidth/2, currentY + 22, { align: 'center' });
+  currentY += cashBoxH + 8;
 
   // Deal Terms table
   doc.setFillColor(...primaryColor);
@@ -2044,17 +2032,29 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
       `Week ${w.week}`,
       fmtNoDecimals(w.oldPayment),
       fmtNoDecimals(w.newPayment),
-      `+${fmtNoDecimals(w.savings)}`,
+      w.savings >= 0 ? `+${fmtNoDecimals(w.savings)}` : fmtNoDecimals(w.savings),
       fmtNoDecimals(w.cumulativeSavings)
     ]),
     theme: 'striped',
     headStyles: { fillColor: primaryColor, fontSize: 10 },
     styles: { fontSize: 9, cellPadding: 4 },
-    columnStyles: {
-      3: { textColor: successColor, fontStyle: 'bold' },
-      4: { textColor: successColor, fontStyle: 'bold' }
-    },
     margin: { left: margin, right: margin },
+    didParseCell: (data: any) => {
+      if (data.section === 'body') {
+        // Column 3 = Weekly Savings
+        if (data.column.index === 3) {
+          const val = displayWeeks[data.row.index]?.savings ?? 0;
+          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+        // Column 4 = Cumulative Savings
+        if (data.column.index === 4) {
+          const val = displayWeeks[data.row.index]?.cumulativeSavings ?? 0;
+          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
   });
 
   currentY = (doc as any).lastAutoTable.finalY + 20;
