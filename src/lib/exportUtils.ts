@@ -1068,22 +1068,37 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
     };
   });
 
-  // Milestone calculations (merchant savings = dailySavings * business days)
-  const month1Savings = metrics.dailySavings * 22;
-  const month3Savings = metrics.dailySavings * 66;
-  // Calculate real cash flow savings during the overlap period only
-  const falloffDayForSavings = Math.max(
-    ...positionsWithDays
-      .filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0)
-      .map(p => p.daysLeft || 0),
-    0
-  );
-  const falloffWeekForSavings = Math.ceil(falloffDayForSavings / 5);
-  const totalOldPaymentsDuringOverlap = weeklySchedule
-    .filter(w => w.week <= falloffWeekForSavings)
-    .reduce((sum, w) => sum + w.cashInfusion, 0);
-  const totalNewPaymentsDuringOverlap = metrics.newDailyPayment * falloffDayForSavings;
-  const totalSavingsToPayoff = totalOldPaymentsDuringOverlap - totalNewPaymentsDuringOverlap;
+  // Build weekly projection to find peak cumulative savings
+  const getActivePositionsForWeek = (weekNum: number) => {
+    return positionTimeline.filter(p => p.daysUntilPayoff > (weekNum - 1) * 5).length;
+  };
+  let cumulativeSavingsTracker = 0;
+  const allWeeklyProjectionForPeak = weeklySchedule.map((w) => {
+    const weeklyCredits = w.cashInfusion;
+    const yourPayment = w.totalDebits;
+    const netCashFlow = weeklyCredits - yourPayment;
+    cumulativeSavingsTracker += netCashFlow;
+    return { week: w.week, netCashFlow, cumulativeSavings: cumulativeSavingsTracker };
+  });
+
+  // Peak cumulative savings = highest point on the curve (always positive)
+  const peakSavings = allWeeklyProjectionForPeak.length > 0
+    ? Math.max(0, ...allWeeklyProjectionForPeak.map(w => w.cumulativeSavings))
+    : 0;
+
+  // Crossover detection for capping milestones
+  const crossoverWeekData = allWeeklyProjectionForPeak.find(w => w.netCashFlow < 0);
+  const crossoverDay = crossoverWeekData ? crossoverWeekData.week * 5 : null;
+  const savingsDays = crossoverDay || maxDay;
+
+  // Milestone calculations capped at crossover
+  const month1Savings = metrics.dailySavings * Math.min(22, savingsDays);
+  const month3Savings = metrics.dailySavings * Math.min(66, savingsDays);
+  const totalSavingsToPayoff = peakSavings;
+  
+  // Find peak week for label
+  const peakWeekData = allWeeklyProjectionForPeak.find(w => w.cumulativeSavings === peakSavings);
+  const peakWeekNum = peakWeekData ? peakWeekData.week : totalWeeks;
 
   // ========== PAGE 1: EXECUTIVE SUMMARY ==========
   
@@ -1135,7 +1150,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.text('PER MONTH', pageWidth / 2, currentY + 65, { align: 'center' });
   
   doc.setFontSize(11);
-  doc.text(`That's ${fmtNoDecimals(totalSavingsToPayoff)} over ${totalWeeks} weeks!`, pageWidth / 2, currentY + 77, { align: 'center' });
+  doc.text(`That's ${fmtNoDecimals(peakSavings)} in peak cash flow savings!`, pageWidth / 2, currentY + 77, { align: 'center' });
 
   currentY += savingsBoxHeight + 15;
 
@@ -1272,7 +1287,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
     `After Day ${maxDay}, all your existing funders will be fully paid off.`,
     `You'll continue with just ONE payment of ${fmtNoDecimals(metrics.newDailyPayment)}/day.`,
     `Your cash flow immediately improves by ${fmtNoDecimals(metrics.dailySavings)}/day.`,
-    `Total savings by payoff: ${fmtNoDecimals(totalSavingsToPayoff)}`
+    `Peak cash flow savings: ${fmtNoDecimals(peakSavings)}`
   ];
   explanations.forEach((text, i) => {
     doc.text(`${i + 1}. ${text}`, margin + 5, currentY);
@@ -1368,13 +1383,13 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('BY FULL PAYOFF', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 12, { align: 'center' });
+  doc.text('PEAK SAVINGS', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 12, { align: 'center' });
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(totalSavingsToPayoff), margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 32, { align: 'center' });
+  doc.text(fmtNoDecimals(peakSavings), margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 32, { align: 'center' });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`(${totalWeeks} weeks)`, margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 44, { align: 'center' });
+  doc.text(`(week ${peakWeekNum})`, margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 44, { align: 'center' });
 
   // ========== PAGE 4: THE FULL PICTURE (TRANSPARENCY) ==========
   doc.addPage();
@@ -1425,7 +1440,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const totalOldPaymentsFalloff = weeklySchedule
     .filter(w => w.week <= falloffWeek)
     .reduce((sum, w) => sum + w.cashInfusion, 0);
-  const cashAccumulatedAtFalloff = totalOldPaymentsFalloff - (metrics.newDailyPayment * falloffDay);
+  const cashAccumulatedAtFalloff = peakSavings;
   const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
     ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
     : 0;
@@ -1544,9 +1559,9 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('CASH FLOW SAVINGS WHILE POSITIONS PAY OFF', pageWidth / 2, currentY + 20, { align: 'center' });
+  doc.text('PEAK CASH FLOW SAVINGS', pageWidth / 2, currentY + 20, { align: 'center' });
   doc.setFontSize(36);
-  doc.text(fmtNoDecimals(totalSavingsToPayoff), pageWidth / 2, currentY + 50, { align: 'center' });
+  doc.text(fmtNoDecimals(peakSavings), pageWidth / 2, currentY + 50, { align: 'center' });
 
   currentY += bigBoxHeight + 25;
 

@@ -106,23 +106,12 @@ export function CashBuildupSection({
     ? allWeeklyProjection[allWeeklyProjection.length - 1].cumulativeSavings 
     : 0;
 
-  // Milestones: daily savings multiplied by business days, capped at falloff
-  const month1Savings = dailySavings * Math.min(22, maxDay);
-  const month3Savings = dailySavings * Math.min(66, maxDay);
+  // Peak cumulative savings = the highest point on the cumulative savings curve
+  const peakSavings = allWeeklyProjection.length > 0
+    ? Math.max(0, ...allWeeklyProjection.map(w => w.cumulativeSavings))
+    : 0;
 
-  // Cash flow savings only during the overlap period (while old positions are active)
-  const falloffWeekNum = Math.ceil(maxDay / 5);
-  const totalOldPaymentsDuringOverlap = weeklySchedule
-    .filter(w => w.week <= falloffWeekNum)
-    .reduce((sum, w) => sum + w.cashInfusion, 0);
-  const totalNewPaymentsDuringOverlap = newDailyPayment * maxDay;
-  const totalSavingsToPayoff = totalOldPaymentsDuringOverlap - totalNewPaymentsDuringOverlap;
-  const weeksToPayoff = falloffWeekNum;
-
-  // Cash accumulated at falloff = same as overlap savings
-  const cashAccumulatedAtFalloff = totalSavingsToPayoff;
-
-  // Crossover detection
+  // Crossover detection (must come before milestones to cap them)
   const crossoverWeekData = allWeeklyProjection.find(w => w.netCashFlow < 0);
   const crossoverWeekIndex = crossoverWeekData ? allWeeklyProjection.findIndex(w => w.netCashFlow < 0) : -1;
   const cashAccumulatedAtCrossover = crossoverWeekIndex > 0 
@@ -130,6 +119,23 @@ export function CashBuildupSection({
     : crossoverWeekIndex === 0 ? 0 : null;
 
   const crossoverDay = crossoverWeekData ? crossoverWeekData.week * 5 : null;
+
+  // Milestones: daily savings multiplied by business days, capped at crossover
+  const savingsDays = crossoverDay || maxDay;
+  const month1Savings = dailySavings * Math.min(22, savingsDays);
+  const month3Savings = dailySavings * Math.min(66, savingsDays);
+
+  // Use peak savings as the main savings figure (always positive)
+  const totalSavingsToPayoff = peakSavings;
+  const falloffWeekNum = Math.ceil(maxDay / 5);
+  const weeksToPayoff = falloffWeekNum;
+
+  // Cash accumulated at falloff = peak savings
+  const cashAccumulatedAtFalloff = peakSavings;
+
+  // Find the week where peak savings occurred
+  const peakWeekData = allWeeklyProjection.find(w => w.cumulativeSavings === peakSavings);
+  const peakWeekNum = peakWeekData ? peakWeekData.week : weeksToPayoff;
   const positionsClearedByCrossover = crossoverDay !== null 
     ? positionTimeline.filter(p => p.daysUntilPayoff <= crossoverDay).length 
     : 0;
@@ -266,9 +272,9 @@ export function CashBuildupSection({
               <div className="text-[11px] text-muted-foreground">saved</div>
             </div>
             <div className="rounded-lg bg-primary p-3 text-center text-primary-foreground">
-              <div className="text-[11px] uppercase font-medium mb-1 opacity-90">While Positions Pay Off</div>
+              <div className="text-[11px] uppercase font-medium mb-1 opacity-90">Peak Cash Flow Savings</div>
               <div className="text-2xl font-bold">{fmt(totalSavingsToPayoff)}</div>
-              <div className="text-[11px] opacity-90">cash flow savings · {weeksToPayoff} weeks</div>
+              <div className="text-[11px] opacity-90">peak at week {peakWeekNum}</div>
             </div>
           </div>
         </CardContent>
