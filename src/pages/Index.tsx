@@ -8,6 +8,7 @@ import { Day1SummaryCard } from '@/components/Day1SummaryCard';
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog';
 import { AdjustmentConfirmDialog, PendingChange } from '@/components/AdjustmentConfirmDialog';
 import { useCalculations } from '@/hooks/useCalculations';
+import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -843,11 +844,10 @@ export default function Index() {
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
-              <input 
-                type="number" 
-                value={merchant.monthlyRevenue || ''} 
-                onChange={e => setMerchant({...merchant, monthlyRevenue: parseFloat(e.target.value) || 0})} 
-                placeholder="0" 
+              <CurrencyInput 
+                value={merchant.monthlyRevenue} 
+                onChange={val => setMerchant({...merchant, monthlyRevenue: val || 0})} 
+                placeholder="0.00" 
                 className="w-full p-2.5 pl-7 border-2 border-secondary rounded-md text-sm bg-accent focus:ring-2 focus:ring-ring focus:border-transparent transition-all font-medium"
               />
             </div>
@@ -1338,13 +1338,10 @@ export default function Index() {
                           <td className="p-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <input 
-                                type="number" 
-                                value={p.amountFunded ?? ''} 
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  updatePosition(p.id, 'amountFunded', val === '' ? null : parseFloat(val) || 0);
-                                }} 
+                              <CurrencyInput 
+                                value={p.amountFunded} 
+                                onChange={val => updatePosition(p.id, 'amountFunded', val)} 
+                                allowNull
                                 placeholder="0.00" 
                                 className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
@@ -1370,13 +1367,10 @@ export default function Index() {
                                   <div className="relative flex items-center gap-1">
                                     <div className="relative flex-1">
                                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                                      <input 
-                                        type="number" 
-                                        value={p.balance ?? ''} 
-                                        onChange={e => {
-                                          const val = e.target.value;
-                                          updatePosition(p.id, 'balance', val === '' ? null : parseFloat(val) || 0);
-                                        }} 
+                                      <CurrencyInput 
+                                        value={p.balance} 
+                                        onChange={val => updatePosition(p.id, 'balance', val)} 
+                                        allowNull
                                         placeholder="0.00" 
                                         className={`w-full p-2 pl-5 border rounded-md text-right bg-background 
                                           ${hasDiscrepancy ? 'border-warning' : 'border-input'}
@@ -1424,10 +1418,9 @@ export default function Index() {
                           <td className="p-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <input 
-                                type="number" 
-                                value={p.dailyPayment || ''} 
-                                onChange={e => updatePosition(p.id, 'dailyPayment', parseFloat(e.target.value) || 0)} 
+                              <CurrencyInput 
+                                value={p.dailyPayment || null} 
+                                onChange={val => updatePosition(p.id, 'dailyPayment', val || 0)} 
                                 placeholder="0.00" 
                                 className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
@@ -1436,13 +1429,9 @@ export default function Index() {
                           <td className="p-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <input 
-                                type="number" 
-                                value={p.dailyPayment ? (p.dailyPayment * 5).toFixed(2) : ''} 
-                                onChange={e => {
-                                  const weekly = parseFloat(e.target.value) || 0;
-                                  updatePosition(p.id, 'dailyPayment', weekly / 5);
-                                }} 
+                              <CurrencyInput 
+                                value={p.dailyPayment ? p.dailyPayment * 5 : null} 
+                                onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) / 5)} 
                                 placeholder="0.00" 
                                 className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
