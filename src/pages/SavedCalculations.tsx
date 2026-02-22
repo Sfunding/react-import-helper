@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText, Copy } from 'lucide-react';
 import { format } from 'date-fns';
-import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
+import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { SavedCalculation } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
 

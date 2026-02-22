@@ -23,7 +23,7 @@ import {
   SavedCalculation
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
-import { exportToExcel, exportToPDF, exportMerchantPDF, exportMerchantCashReport } from '@/lib/exportUtils';
+import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -1679,7 +1679,6 @@ export default function Index() {
               <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
               <div className="flex gap-2">
                 <Button
-                  variant="outline"
                   onClick={() => {
                     const tempCalc = {
                       id: '',
@@ -1695,35 +1694,12 @@ export default function Index() {
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     };
-                    exportMerchantCashReport(tempCalc);
-                    toast({ title: 'Cash Report exported', description: 'File downloaded successfully.' });
-                  }}
-                >
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  Cash Report
-                </Button>
-                <Button
-                  onClick={() => {
-                    const tempCalc = {
-                      id: '',
-                      user_id: '',
-                      name: merchant.name || 'Merchant Offer',
-                      merchant_name: merchant.name,
-                      merchant_business_type: merchant.businessType,
-                      merchant_monthly_revenue: merchant.monthlyRevenue,
-                      settings,
-                      positions,
-                      total_balance: totalBalance,
-                      total_daily_payment: totalCurrentDailyPayment,
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString(),
-                    };
-                    exportMerchantPDF(tempCalc);
-                    toast({ title: 'Merchant PDF exported', description: 'File downloaded successfully.' });
+                    exportMerchantProposal(tempCalc);
+                    toast({ title: 'Merchant Proposal exported', description: 'File downloaded successfully.' });
                   }}
                 >
                   <FileText className="w-4 h-4 mr-2" />
-                  Export Merchant PDF
+                  Export Merchant Proposal
                 </Button>
               </div>
             </div>
