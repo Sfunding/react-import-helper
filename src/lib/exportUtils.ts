@@ -1071,7 +1071,19 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   // Milestone calculations (merchant savings = dailySavings * business days)
   const month1Savings = metrics.dailySavings * 22;
   const month3Savings = metrics.dailySavings * 66;
-  const totalSavingsToPayoff = metrics.dailySavings * metrics.numberOfDebits;
+  // Calculate real cash flow savings during the overlap period only
+  const falloffDayForSavings = Math.max(
+    ...positionsWithDays
+      .filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0)
+      .map(p => p.daysLeft || 0),
+    0
+  );
+  const falloffWeekForSavings = Math.ceil(falloffDayForSavings / 5);
+  const totalOldPaymentsDuringOverlap = weeklySchedule
+    .filter(w => w.week <= falloffWeekForSavings)
+    .reduce((sum, w) => sum + w.cashInfusion, 0);
+  const totalNewPaymentsDuringOverlap = metrics.newDailyPayment * falloffDayForSavings;
+  const totalSavingsToPayoff = totalOldPaymentsDuringOverlap - totalNewPaymentsDuringOverlap;
 
   // ========== PAGE 1: EXECUTIVE SUMMARY ==========
   
@@ -1410,9 +1422,10 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
   const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
   const falloffWeek = Math.ceil(falloffDay / 5);
-  const cashAccumulatedAtFalloff = weeklySchedule
+  const totalOldPaymentsFalloff = weeklySchedule
     .filter(w => w.week <= falloffWeek)
-    .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
+    .reduce((sum, w) => sum + w.cashInfusion, 0);
+  const cashAccumulatedAtFalloff = totalOldPaymentsFalloff - (metrics.newDailyPayment * falloffDay);
   const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
     ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
     : 0;
@@ -1519,7 +1532,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.setFont('helvetica', 'normal');
   doc.text(`Daily Payment: ${fmtNoDecimals(metrics.newDailyPayment)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 35, { align: 'center' });
   doc.text(`Weekly Payment: ${fmtNoDecimals(metrics.newWeeklyPayment)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 48, { align: 'center' });
-  doc.text(`Monthly Payment: ${fmtNoDecimals(metrics.monthlySavings + metrics.newDailyPayment * 22)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 61, { align: 'center' });
+  doc.text(`Monthly Payment: ${fmtNoDecimals(metrics.newDailyPayment * 22)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 61, { align: 'center' });
   doc.text('1 simple payment', margin + halfWidth + 10 + halfWidth/2, currentY + 74, { align: 'center' });
 
   currentY += compareHeight + 20;
@@ -1531,7 +1544,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL SAVINGS OVER LIFE OF DEAL', pageWidth / 2, currentY + 20, { align: 'center' });
+  doc.text('CASH FLOW SAVINGS WHILE POSITIONS PAY OFF', pageWidth / 2, currentY + 20, { align: 'center' });
   doc.setFontSize(36);
   doc.text(fmtNoDecimals(totalSavingsToPayoff), pageWidth / 2, currentY + 50, { align: 'center' });
 
