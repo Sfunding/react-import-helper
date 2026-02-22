@@ -1097,8 +1097,8 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const savingsDays = crossoverDay || maxDay;
 
   // Milestone calculations capped at crossover
-  const month1Savings = metrics.dailySavings * Math.min(22, savingsDays);
-  const month3Savings = metrics.dailySavings * Math.min(66, savingsDays);
+  const month1Savings = Math.min(metrics.dailySavings * Math.min(22, savingsDays), peakSavings);
+  const month3Savings = Math.min(metrics.dailySavings * Math.min(66, savingsDays), peakSavings);
   const totalSavingsToPayoff = peakSavings;
   
   // Find peak week for label
