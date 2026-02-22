@@ -1,68 +1,58 @@
 
 
-## Plan: Improve Number Input UX - Remove Spinners, Add Formatting
+## Plan: Fix Weekly Savings Display and Add Crossover Point Card
 
-### The Problem
+### Issues to Fix
 
-All numeric inputs use `type="number"` which shows browser-native increment/decrement arrows (spinners). These are frustrating for entering large dollar amounts like $579,650 or precise values like 1.499.
+**1. "+- $27,960" formatting bug (line 282)**
+The savings column hardcodes a "+" prefix: `+{fmt(w.savings)}`. When savings goes negative, `fmt()` adds a minus sign, producing "+- $27,960". Fix: conditionally show "+" only when positive, and use proper red/green coloring based on sign.
 
-### The Fix
+**2. Colors always green even when negative**
+Both the "Weekly Savings" and "Cumulative Savings" columns always use `text-success` (green). When savings turn negative or cumulative drops, these should turn red.
 
-Two changes:
-
-1. **Hide the spinner arrows** globally via CSS -- keeps `type="number"` for mobile keyboard benefits but removes the visual arrows
-2. **Switch position dollar inputs to text with formatting** -- the balance, daily payment, and weekly payment fields will display formatted numbers (e.g., "579,650") and accept plain number input, making large values much easier to read and enter
+**3. Add a "Crossover Point" info card**
+When positions start falling off and cash infused drops below the new payment, the merchant needs reassurance. Add a card that detects the crossover week and explains:
+- How much cash they already accumulated before the crossover
+- How much their total debt/leverage was reduced by that point
+- That even though they're now paying more than they receive, their business is stable because the debt burden is significantly lower
 
 ### Files to Change
 
 | File | Change |
-|------|---------|
-| `src/index.css` | Add global CSS to hide number input spinners across all browsers |
-| `src/pages/Index.tsx` | Switch key dollar-amount inputs from `type="number"` to `type="text"` with `inputMode="decimal"` for mobile keyboard support, and add comma formatting on blur |
+|------|--------|
+| `src/components/CashBuildupSection.tsx` | Fix formatting, colors, and add crossover card |
 
 ### Technical Details
 
-**1. index.css - Global spinner removal**
+**1. Fix savings formatting (line 282)**
 
-Add CSS rules to hide spinners for all number inputs:
-```css
-/* Hide number input spinners */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-}
+Replace:
+```typescript
+<TableCell className="text-right font-semibold text-success">+{fmt(w.savings)}</TableCell>
+```
+With conditional formatting:
+```typescript
+<TableCell className={cn("text-right font-semibold", w.savings >= 0 ? "text-success" : "text-destructive")}>
+  {w.savings >= 0 ? `+${fmt(w.savings)}` : fmt(w.savings)}
+</TableCell>
 ```
 
-This immediately fixes ALL number inputs (settings fields like Fee %, Rate, Broker %, Term, EPO tiers) without changing their behavior.
+**2. Fix cumulative savings color (line 283)**
 
-**2. Index.tsx - Formatted currency inputs for key fields**
+Same pattern -- green when positive, red when negative.
 
-For the main dollar-amount fields (Monthly Revenue, Balance, Amount Funded, Daily Payment, Weekly Payment), switch to `type="text"` with `inputMode="decimal"` so mobile users still get a numeric keyboard.
+**3. Fix summary bar color** -- the "After 12 weeks" bar at the bottom should also reflect positive/negative.
 
-On focus: strip formatting so the user edits a plain number.
-On blur: format with commas (e.g., "579,650.00").
-On change: strip non-numeric characters except decimal point, then parse.
+**4. Add Crossover Point card**
 
-This applies to approximately 6 input fields:
-- Monthly Revenue
-- Amount Funded (per position)
-- Balance (per position)
-- Daily Payment (per position)
-- Weekly Payment (per position)
-- Current Exposure
+Detect the first week where `oldPayment < newPayment` (savings goes negative). Calculate:
+- `cashAccumulatedAtCrossover`: cumulative savings up to that point (the peak)
+- `totalDebtReduced`: sum of all position balances that were fully paid off before crossover
+- `positionsClearedByCrossover`: count of positions cleared
 
-Settings fields (Fee %, Rate, Broker %, Term) keep `type="number"` but lose the spinners via CSS -- these are small values where plain number entry is fine.
+Insert a new card between the "Money Back in Your Pocket" and "Position Payoff Timeline" sections with a calming message like:
 
-### What Improves
+> **Around Week 9, your savings peak at $286,395**
+> By this point, X of your Y positions are fully paid off, reducing your total debt by $Z. Yes, your new payment now exceeds what we're paying out -- but that's because your old debts are gone. Your business keeps that accumulated cash and operates with far less leverage.
 
-| Before | After |
-|--------|-------|
-| Annoying spinner arrows on every field | No spinners anywhere |
-| Raw numbers like "579650" hard to read | Formatted as "579,650" when not editing |
-| Desktop and mobile both show spinners | Clean input on both platforms |
-| Accidentally scrolling changes values | No scroll-to-change behavior |
-
+This card only appears when a crossover actually exists (i.e., when positions fall off before the deal ends).
