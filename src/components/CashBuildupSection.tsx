@@ -399,10 +399,10 @@ export function CashBuildupSection({
             </div>
           )}
 
-          <div className={cn("mt-3 p-2 rounded-lg border", finalCumulativeSavings >= 0 ? "bg-success/10 border-success/20" : "bg-destructive/10 border-destructive/20")}>
+          <div className="mt-3 p-2 rounded-lg border bg-success/10 border-success/20">
             <p className="text-center text-sm">
-              <span className="text-muted-foreground">After {allWeeklyProjection.length} weeks:</span>{' '}
-              <span className={cn("font-bold text-base", finalCumulativeSavings >= 0 ? "text-success" : "text-destructive")}>{fmt(finalCumulativeSavings)} saved</span>
+              <span className="text-muted-foreground">Peak savings at week {peakWeekNum}:</span>{' '}
+              <span className="font-bold text-base text-success">{fmt(peakSavings)} saved</span>
             </p>
           </div>
         </CardContent>
