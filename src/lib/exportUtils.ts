@@ -1057,14 +1057,19 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const weeklyNewPayment = metrics.newDailyPayment * 5;
   const weeklySavingsAmount = weeklyOldPayment - weeklyNewPayment;
 
-  const weeklyProjection = Array.from({ length: totalWeeks }, (_, i) => {
-    const week = i + 1;
+  // Use real simulation data so Old Weekly Cost declines as positions fall off
+  let cumulativeSavingsForTable = 0;
+  const weeklyProjection = weeklySchedule.map((w) => {
+    const oldPayment = w.cashInfusion;
+    const newPayment = w.totalDebits;
+    const savings = oldPayment - newPayment;
+    cumulativeSavingsForTable += savings;
     return {
-      week,
-      oldPayment: weeklyOldPayment,
-      newPayment: weeklyNewPayment,
-      savings: weeklySavingsAmount,
-      cumulativeSavings: weeklySavingsAmount * week
+      week: w.week,
+      oldPayment,
+      newPayment,
+      savings,
+      cumulativeSavings: cumulativeSavingsForTable
     };
   });
 
