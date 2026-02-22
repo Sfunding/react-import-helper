@@ -106,26 +106,21 @@ export function CashBuildupSection({
     ? allWeeklyProjection[allWeeklyProjection.length - 1].cumulativeSavings 
     : 0;
 
-  // Milestones from real cumulative data
-  const month1Savings = allWeeklyProjection.length >= 4 
-    ? allWeeklyProjection[3].cumulativeSavings 
-    : allWeeklyProjection.length > 0 ? allWeeklyProjection[allWeeklyProjection.length - 1].cumulativeSavings : 0;
-  const month3Savings = allWeeklyProjection.length >= 12 
-    ? allWeeklyProjection[11].cumulativeSavings 
-    : allWeeklyProjection.length > 0 ? allWeeklyProjection[allWeeklyProjection.length - 1].cumulativeSavings : 0;
+  // Milestones: daily savings multiplied by business days, capped at falloff
+  const month1Savings = dailySavings * Math.min(22, maxDay);
+  const month3Savings = dailySavings * Math.min(66, maxDay);
 
-  // Total savings from actual schedule
-  let totalSavingsToPayoff = 0;
-  weeklySchedule.forEach((w) => {
-    totalSavingsToPayoff += w.cashInfusion - w.totalDebits;
-  });
-  const weeksToPayoff = weeklySchedule.length;
+  // Cash flow savings only during the overlap period (while old positions are active)
+  const falloffWeekNum = Math.ceil(maxDay / 5);
+  const totalOldPaymentsDuringOverlap = weeklySchedule
+    .filter(w => w.week <= falloffWeekNum)
+    .reduce((sum, w) => sum + w.cashInfusion, 0);
+  const totalNewPaymentsDuringOverlap = newDailyPayment * maxDay;
+  const totalSavingsToPayoff = totalOldPaymentsDuringOverlap - totalNewPaymentsDuringOverlap;
+  const weeksToPayoff = falloffWeekNum;
 
-  // Cash accumulated at falloff from real schedule
-  const falloffWeek = Math.ceil(maxDay / 5);
-  const cashAccumulatedAtFalloff = weeklySchedule
-    .filter(w => w.week <= falloffWeek)
-    .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
+  // Cash accumulated at falloff = same as overlap savings
+  const cashAccumulatedAtFalloff = totalSavingsToPayoff;
 
   // Crossover detection
   const crossoverWeekData = allWeeklyProjection.find(w => w.netCashFlow < 0);
@@ -271,9 +266,9 @@ export function CashBuildupSection({
               <div className="text-[11px] text-muted-foreground">saved</div>
             </div>
             <div className="rounded-lg bg-primary p-3 text-center text-primary-foreground">
-              <div className="text-[11px] uppercase font-medium mb-1 opacity-90">By Full Payoff</div>
+              <div className="text-[11px] uppercase font-medium mb-1 opacity-90">While Positions Pay Off</div>
               <div className="text-2xl font-bold">{fmt(totalSavingsToPayoff)}</div>
-              <div className="text-[11px] opacity-90">total saved · {weeksToPayoff} weeks</div>
+              <div className="text-[11px] opacity-90">cash flow savings · {weeksToPayoff} weeks</div>
             </div>
           </div>
         </CardContent>
