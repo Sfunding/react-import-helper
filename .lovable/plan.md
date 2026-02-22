@@ -1,73 +1,68 @@
 
-## Plan: Make Fee Schedule Actually Affect the Daily Simulation
+
+## Plan: Improve Number Input UX - Remove Spinners, Add Formatting
 
 ### The Problem
 
-The "Fee Schedule" dropdown (Upfront vs Average) changes a label in the Day 1 Summary Card but has **zero effect** on the actual simulation math. Both modes produce identical daily schedules, RTR balances, and cash flows.
+All numeric inputs use `type="number"` which shows browser-native increment/decrement arrows (spinners). These are frustrating for entering large dollar amounts like $579,650 or precise values like 1.499.
 
-**Root cause** in Index.tsx line 292 and exportUtils.ts line 149:
-```typescript
-const cumulativeGross = cumulativeNetFunded + originationFee;  // ALWAYS adds full fee from Day 1
-```
+### The Fix
 
-This is the "upfront" behavior hardcoded regardless of the setting.
+Two changes:
 
-### How It Should Work
-
-- **Upfront**: Full fee is added to gross on Day 1. RTR is larger from the start.
-  - `cumulativeGross = cumulativeNetFunded + totalFee`
-- **Average**: Fee accumulates proportionally as cash is infused. RTR grows gradually.
-  - `cumulativeGross = cumulativeNetFunded / (1 - feePercent)`
-  - This spreads the fee proportionally across all cash infusions
-
-Both modes produce the same total fee by the end of the deal, but the RTR trajectory differs.
+1. **Hide the spinner arrows** globally via CSS -- keeps `type="number"` for mobile keyboard benefits but removes the visual arrows
+2. **Switch position dollar inputs to text with formatting** -- the balance, daily payment, and weekly payment fields will display formatted numbers (e.g., "579,650") and accept plain number input, making large values much easier to read and enter
 
 ### Files to Change
 
 | File | Change |
-|------|--------|
-| `src/pages/Index.tsx` | Line ~292: Branch `cumulativeGross` calculation based on `settings.feeSchedule` |
-| `src/lib/exportUtils.ts` | Line ~149: Same branch in the PDF export simulation |
+|------|---------|
+| `src/index.css` | Add global CSS to hide number input spinners across all browsers |
+| `src/pages/Index.tsx` | Switch key dollar-amount inputs from `type="number"` to `type="text"` with `inputMode="decimal"` for mobile keyboard support, and add comma formatting on blur |
 
 ### Technical Details
 
-**1. Index.tsx - Main simulation loop (line 292)**
+**1. index.css - Global spinner removal**
 
-Replace:
-```typescript
-const cumulativeGross = cumulativeNetFunded + originationFee;
+Add CSS rules to hide spinners for all number inputs:
+```css
+/* Hide number input spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
 ```
 
-With:
-```typescript
-const cumulativeGross = settings.feeSchedule === 'upfront'
-  ? cumulativeNetFunded + originationFee          // Full fee from Day 1
-  : cumulativeNetFunded / (1 - settings.feePercent); // Fee proportional to cash infused
-```
+This immediately fixes ALL number inputs (settings fields like Fee %, Rate, Broker %, Term, EPO tiers) without changing their behavior.
 
-**2. Index.tsx - Second simulation loop (line ~460)**
+**2. Index.tsx - Formatted currency inputs for key fields**
 
-Apply the same branching logic to the "what-if" scenario loop if it exists.
+For the main dollar-amount fields (Monthly Revenue, Balance, Amount Funded, Daily Payment, Weekly Payment), switch to `type="text"` with `inputMode="decimal"` so mobile users still get a numeric keyboard.
 
-**3. exportUtils.ts - PDF schedule generation (line 149)**
+On focus: strip formatting so the user edits a plain number.
+On blur: format with commas (e.g., "579,650.00").
+On change: strip non-numeric characters except decimal point, then parse.
 
-Same fix:
-```typescript
-const cumulativeGross = settings.feeSchedule === 'upfront'
-  ? cumulativeNetFunded + originationFee
-  : cumulativeNetFunded / (1 - settings.feePercent);
-```
+This applies to approximately 6 input fields:
+- Monthly Revenue
+- Amount Funded (per position)
+- Balance (per position)
+- Daily Payment (per position)
+- Weekly Payment (per position)
+- Current Exposure
 
-**4. Day1SummaryCard.tsx - Already correct**
+Settings fields (Fee %, Rate, Broker %, Term) keep `type="number"` but lose the spinners via CSS -- these are small values where plain number entry is fine.
 
-The Day1SummaryCard receives `grossContract` from `dailySchedule[0]?.cumulativeGross`, so once the simulation math changes, the card will automatically show different values for each mode.
+### What Improves
 
-### What This Fixes
+| Before | After |
+|--------|-------|
+| Annoying spinner arrows on every field | No spinners anywhere |
+| Raw numbers like "579650" hard to read | Formatted as "579,650" when not editing |
+| Desktop and mobile both show spinners | Clean input on both platforms |
+| Accidentally scrolling changes values | No scroll-to-change behavior |
 
-| Aspect | Before | After |
-|--------|--------|-------|
-| Switching fee schedule | No visible change anywhere | RTR trajectory, Day 1 gross, and daily schedule all update |
-| Upfront mode | Same as average | Full fee front-loaded, larger Day 1 RTR |
-| Average mode | Same as upfront | Fee spreads proportionally, smaller Day 1 RTR |
-| Day 1 Summary Card | Shows correct label but wrong numbers | Numbers match the selected mode |
-| PDF export | Ignores fee schedule | Matches dashboard exactly |
