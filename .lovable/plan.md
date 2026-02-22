@@ -1,31 +1,62 @@
 
 
-## Fix: Milestones Cannot Exceed Peak Savings
+## Combine Merchant PDF + Cash Report Into One Unified PDF
 
-### The Problem
+### Current State
 
-"After 3 Months" shows $330,439 but "Peak Cash Flow Savings" shows $306,975. The milestone can't be higher than the peak -- it's the same savings curve.
+There are two separate merchant-facing PDFs with overlapping content:
 
-The milestones use a flat formula (`dailySavings x days`) which assumes constant savings every day. But savings actually decline as positions fall off, so the real peak (from simulation) is lower.
+1. **Merchant PDF** (1 page): Payment comparison, savings boxes, deal terms table, positions table, EPO options
+2. **Cash Report** (5 pages): Executive summary, position payoff schedule, weekly cash flow, "full picture" transparency, bottom line comparison
 
-### The Fix
+Both show the same payment comparison, savings figures, and positions -- just laid out differently. The user wants one clean PDF to hand to a merchant.
 
-**File:** `src/components/CashBuildupSection.tsx` (line 125-126)
+### Combined PDF Structure (4 pages)
 
-Cap both milestones at `peakSavings`:
+**Page 1 -- The Offer**
+- Company header bar (white-labeled)
+- Merchant name + date
+- Payment comparison boxes (OLD vs NEW with reduction badge)
+- Savings boxes (Daily / Weekly / Monthly) in the green container
+- "Position Buyout Only" label
+- Deal Terms table (Amount Funded, Payback, Factor Rate, Fee, # Payments)
 
-```typescript
-const month1Savings = Math.min(dailySavings * Math.min(22, savingsDays), peakSavings);
-const month3Savings = Math.min(dailySavings * Math.min(66, savingsDays), peakSavings);
-```
+**Page 2 -- Current Positions + Payoff Schedule**
+- "Positions Being Consolidated" table (Funder, Balance, Daily Payment)
+- "Position Payoff Timeline" table (Funder, Balance, Daily Payment, Days to Payoff, Paid Off By)
+- "All Positions Clear" callout with date
+- Key bullet points ("What This Means For You")
+- Early Payoff Options table (if EPO is enabled)
 
-**File:** `src/lib/exportUtils.ts` (same milestone calculation)
+**Page 3 -- Weekly Cash Flow Projection**
+- Weekly table (first 12 weeks) using real simulation data (declining old payments)
+- Key Milestones boxes (1 Month, 3 Months, Peak Savings) -- all capped at peak
+- Peak savings summary bar
 
-Apply the same cap in the PDF export so the report matches the on-screen display.
+**Page 4 -- The Bottom Line**
+- "After All Positions Fall Off" snapshot (Cash Accumulated + Balance With Us)
+- Single payment going forward callout
+- Without vs With Consolidation side-by-side comparison
+- Big green "Peak Cash Flow Savings" box
+- Call to action
+
+### Technical Changes
+
+**File: `src/lib/exportUtils.ts`**
+- Create a new `exportMerchantProposal()` function that combines the best content from both existing functions into the 4-page layout above
+- Keep `exportMerchantPDF` and `exportMerchantCashReport` for now (can remove later) but they won't be called from the UI
+- Uses real simulation data for the weekly table (already fixed)
+- All milestones capped at peakSavings (already fixed)
+
+**File: `src/pages/Index.tsx`**
+- Replace the two separate export buttons ("Cash Report" + "Export Merchant PDF") with a single "Export Merchant Proposal" button
+- Import and call the new `exportMerchantProposal` function
+
+**File: `src/pages/SavedCalculations.tsx`** (if it has export buttons too)
+- Update any export buttons there to use the new combined function
 
 ### Result
-
-- If the flat formula gives a number higher than peak savings, it gets capped to peak savings
-- "After 3 Months" will never exceed "Peak Cash Flow Savings"
-- Both on-screen and PDF will be consistent
+- One button, one PDF, everything the merchant needs to see in a clean 4-page document
+- No more confusion about which PDF to send
+- All the deal terms, positions, savings, and cash flow projections in one place
 
