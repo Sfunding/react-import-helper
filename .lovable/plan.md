@@ -1,62 +1,36 @@
 
 
-## Combine Merchant PDF + Cash Report Into One Unified PDF
+## Fix: PDF Layout and Savings Sign Formatting
 
-### Current State
+### Problems Found
 
-There are two separate merchant-facing PDFs with overlapping content:
+1. **Page 2 is wasted space**: The Deal Terms table overflows from page 1 onto page 2, leaving page 2 with just a tiny table and nothing else. This happens because page 1 has too much vertical padding (large payment boxes, savings section, "Position Buyout Only" label all take up space before the deal terms).
 
-1. **Merchant PDF** (1 page): Payment comparison, savings boxes, deal terms table, positions table, EPO options
-2. **Cash Report** (5 pages): Executive summary, position payoff schedule, weekly cash flow, "full picture" transparency, bottom line comparison
+2. **"+-$27,960" bug**: Line 2047 in exportUtils.ts always prepends `+` to the weekly savings: `+${fmtNoDecimals(w.savings)}`. When savings are negative, `fmtNoDecimals` already includes the `-` sign, so it renders as `+-$27,960`.
 
-Both show the same payment comparison, savings figures, and positions -- just laid out differently. The user wants one clean PDF to hand to a merchant.
+3. **5 pages instead of 4**: Because of the overflow, we get 5 pages instead of the planned 4.
 
-### Combined PDF Structure (4 pages)
-
-**Page 1 -- The Offer**
-- Company header bar (white-labeled)
-- Merchant name + date
-- Payment comparison boxes (OLD vs NEW with reduction badge)
-- Savings boxes (Daily / Weekly / Monthly) in the green container
-- "Position Buyout Only" label
-- Deal Terms table (Amount Funded, Payback, Factor Rate, Fee, # Payments)
-
-**Page 2 -- Current Positions + Payoff Schedule**
-- "Positions Being Consolidated" table (Funder, Balance, Daily Payment)
-- "Position Payoff Timeline" table (Funder, Balance, Daily Payment, Days to Payoff, Paid Off By)
-- "All Positions Clear" callout with date
-- Key bullet points ("What This Means For You")
-- Early Payoff Options table (if EPO is enabled)
-
-**Page 3 -- Weekly Cash Flow Projection**
-- Weekly table (first 12 weeks) using real simulation data (declining old payments)
-- Key Milestones boxes (1 Month, 3 Months, Peak Savings) -- all capped at peak
-- Peak savings summary bar
-
-**Page 4 -- The Bottom Line**
-- "After All Positions Fall Off" snapshot (Cash Accumulated + Balance With Us)
-- Single payment going forward callout
-- Without vs With Consolidation side-by-side comparison
-- Big green "Peak Cash Flow Savings" box
-- Call to action
-
-### Technical Changes
+### The Fix
 
 **File: `src/lib/exportUtils.ts`**
-- Create a new `exportMerchantProposal()` function that combines the best content from both existing functions into the 4-page layout above
-- Keep `exportMerchantPDF` and `exportMerchantCashReport` for now (can remove later) but they won't be called from the UI
-- Uses real simulation data for the weekly table (already fixed)
-- All milestones capped at peakSavings (already fixed)
 
-**File: `src/pages/Index.tsx`**
-- Replace the two separate export buttons ("Cash Report" + "Export Merchant PDF") with a single "Export Merchant Proposal" button
-- Import and call the new `exportMerchantProposal` function
+**Fix 1 -- Tighten Page 1 spacing** to keep Deal Terms on the same page:
+- Reduce payment comparison box height from 45 to 38
+- Reduce savings section height from 70 to 60
+- Reduce "Position Buyout Only" box height from 40 to 30
+- Reduce spacing gaps between sections (10 to 8, 25 to 18, 15 to 10, etc.)
+- This should save ~40px, enough to keep the Deal Terms table on page 1
 
-**File: `src/pages/SavedCalculations.tsx`** (if it has export buttons too)
-- Update any export buttons there to use the new combined function
+**Fix 2 -- Fix the weekly savings sign** (line 2047):
+- Replace `+${fmtNoDecimals(w.savings)}` with conditional logic:
+  - If savings >= 0: `+$33,044`
+  - If savings < 0: `-$27,960`
+- Also apply proper red coloring for negative rows in the table styling
+
+**Fix 3 -- Color negative cumulative savings red** in the table (column 4):
+- Currently column 4 is always green. Use `didParseCell` hook to check the value and set red text for negative cumulative savings rows.
 
 ### Result
-- One button, one PDF, everything the merchant needs to see in a clean 4-page document
-- No more confusion about which PDF to send
-- All the deal terms, positions, savings, and cash flow projections in one place
-
+- 4-page PDF as originally planned (Deal Terms stays on page 1)
+- No more "+-" formatting glitch
+- Negative savings show correctly with proper sign and color
