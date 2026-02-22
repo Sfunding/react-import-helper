@@ -1010,7 +1010,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { positionsWithDays, includedPositions, metrics, dailySchedule } = calculateSchedules(
+  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
     positions,
     settings,
     merchantRevenue
@@ -1052,22 +1052,31 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
     ? Math.max(...positionTimeline.map(p => p.daysUntilPayoff)) 
     : 0;
   const totalWeeks = Math.ceil(maxDay / 5);
-  const weeklyProjection: Array<{week: number; oldPayment: number; newPayment: number; savings: number; cumulativeSavings: number}> = [];
   let cumulativeSavings = 0;
-
-  for (let week = 1; week <= Math.min(totalWeeks, 26); week++) {
-    const oldPayment = metrics.totalCurrentDailyPayment * 5;
-    const newPayment = metrics.newDailyPayment * 5;
-    const savings = metrics.weeklySavings;
-    cumulativeSavings += savings;
-    weeklyProjection.push({ week, oldPayment, newPayment, savings, cumulativeSavings });
-  }
+  const weeklyProjection = weeklySchedule.map(w => {
+    const weeklyCredits = w.cashInfusion;
+    const yourPayment = w.totalDebits;
+    const netCashFlow = weeklyCredits - yourPayment;
+    cumulativeSavings += netCashFlow;
+    return {
+      week: w.week,
+      weeklyCredits,
+      yourPayment,
+      netCashFlow,
+      cumulativeSavings
+    };
+  });
 
   // Milestone calculations
-  const month1Savings = Math.min(4, totalWeeks) * metrics.weeklySavings;
-  const month3Savings = Math.min(12, totalWeeks) * metrics.weeklySavings;
-  const month6Savings = Math.min(26, totalWeeks) * metrics.weeklySavings;
-  const totalSavingsToPayoff = totalWeeks * metrics.weeklySavings;
+  const month1Savings = weeklyProjection.length >= 4
+    ? weeklyProjection[3].cumulativeSavings
+    : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
+  const month3Savings = weeklyProjection.length >= 12
+    ? weeklyProjection[11].cumulativeSavings
+    : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
+  const totalSavingsToPayoff = weeklyProjection.length > 0
+    ? weeklyProjection[weeklyProjection.length - 1].cumulativeSavings
+    : 0;
 
   // ========== PAGE 1: EXECUTIVE SUMMARY ==========
   
@@ -1286,12 +1295,12 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const displayWeeks = weeklyProjection.slice(0, 12);
   autoTable(doc, {
     startY: currentY,
-    head: [['Week', 'Old Payment', 'New Payment', 'Weekly Savings', 'Cumulative Savings']],
+    head: [['Week', 'Weekly Credits', 'Your Payment', 'Net Cash Flow', 'Cumulative']],
     body: displayWeeks.map(w => [
       `Week ${w.week}`,
-      fmtNoDecimals(w.oldPayment),
-      fmtNoDecimals(w.newPayment),
-      `+${fmtNoDecimals(w.savings)}`,
+      fmtNoDecimals(w.weeklyCredits),
+      fmtNoDecimals(w.yourPayment),
+      `${w.netCashFlow >= 0 ? '+' : ''}${fmtNoDecimals(w.netCashFlow)}`,
       fmtNoDecimals(w.cumulativeSavings)
     ]),
     theme: 'striped',
@@ -1405,7 +1414,10 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
   const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
   const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
-  const cashAccumulatedAtFalloff = metrics.dailySavings * falloffDay;
+  const falloffWeek = Math.ceil(falloffDay / 5);
+  const cashAccumulatedAtFalloff = weeklySchedule
+    .filter(w => w.week <= falloffWeek)
+    .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
   const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
     ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
     : 0;
