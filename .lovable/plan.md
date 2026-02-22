@@ -1,71 +1,69 @@
 
 
-## Fix: On-Screen "Total Saved" and Milestones Showing Negative Values
+## Fix: Use Peak Cumulative Savings Instead of Overlap Total
 
-### The Problem
+### Why the Current Fix Still Shows Negative Numbers
 
-The `CashBuildupSection.tsx` component calculates `totalSavingsToPayoff` by summing `cashInfusion - totalDebits` across ALL weeks of the schedule (line 117-121). After positions fall off, `cashInfusion` drops to zero while `totalDebits` (the new payment) continues, making the cumulative sum deeply negative (-$1,220,299).
+The "overlap savings" formula (`totalOldPayments - totalNewPayments` during the overlap) can go negative when the new daily payment ($20,581) is high relative to the *average* old payment. Here's what happens:
 
-The month 1 and month 3 milestones (lines 110-115) pull from the same cumulative simulation data, which can also go negative.
+- Day 1: Old payments = $27,190/day, savings = $6,609/day (positive)
+- As positions fall off (by day 20, 30, etc.), the old payments drop
+- Once old payments drop below $20,581/day, the merchant is paying MORE daily than they would with just the remaining old positions
+- By the time ALL positions are gone (day 100), the cumulative savings have gone deeply negative
 
-The `cashAccumulatedAtFalloff` (lines 126-128) has the same issue.
+So the total overlap savings is legitimately negative: the merchant pays more in total, even though they save money in the early weeks.
 
-### The Fix
+### The Correct Metric: Peak Cash Flow Savings
 
-Apply the same overlap-based savings logic that was already applied to the PDF export.
+The merchant's real benefit is the cash they accumulate in the early weeks before the crossover. This is already calculated as `cashAccumulatedAtCrossover` -- the highest point on the cumulative savings curve.
 
-**File:** `src/components/CashBuildupSection.tsx`
+### Changes
 
-**1. Fix `totalSavingsToPayoff` (lines 117-122)**
+**Both files:** `src/components/CashBuildupSection.tsx` and `src/lib/exportUtils.ts`
 
-Replace the full-schedule sum with overlap-only savings:
+**1. Replace `totalSavingsToPayoff` with peak cumulative savings**
 
-```typescript
-// Cash flow savings only during the overlap period (while old positions are active)
-const falloffWeekNum = Math.ceil(maxDay / 5);
-const totalOldPaymentsDuringOverlap = weeklySchedule
-  .filter(w => w.week <= falloffWeekNum)
-  .reduce((sum, w) => sum + w.cashInfusion, 0);
-const totalNewPaymentsDuringOverlap = newDailyPayment * maxDay;
-const totalSavingsToPayoff = totalOldPaymentsDuringOverlap - totalNewPaymentsDuringOverlap;
-const weeksToPayoff = falloffWeekNum;
-```
-
-This shows savings only while old positions are being paid off -- always positive.
-
-**2. Fix milestones (lines 110-115)**
-
-Replace cumulative simulation lookups with simple daily savings multipliers (same as PDF):
+Instead of summing over the entire overlap, find the maximum cumulative savings from the weekly projection:
 
 ```typescript
-const month1Savings = dailySavings * Math.min(22, maxDay);
-const month3Savings = dailySavings * Math.min(66, maxDay);
+const peakSavings = Math.max(0, ...allWeeklyProjection.map(w => w.cumulativeSavings));
 ```
 
-These are always positive and represent actual cash the merchant keeps.
+Use this as the "Total Saved" / main savings figure everywhere.
 
-**3. Fix `cashAccumulatedAtFalloff` (lines 125-128)**
+**2. Cap month 1 and month 3 milestones at crossover day**
 
-Replace the simulation sum with the overlap savings value:
+Currently using `Math.min(22, maxDay)` -- should use `Math.min(22, crossoverDay || maxDay)`:
 
 ```typescript
-const cashAccumulatedAtFalloff = totalSavingsToPayoff;
+const savingsDays = crossoverDay || maxDay;
+const month1Savings = dailySavings * Math.min(22, savingsDays);
+const month3Savings = dailySavings * Math.min(66, savingsDays);
 ```
 
-Since `totalSavingsToPayoff` now represents savings during the overlap period (which ends at falloff), this is the same number and always positive.
+This prevents milestones from claiming savings beyond the crossover point.
 
-**4. Update "By Full Payoff" label (line 274-276)**
+**3. Fix `cashAccumulatedAtFalloff` to use peak savings**
 
-Change the label from "By Full Payoff" to "While Positions Pay Off" to match the PDF and accurately describe the metric:
-
-```
-By Full Payoff -> While Positions Pay Off
-total saved · {weeksToPayoff} weeks -> cash flow savings · {weeksToPayoff} weeks
+```typescript
+const cashAccumulatedAtFalloff = peakSavings;
 ```
 
-### What Won't Change
+**4. Update labels**
 
-- The weekly cash flow projection table stays as-is (it correctly shows the simulation data with negative values after crossover -- that's informative for internal use)
-- The crossover point card stays as-is (it explains why net cash flow goes negative)
-- Daily/Weekly/Monthly savings in the hero bar stay as-is (those are correct constant values)
+- Hero bar: "Total Saved" stays, now shows the peak (always positive)
+- Milestones big box: "PEAK CASH FLOW SAVINGS" with the crossover week count
+- PDF big green box: Same label change
+- PDF "Total savings by payoff" bullet point: Change to "Peak cash flow savings: $X"
+- PDF page 3 milestone "BY FULL PAYOFF": Change to "PEAK SAVINGS"
+- PDF page 4 "CASH ACCUMULATED": Use peak savings value
+
+### Files to Edit
+
+1. **`src/components/CashBuildupSection.tsx`** -- 4 spots (totalSavingsToPayoff calculation, milestones, cashAccumulatedAtFalloff, label)
+2. **`src/lib/exportUtils.ts`** -- 6 spots (totalSavingsToPayoff calculation, milestones month1/month3 cap, cashAccumulatedAtFalloff on page 4, "Total savings by payoff" text, page 3 milestone label, big green box label)
+
+### Result
+
+Every savings number shown to the merchant will be positive, representing the real cash they accumulate during the beneficial early period of the consolidation.
 
