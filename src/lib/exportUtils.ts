@@ -1052,31 +1052,26 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
     ? Math.max(...positionTimeline.map(p => p.daysUntilPayoff)) 
     : 0;
   const totalWeeks = Math.ceil(maxDay / 5);
-  let cumulativeSavings = 0;
-  const weeklyProjection = weeklySchedule.map(w => {
-    const weeklyCredits = w.cashInfusion;
-    const yourPayment = w.totalDebits;
-    const netCashFlow = weeklyCredits - yourPayment;
-    cumulativeSavings += netCashFlow;
+  // Merchant-facing weekly savings (always positive, constant)
+  const weeklyOldPayment = metrics.totalCurrentDailyPayment * 5;
+  const weeklyNewPayment = metrics.newDailyPayment * 5;
+  const weeklySavingsAmount = weeklyOldPayment - weeklyNewPayment;
+
+  const weeklyProjection = Array.from({ length: totalWeeks }, (_, i) => {
+    const week = i + 1;
     return {
-      week: w.week,
-      weeklyCredits,
-      yourPayment,
-      netCashFlow,
-      cumulativeSavings
+      week,
+      oldPayment: weeklyOldPayment,
+      newPayment: weeklyNewPayment,
+      savings: weeklySavingsAmount,
+      cumulativeSavings: weeklySavingsAmount * week
     };
   });
 
-  // Milestone calculations
-  const month1Savings = weeklyProjection.length >= 4
-    ? weeklyProjection[3].cumulativeSavings
-    : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
-  const month3Savings = weeklyProjection.length >= 12
-    ? weeklyProjection[11].cumulativeSavings
-    : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
-  const totalSavingsToPayoff = weeklyProjection.length > 0
-    ? weeklyProjection[weeklyProjection.length - 1].cumulativeSavings
-    : 0;
+  // Milestone calculations (merchant savings = dailySavings * business days)
+  const month1Savings = metrics.dailySavings * 22;
+  const month3Savings = metrics.dailySavings * 66;
+  const totalSavingsToPayoff = metrics.dailySavings * metrics.numberOfDebits;
 
   // ========== PAGE 1: EXECUTIVE SUMMARY ==========
   
@@ -1295,12 +1290,12 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const displayWeeks = weeklyProjection.slice(0, 12);
   autoTable(doc, {
     startY: currentY,
-    head: [['Week', 'Weekly Credits', 'Your Payment', 'Net Cash Flow', 'Cumulative']],
+    head: [['Week', 'Old Weekly Cost', 'New Weekly Cost', 'Weekly Savings', 'Cumulative Savings']],
     body: displayWeeks.map(w => [
       `Week ${w.week}`,
-      fmtNoDecimals(w.weeklyCredits),
-      fmtNoDecimals(w.yourPayment),
-      `${w.netCashFlow >= 0 ? '+' : ''}${fmtNoDecimals(w.netCashFlow)}`,
+      fmtNoDecimals(w.oldPayment),
+      fmtNoDecimals(w.newPayment),
+      `+${fmtNoDecimals(w.savings)}`,
       fmtNoDecimals(w.cumulativeSavings)
     ]),
     theme: 'striped',
