@@ -1,104 +1,76 @@
 
 
-## Plan: Rebuild Cash Report with Accurate Math and Better Design
+## Plan: Fix Cash Report to Reflect Changing Weekly Credits
 
-### The Core Math Problems
+### The Problem
 
-The cash report has **three major calculation bugs** that produce fake numbers:
+The cash report's weekly table currently shows the same "Old Payment" and "New Payment" every week. But in reality, the **weekly credits** (cash flowing in from old positions) decrease after positions fall off (around week 8 in the user's scenario). The internal weekly schedule tab already shows this change correctly, but the cash report doesn't reflect it.
 
-**Bug 1: "New Payment" uses a flat estimate instead of actual debits**
-- Current: `newPayment = newDailyPayment * 5` (constant every week)
-- Reality: The simulation already calculates actual weekly debits (`w.totalDebits`) which handles partial payments, early termination, etc.
-- Fix: Use `w.totalDebits` from the weekly schedule
+The root cause: the code uses `w.cashInfusion` (which does change) and `w.totalDebits` (which is roughly constant), but the user's screenshot shows flat values -- meaning either the build hasn't caught up or there's a data issue. Regardless, the labels "Old Payment" and "New Payment" misrepresent what these columns are.
 
-**Bug 2: "Cash Accumulated at Falloff" uses a flat daily savings multiplied by days**
-- Current: `cashAccumulatedAtFalloff = dailySavings * maxDay` (line 115) -- assumes savings is constant every day
-- Reality: As positions fall off, the cash infused drops, so savings change every week
-- Fix: Sum actual `(cashInfusion - totalDebits)` from the weekly schedule up to the falloff week
+### The Fix
 
-**Bug 3: "Total Savings to Payoff" also uses `newDailyPayment * 5` instead of actual debits**
-- Current: `totalSavingsToPayoff += w.cashInfusion - (newDailyPayment * 5)`
-- Fix: `totalSavingsToPayoff += w.cashInfusion - w.totalDebits`
+Rename and restructure the weekly table columns to accurately represent the cash flow:
 
-All three bugs stem from the same root cause: using a static approximation (`newDailyPayment * 5`) when the actual simulation data (`w.totalDebits`) is already available as a prop.
+| Column | Source | Meaning |
+|--------|--------|---------|
+| Week | `w.week` | Week number |
+| Weekly Credits | `w.cashInfusion` | Cash flowing in from positions (decreases as positions fall off) |
+| Your Payment | `w.totalDebits` | What the merchant pays us (roughly constant) |
+| Net Cash Flow | difference | Weekly credits minus payment (positive = savings, negative = paying more than receiving) |
+| Cumulative | running total | Total cash accumulated |
+
+Additionally, add a "Positions Active" indicator to each row so the merchant can see WHY weekly credits change (e.g., "5 of 5" dropping to "3 of 5").
 
 ### Design Improvements
 
-The current layout has 6 separate cards stacked vertically which feels cluttered. Here is the improved structure:
+1. **Weekly table**: Add a subtle row highlight/separator at the week where positions start falling off. Add a small annotation like "Position X paid off" at the transition points.
 
-1. **Hero Summary Bar** -- Single compact banner at the top with 3-4 key stats (daily savings, total saved, deal term) instead of the wordy "Important Information" card
-2. **Position Payoff Timeline** -- Move up to be the first detailed section (most relevant to the merchant)
-3. **Savings Milestones** -- Cleaner 3-column layout with subtle progress indicators
-4. **Crossover Point** -- Keep but refine the messaging
-5. **Weekly Cash Flow Table** -- Keep at bottom as the detailed breakdown, but show fewer rows by default with an expand option
+2. **Hero summary bar**: Clean up -- remove gradient, use a subtle `bg-muted/50` border, tighter spacing.
 
-Remove the "Important Information" card (generic warnings) and the "When All Positions Clear" card (fold those stats into the crossover/timeline sections where they're more contextual).
+3. **Savings milestones**: Use the actual cumulative data from the weekly projection (already correct in current code).
 
-### Files to Change
+4. **Crossover card**: Keep but ensure it references the correct week where net cash flow turns negative.
+
+### File to Change
 
 | File | Change |
 |------|--------|
-| `src/components/CashBuildupSection.tsx` | Fix all 3 math bugs, redesign layout |
+| `src/components/CashBuildupSection.tsx` | Rename columns, add position-active count per week, add falloff annotations, clean up styling |
 
 ### Technical Details
 
-**1. Fix weekly projection math (lines 77-92)**
+**1. Add position-active count per week**
 
-Replace:
-```typescript
-const oldPayment = w.cashInfusion;
-const newPayment = newDailyPayment * 5;
-const savings = oldPayment - newPayment;
+For each week in the projection, calculate how many positions are still active:
+
 ```
-With:
-```typescript
-const oldPayment = w.cashInfusion;
-const newPayment = w.totalDebits;  // Actual debits from simulation
-const savings = oldPayment - newPayment;
+const getActivePositionsForWeek = (weekNum: number) => {
+  const dayInWeek = weekNum * 5;
+  return positionTimeline.filter(p => p.daysUntilPayoff > (weekNum - 1) * 5).length;
+};
 ```
 
-**2. Fix cash accumulated at falloff (line 115)**
+**2. Detect falloff weeks**
 
-Replace:
-```typescript
-const cashAccumulatedAtFalloff = dailySavings * maxDay;
+Find weeks where a position finishes paying off and annotate those rows:
+
 ```
-With:
-```typescript
-const falloffWeek = Math.ceil(maxDay / 5);
-const cashAccumulatedAtFalloff = weeklySchedule
-  .filter(w => w.week <= falloffWeek)
-  .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
+const falloffWeeks = positionTimeline.map(p => Math.ceil(p.daysUntilPayoff / 5));
+// Use this to add visual markers in the table
 ```
 
-**3. Fix total savings to payoff (lines 108-111)**
+**3. Column rename and restructure**
 
-Replace:
-```typescript
-totalSavingsToPayoff += w.cashInfusion - (newDailyPayment * 5);
-```
-With:
-```typescript
-totalSavingsToPayoff += w.cashInfusion - w.totalDebits;
-```
+- "Old Payment" becomes "Weekly Credits" (what flows in from old positions)
+- "New Payment" becomes "Your Payment" (what merchant pays)
+- "Weekly Savings" becomes "Net Cash Flow"
+- Keep "Cumulative Savings" as "Cumulative"
 
-**4. Redesign the layout**
+**4. Styling cleanup**
 
-- Replace the 6-card stack with a cleaner flow:
-  - Top: Compact hero bar with key numbers (daily savings, total term, total saved)
-  - Position Timeline table (currently card 5, move to top)
-  - Savings milestones (1 month, 3 months, full payoff) in a cleaner grid
-  - Crossover point card (when applicable)
-  - Weekly projection table with a "Show all weeks" toggle (default to 8 rows)
-- Remove the "Important Information" card (the info is covered elsewhere in the offer)
-- Fold "When All Positions Clear" stats into the position timeline footer
-
-### What This Fixes
-
-| Metric | Before (Fake) | After (Accurate) |
-|--------|---------------|-------------------|
-| Weekly "New Payment" | Static `dailyPayment * 5` every week | Actual debits from simulation (handles partials, last day) |
-| Cash at Falloff | `dailySavings * maxDay` (flat) | Sum of real weekly net savings from schedule |
-| Total Savings | Uses flat weekly estimate | Uses actual schedule debits |
-| Crossover detection | Based on flat estimate | Based on real schedule data |
+- Hero bar: Replace `bg-gradient-to-r from-primary/10 via-accent/30 to-success/10` with `bg-muted/50 border`
+- Table rows with position falloff get a subtle left-border accent
+- Negative net cash flow rows use `text-destructive` with `bg-destructive/5` background
+- Tighter padding throughout (`p-2` instead of defaults)
 
