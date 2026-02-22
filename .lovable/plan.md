@@ -1,116 +1,77 @@
 
 
-## Plan: Fix PDF Cash Report to Use Real Simulation Data
+## Plan: Fix PDF Cash Report Milestones and Weekly Table for Merchant-Facing Accuracy
 
 ### The Problem
 
-The PDF cash report (`exportMerchantCashReport` in `src/lib/exportUtils.ts`) has the **exact same bugs** we already fixed in the on-screen `CashBuildupSection.tsx`. The PDF export has its own independent calculation loop that uses flat static values instead of the simulation's `weeklySchedule` data.
+The screenshot shows "BY FULL PAYOFF: -$893,061" -- a deeply negative number presented as "saved." This is because the milestones use cumulative `cashInfusion - totalDebits` (an internal simulation metric). After positions fall off, `cashInfusion` drops to zero while `totalDebits` continues, making the cumulative sum go very negative. This is not what the merchant saves -- it's just the internal deal cash flow.
 
-Specifically:
+The merchant's real savings = `(oldDailyPayment - newDailyPayment) x business days`. This is always positive and constant -- it's the whole point of the consolidation.
 
-| Line | Bug | Current (Wrong) | Fix |
-|------|-----|-----------------|-----|
-| 1013 | `weeklySchedule` not destructured | Only pulls `positionsWithDays, includedPositions, metrics, dailySchedule` | Add `weeklySchedule` to destructuring |
-| 1055-1064 | Weekly projection uses flat values | `oldPayment = metrics.totalCurrentDailyPayment * 5` (constant every week) | Use `w.cashInfusion` from `weeklySchedule` |
-| 1060 | New payment is flat | `newPayment = metrics.newDailyPayment * 5` (constant every week) | Use `w.totalDebits` from `weeklySchedule` |
-| 1067-1070 | Milestones use flat weekly savings | `month1Savings = 4 * metrics.weeklySavings` | Sum actual net savings from `weeklySchedule` |
-| 1408 | Cash at falloff uses flat daily savings | `cashAccumulatedAtFalloff = metrics.dailySavings * falloffDay` | Sum `(cashInfusion - totalDebits)` up to falloff week |
+### What Changes
 
-### The Fix
+**File:** `src/lib/exportUtils.ts`
 
-**1. Destructure `weeklySchedule`** (line 1013)
+**1. Fix milestones to use actual merchant savings**
 
-Add `weeklySchedule` to the destructured result from `calculateSchedules`.
-
-**2. Replace the flat weekly projection loop** (lines 1055-1064)
-
-Instead of generating a fake flat loop, map directly from `weeklySchedule`:
+Replace the simulation-based milestones with merchant-facing savings:
 
 ```
-Weekly Credits = w.cashInfusion (decreases as positions fall off)
-Your Payment = w.totalDebits (actual debits from simulation)
-Net Cash Flow = cashInfusion - totalDebits
-Cumulative = running sum of net cash flow
+month1Savings = metrics.dailySavings * 22  (22 business days)
+month3Savings = metrics.dailySavings * 66  (66 business days)
+totalSavingsToPayoff = metrics.dailySavings * metrics.numberOfDebits
 ```
 
-**3. Fix milestones** (lines 1067-1070)
+These are always positive and represent what the merchant actually keeps in their pocket.
 
-Calculate from actual cumulative data at week 4, week 12, and the final week -- not from flat multipliers.
+**2. Fix the weekly table to show merchant savings alongside simulation data**
 
-**4. Fix cash accumulated at falloff** (line 1408)
+The weekly table currently shows Weekly Credits, Your Payment, Net Cash Flow, and Cumulative -- all from the simulation. The problem is "Net Cash Flow" goes negative after falloff, which confuses the merchant.
 
-Sum actual `(cashInfusion - totalDebits)` from weekly schedule up to the falloff week.
+Replace the weekly table with a hybrid approach:
+- **Week** -- week number
+- **Old Weekly Cost** -- `metrics.totalCurrentDailyPayment * 5` (constant -- what they were paying before)
+- **New Weekly Cost** -- `metrics.newDailyPayment * 5` (constant -- their single payment to us)
+- **Weekly Savings** -- `old - new` (constant, always positive)
+- **Cumulative Savings** -- `weeklySavings * week` (steadily growing)
 
-**5. Update PDF table columns** (lines 1285-1305)
+This gives the merchant a clear, always-positive picture of their savings over time.
 
-Rename columns to match the on-screen report:
-- "Old Payment" becomes "Weekly Credits"
-- "New Payment" becomes "Your Payment"
-- "Weekly Savings" becomes "Net Cash Flow"
-- "Cumulative Savings" becomes "Cumulative"
+**3. Keep the simulation data for the "After Positions Fall Off" section only**
 
-### File to Change
-
-| File | Change |
-|------|--------|
-| `src/lib/exportUtils.ts` | Fix `exportMerchantCashReport` function (lines 1007-1561) |
+The falloff section (page 4) already uses `weeklySchedule` data for `cashAccumulatedAtFalloff`. This is fine because that section is explicitly about the deal mechanics, not merchant savings. No change needed there.
 
 ### Technical Details
 
-**Destructure weeklySchedule (line 1013):**
+**Milestone fix (lines 1070-1079):**
 
-Change:
 ```typescript
-const { positionsWithDays, includedPositions, metrics, dailySchedule } = calculateSchedules(...)
-```
-To:
-```typescript
-const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(...)
+const month1Savings = metrics.dailySavings * 22;
+const month3Savings = metrics.dailySavings * 66;
+const totalSavingsToPayoff = metrics.dailySavings * metrics.numberOfDebits;
 ```
 
-**Replace weekly projection (lines 1055-1064):**
+**Weekly projection fix (lines 1055-1068):**
 
-Replace the flat loop with:
 ```typescript
-const weeklyProjection = weeklySchedule.map(w => {
-  const weeklyCredits = w.cashInfusion;
-  const yourPayment = w.totalDebits;
-  const netCashFlow = weeklyCredits - yourPayment;
-  cumulativeSavings += netCashFlow;
+const weeklyOldPayment = metrics.totalCurrentDailyPayment * 5;
+const weeklyNewPayment = metrics.newDailyPayment * 5;
+const weeklySavingsAmount = weeklyOldPayment - weeklyNewPayment;
+
+const weeklyProjection = Array.from({ length: totalWeeks }, (_, i) => {
+  const week = i + 1;
   return {
-    week: w.week,
-    weeklyCredits,
-    yourPayment,
-    netCashFlow,
-    cumulativeSavings
+    week,
+    oldPayment: weeklyOldPayment,
+    newPayment: weeklyNewPayment,
+    savings: weeklySavingsAmount,
+    cumulativeSavings: weeklySavingsAmount * week
   };
 });
 ```
 
-**Fix milestones (lines 1067-1070):**
+**PDF table column update (lines 1296-1314):**
 
-```typescript
-const month1Savings = weeklyProjection.length >= 4
-  ? weeklyProjection[3].cumulativeSavings
-  : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
-const month3Savings = weeklyProjection.length >= 12
-  ? weeklyProjection[11].cumulativeSavings
-  : weeklyProjection[weeklyProjection.length - 1]?.cumulativeSavings || 0;
-const totalSavingsToPayoff = weeklyProjection.length > 0
-  ? weeklyProjection[weeklyProjection.length - 1].cumulativeSavings
-  : 0;
-```
+Update headers and body to: `['Week', 'Old Weekly Cost', 'New Weekly Cost', 'Weekly Savings', 'Cumulative Savings']`
 
-**Fix cash at falloff (line 1408):**
-
-```typescript
-const falloffWeek = Math.ceil(falloffDay / 5);
-const cashAccumulatedAtFalloff = weeklySchedule
-  .filter(w => w.week <= falloffWeek)
-  .reduce((sum, w) => sum + (w.cashInfusion - w.totalDebits), 0);
-```
-
-**Update PDF table (lines 1285-1305):**
-
-Change column headers and body to use the new projection fields with correct labels (Weekly Credits, Your Payment, Net Cash Flow, Cumulative).
-
+All values will be positive and consistent, giving the merchant confidence in the deal.
