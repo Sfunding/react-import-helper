@@ -122,8 +122,8 @@ export function CashBuildupSection({
 
   // Milestones: daily savings multiplied by business days, capped at crossover
   const savingsDays = crossoverDay || maxDay;
-  const month1Savings = dailySavings * Math.min(22, savingsDays);
-  const month3Savings = dailySavings * Math.min(66, savingsDays);
+  const month1Savings = Math.min(dailySavings * Math.min(22, savingsDays), peakSavings);
+  const month3Savings = Math.min(dailySavings * Math.min(66, savingsDays), peakSavings);
 
   // Use peak savings as the main savings figure (always positive)
   const totalSavingsToPayoff = peakSavings;
