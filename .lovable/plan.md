@@ -1,43 +1,31 @@
 
 
-## Fix: PDF Cash Flow Table Shows Flat "Old Weekly Cost" Instead of Declining
+## Fix: Milestones Cannot Exceed Peak Savings
 
 ### The Problem
 
-The PDF "Weekly Cash Flow Projection" table uses a **static** `weeklyProjection` array (line 1060-1069 in `exportUtils.ts`) that repeats the same `weeklyOldPayment` every week. It never decreases as positions fall off.
+"After 3 Months" shows $330,439 but "Peak Cash Flow Savings" shows $306,975. The milestone can't be higher than the peak -- it's the same savings curve.
 
-Meanwhile, the on-screen table in `CashBuildupSection.tsx` correctly uses the real simulation data (`weeklySchedule`) which shows declining credits as positions pay off.
+The milestones use a flat formula (`dailySavings x days`) which assumes constant savings every day. But savings actually decline as positions fall off, so the real peak (from simulation) is lower.
 
 ### The Fix
 
-**File:** `src/lib/exportUtils.ts`
+**File:** `src/components/CashBuildupSection.tsx` (line 125-126)
 
-Replace the static `weeklyProjection` (lines 1060-1069) with data derived from the real `weeklySchedule` simulation -- the same approach the on-screen component uses.
+Cap both milestones at `peakSavings`:
 
 ```typescript
-// Replace static weeklyProjection with real simulation data
-let cumulativeSavingsForTable = 0;
-const weeklyProjection = weeklySchedule.map((w) => {
-  const oldPayment = w.cashInfusion;       // Old positions' payments (declines as they fall off)
-  const newPayment = w.totalDebits;         // New consolidated payment (constant)
-  const savings = oldPayment - newPayment;
-  cumulativeSavingsForTable += savings;
-  return {
-    week: w.week,
-    oldPayment,
-    newPayment,
-    savings,
-    cumulativeSavings: cumulativeSavingsForTable
-  };
-});
+const month1Savings = Math.min(dailySavings * Math.min(22, savingsDays), peakSavings);
+const month3Savings = Math.min(dailySavings * Math.min(66, savingsDays), peakSavings);
 ```
 
-This single change makes the PDF table match the on-screen table -- "Old Weekly Cost" will decrease as positions pay off, "Weekly Savings" will decrease (and eventually go negative), and "Cumulative Savings" will peak then decline.
+**File:** `src/lib/exportUtils.ts` (same milestone calculation)
 
-The rest of the PDF (milestones, peak savings, etc.) already uses the real simulation data via `allWeeklyProjectionForPeak`, so no other changes are needed.
+Apply the same cap in the PDF export so the report matches the on-screen display.
 
-### Technical Detail
+### Result
 
-- Only `weeklyProjection` in `exportUtils.ts` lines 1060-1069 needs to change
-- The variables `weeklyOldPayment`, `weeklyNewPayment`, `weeklySavingsAmount` (lines 1056-1058) are still used elsewhere for the hero bar stats, so they stay
-- The table column headers stay the same
+- If the flat formula gives a number higher than peak savings, it gets capped to peak savings
+- "After 3 Months" will never exceed "Peak Cash Flow Savings"
+- Both on-screen and PDF will be consistent
+
