@@ -1600,67 +1600,57 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   doc.save(filename);
 }
 
-// ========== COMBINED MERCHANT PROPOSAL PDF (5 pages) ==========
+// ========== COMBINED MERCHANT PROPOSAL PDF (4 pages, @react-pdf/renderer) ==========
 export async function exportMerchantProposal(calculation: SavedCalculation) {
+  const { pdf } = await import('@react-pdf/renderer');
+  const { default: MerchantProposalPDF } = await import('@/components/pdf/MerchantProposalPDF');
+  const { createElement } = await import('react');
+  const { fmtDate: pdfFmtDate } = await import('@/components/pdf/pdfHelpers');
+
   const settings = calculation.settings as Settings;
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
-  
+
   const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
     positions,
     settings,
     merchantRevenue
   );
 
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  // Colors
-  const primaryColor: [number, number, number] = [30, 58, 138];
-  const successColor: [number, number, number] = [22, 163, 74];
-  const lightGreen: [number, number, number] = [220, 252, 231];
-  const darkGreen: [number, number, number] = [21, 128, 61];
-  const lightBlue: [number, number, number] = [239, 246, 255];
-
   const companyName = settings.whiteLabelCompany?.trim() || 'AVION FUNDING';
+  const dateStr = pdfFmtDate();
 
-  // ========== Shared calculations ==========
-  const positionTimeline = includedPositions
-    .map(p => {
-      const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
-      const balance = posWithDays?.balance || 0;
-      const daysUntilPayoff = posWithDays?.daysLeft || 0;
-      return {
-        entity: p.entity || 'Unknown Funder',
-        balance,
-        dailyPayment: p.dailyPayment,
-        daysUntilPayoff,
-        payoffDate: getFormattedLastPaymentDate(daysUntilPayoff)
-      };
-    })
-    .sort((a, b) => a.daysUntilPayoff - b.daysUntilPayoff);
-
-  const maxDay = positionTimeline.length > 0 
-    ? Math.max(...positionTimeline.map(p => p.daysUntilPayoff)) 
-    : 0;
-  const totalWeeks = Math.ceil(maxDay / 5);
-
-  // Weekly projection using REAL simulation data
-  let cumulativeSavingsForTable = 0;
-  const weeklyProjection = weeklySchedule.map((w) => {
-    const oldPayment = w.cashInfusion;
-    const newPayment = w.totalDebits;
-    const savings = oldPayment - newPayment;
-    cumulativeSavingsForTable += savings;
-    return { week: w.week, oldPayment, newPayment, savings, cumulativeSavings: cumulativeSavingsForTable };
+  // Build position data
+  const positionTimeline = includedPositions.map(p => {
+    const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
+    const balance = posWithDays?.balance || 0;
+    const daysToPayoff = posWithDays?.daysLeft || 0;
+    return {
+      entity: p.entity || 'Unknown Funder',
+      balance,
+      dailyPayment: p.dailyPayment,
+      daysToPayoff,
+      payoffDate: getFormattedLastPaymentDate(daysToPayoff),
+    };
   });
 
-  // Peak savings from real simulation
+  const maxDay = positionTimeline.length > 0
+    ? Math.max(...positionTimeline.map(p => p.daysToPayoff))
+    : 0;
+
+  // Weekly projection from REAL simulation data
+  let cumulativeSavings = 0;
+  const weeklyData = weeklySchedule.map(w => {
+    const oldWeeklyCost = w.cashInfusion;
+    const newWeeklyCost = w.totalDebits;
+    const weeklySavings = oldWeeklyCost - newWeeklyCost;
+    cumulativeSavings += weeklySavings;
+    return { week: w.week, oldWeeklyCost, newWeeklyCost, weeklySavings, cumulativeSavings };
+  });
+
+  // Peak savings
   let cumTracker = 0;
-  const allWeeklyForPeak = weeklySchedule.map((w) => {
+  const allWeeklyForPeak = weeklySchedule.map(w => {
     const net = w.cashInfusion - w.totalDebits;
     cumTracker += net;
     return { week: w.week, netCashFlow: net, cumulativeSavings: cumTracker };
@@ -1669,7 +1659,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     ? Math.max(0, ...allWeeklyForPeak.map(w => w.cumulativeSavings))
     : 0;
 
-  // Crossover detection for capping milestones
+  // Crossover detection for milestone capping
   const crossoverWeekData = allWeeklyForPeak.find(w => w.netCashFlow < 0);
   const crossoverDay = crossoverWeekData ? crossoverWeekData.week * 5 : null;
   const savingsDays = crossoverDay || maxDay;
@@ -1682,205 +1672,19 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
   const falloffDay = includedWithDays.length > 0 ? Math.max(...includedWithDays.map(p => p.daysLeft || 0)) : 0;
   const rtrAtFalloff = dailySchedule[falloffDay - 1]?.rtrBalance || 0;
-  const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
-    ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
+  const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0
+    ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment)
     : 0;
-  const cashAccumulatedAtFalloff = peakSavings;
 
-  // ========== PAGE 1: CASH FLOW ANALYSIS ==========
-  // Header bar
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, pageWidth, 40, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text(companyName.toUpperCase(), margin, 22);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Cash Flow Analysis', margin, 33);
+  // Cash to merchant
+  const cashToMerchant = metrics.totalFunding - metrics.totalBalance;
 
-  // Merchant info
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(calculation.merchant_name || 'Merchant Proposal', margin, 55);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Prepared: ${dateStr}`, margin, 64);
+  // Consolidation type
+  const consolidationType = cashToMerchant > 0 ? 'Buyout + Cash Out' : 'Position Buyout Only';
 
-  let currentY = 75;
-
-  // Big green "YOUR SAVINGS AT A GLANCE" box
-  const savingsBoxHeight = 70;
-  const savingsFullWidth = pageWidth - margin * 2;
-  doc.setFillColor(...successColor);
-  doc.roundedRect(margin, currentY, savingsFullWidth, savingsBoxHeight, 5, 5, 'F');
-  
-  // Dark green title stripe
-  doc.setFillColor(...darkGreen);
-  doc.roundedRect(margin, currentY, savingsFullWidth, 20, 5, 5, 'F');
-  doc.rect(margin, currentY + 10, savingsFullWidth, 10, 'F');
-  
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13);
-  doc.setFont('helvetica', 'bold');
-  doc.text('YOUR SAVINGS AT A GLANCE', pageWidth / 2, currentY + 14, { align: 'center' });
-
-  // Big monthly savings number
-  doc.setFontSize(32);
-  doc.text(`${fmtNoDecimals(metrics.monthlySavings)} PER MONTH`, pageWidth / 2, currentY + 44, { align: 'center' });
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`That's ${fmtNoDecimals(peakSavings)} in peak cash flow savings!`, pageWidth / 2, currentY + 60, { align: 'center' });
-
-  currentY += savingsBoxHeight + 12;
-
-  // Three stat boxes
-  const statWidth = (pageWidth - margin * 2 - 20) / 3;
-  const statHeight = 42;
-  
-  // Positions Consolidated
-  doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin, currentY, statWidth, statHeight, 3, 3, 'F');
-  doc.setTextColor(...primaryColor);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('POSITIONS CONSOLIDATED', margin + statWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(includedPositions.length.toString(), margin + statWidth/2, currentY + 32, { align: 'center' });
-
-  // Total Debt Being Paid
-  doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin + statWidth + 10, currentY, statWidth, statHeight, 3, 3, 'F');
-  doc.setTextColor(...primaryColor);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('TOTAL DEBT BEING PAID', margin + statWidth + 10 + statWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(metrics.totalBalance), margin + statWidth + 10 + statWidth/2, currentY + 32, { align: 'center' });
-
-  // Days to Clear All
-  doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin + (statWidth + 10) * 2, currentY, statWidth, statHeight, 3, 3, 'F');
-  doc.setTextColor(...primaryColor);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('DAYS TO CLEAR ALL', margin + (statWidth + 10) * 2 + statWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(maxDay.toString(), margin + (statWidth + 10) * 2 + statWidth/2, currentY + 32, { align: 'center' });
-
-  currentY += statHeight + 12;
-
-  // OLD PAYMENT vs NEW PAYMENT boxes
-  const compBoxWidth = (pageWidth - margin * 2 - 15) / 2;
-  const compBoxHeight = 42;
-
-  // Old Payment
-  doc.setFillColor(254, 226, 226);
-  doc.roundedRect(margin, currentY, compBoxWidth, compBoxHeight, 3, 3, 'F');
-  doc.setTextColor(185, 28, 28);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('OLD PAYMENT', margin + compBoxWidth/2, currentY + 11, { align: 'center' });
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment)}/day`, margin + compBoxWidth/2, currentY + 25, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`${fmtNoDecimals(metrics.totalCurrentDailyPayment * 5)}/week`, margin + compBoxWidth/2, currentY + 37, { align: 'center' });
-
-  // New Payment
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin + compBoxWidth + 15, currentY, compBoxWidth, compBoxHeight, 3, 3, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('NEW PAYMENT', margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 11, { align: 'center' });
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 25, { align: 'center' });
-  doc.setFontSize(10);
-  doc.text(`${fmtNoDecimals(metrics.newWeeklyPayment)}/week`, margin + compBoxWidth + 15 + compBoxWidth/2, currentY + 37, { align: 'center' });
-
-  // ========== PAGE 2: POSITION PAYOFF SCHEDULE ==========
-  doc.addPage();
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, pageWidth, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('POSITION PAYOFF SCHEDULE', margin, 20);
-
-  currentY = 42;
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Each position will be paid off according to this schedule:', margin, currentY);
-  currentY += 10;
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Funder', 'Balance', 'Daily Payment', 'Days to Payoff', 'Paid Off By']],
-    body: positionTimeline.map(p => [
-      p.entity,
-      fmtNoDecimals(p.balance),
-      `${fmtNoDecimals(p.dailyPayment)}/day`,
-      `Day ${p.daysUntilPayoff}`,
-      p.payoffDate
-    ]),
-    theme: 'striped',
-    headStyles: { fillColor: primaryColor, fontSize: 10 },
-    styles: { fontSize: 10, cellPadding: 5 },
-    margin: { left: margin, right: margin },
-  });
-
-  currentY = (doc as any).lastAutoTable.finalY + 15;
-
-  // ALL POSITIONS CLEAR callout
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 35, 3, 3, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('ALL POSITIONS CLEAR', margin + 10, currentY + 14);
-  doc.setFontSize(18);
-  doc.text(`Day ${maxDay}`, margin + 10, currentY + 28);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`(${getFormattedLastPaymentDate(maxDay)})`, margin + 60, currentY + 28);
-  currentY += 45;
-
-  // What This Means For You
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('What This Means For You', margin, currentY);
-  currentY += 12;
-
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  const explanations = [
-    `After Day ${maxDay}, all your existing funders will be fully paid off.`,
-    `You'll continue with just ONE payment of ${fmtNoDecimals(metrics.newDailyPayment)}/day.`,
-    `Your cash flow immediately improves by ${fmtNoDecimals(metrics.dailySavings)}/day.`,
-    `Peak cash flow savings: ${fmtNoDecimals(peakSavings)}`
-  ];
-  explanations.forEach((text, i) => {
-    doc.text(`${i + 1}. ${text}`, margin + 5, currentY);
-    currentY += 10;
-  });
-
-  // Early Payoff Options (if enabled) - on page 2
+  // Early payoff options
+  let earlyPayOptionsData: any = undefined;
   if (settings.earlyPayOptions?.enabled && (settings.earlyPayOptions?.tiers || []).length > 0) {
-    currentY += 5;
-    if (currentY > pageHeight - 100) {
-      doc.addPage();
-      currentY = 20;
-    }
-    
     const getRtrAtDay = (day: number): number => {
       if (dailySchedule.length === 0) return 0;
       if (day >= dailySchedule.length) {
@@ -1890,327 +1694,58 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
       }
       return dailySchedule[day - 1]?.rtrBalance || 0;
     };
-    const tiers = (settings.earlyPayOptions?.tiers || []).sort((a, b) => a.daysAfterFalloff - b.daysAfterFalloff);
-    
-    doc.setFillColor(...successColor);
-    doc.rect(margin, currentY, pageWidth - margin * 2, 12, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text('EARLY PAYOFF OPTIONS', margin + 5, currentY + 8);
-    currentY += 12;
-
-    doc.setTextColor(100, 100, 100);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Pay off your balance early after positions clear and save:', margin, currentY + 8);
-    currentY += 15;
-
-    autoTable(doc, {
-      startY: currentY,
-      head: [['Pay By', 'Payoff Amount', 'You Save']],
-      body: tiers.map(tier => {
+    const tiers = (settings.earlyPayOptions.tiers || []).sort((a, b) => a.daysAfterFalloff - b.daysAfterFalloff);
+    earlyPayOptionsData = {
+      enabled: true,
+      tiers: tiers.map(tier => {
         const payoffDeadline = falloffDay + tier.daysAfterFalloff;
         const rtrAtDeadline = getRtrAtDay(payoffDeadline);
         const discountedPayoff = rtrAtDeadline * (1 - tier.discountPercent);
         const savings = rtrAtDeadline * tier.discountPercent;
-        return [
-          `Day ${payoffDeadline} (${tier.daysAfterFalloff} days after)`,
-          fmtNoDecimals(discountedPayoff),
-          `${fmtNoDecimals(savings)} (${(tier.discountPercent * 100).toFixed(0)}% off)`
-        ];
+        return {
+          daysAfterFalloff: tier.daysAfterFalloff,
+          discountPercent: tier.discountPercent,
+          payoffDeadline,
+          payoffAmount: discountedPayoff,
+          savings,
+        };
       }),
-      theme: 'striped',
-      headStyles: { fillColor: successColor, fontSize: 10 },
-      bodyStyles: { fontSize: 10 },
-      styles: { cellPadding: 4 },
-      margin: { left: margin, right: margin },
-    });
+    };
   }
 
-  // ========== PAGE 3: WEEKLY CASH FLOW PROJECTION ==========
-  doc.addPage();
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, pageWidth, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('WEEKLY CASH FLOW PROJECTION', margin, 20);
+  const pdfData = {
+    companyName,
+    merchantName: calculation.merchant_name || 'Merchant',
+    preparedDate: dateStr,
+    amountFunded: metrics.totalFunding,
+    totalPayback: metrics.totalPayback,
+    factorRate: settings.rate,
+    originationFeePct: settings.feePercent * 100,
+    numPayments: metrics.numberOfDebits,
+    consolidationType,
+    oldDailyPayment: metrics.totalCurrentDailyPayment,
+    newDailyPayment: metrics.newDailyPayment,
+    reductionPct: metrics.impliedDiscount * 100,
+    dailySavings: metrics.dailySavings,
+    cashToMerchant: Math.max(0, cashToMerchant),
+    positions: positionTimeline,
+    maxPayoffDay: maxDay,
+    maxPayoffDate: getFormattedLastPaymentDate(maxDay),
+    weeklyData,
+    month1Savings,
+    month3Savings,
+    peakSavings,
+    peakWeek: peakWeekNum,
+    falloffDay,
+    cashAccumulated: peakSavings,
+    balanceWithUs: rtrAtFalloff,
+    daysRemainingAfterFalloff,
+    numPositions: includedPositions.length,
+    earlyPayOptions: earlyPayOptionsData,
+  };
 
-  currentY = 42;
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text('See how your savings accumulate week by week:', margin, currentY);
-  currentY += 10;
-
-  // 12-week table with real simulation data
-  const displayWeeks = weeklyProjection.slice(0, 12);
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Week', 'Old Weekly Cost', 'New Weekly Cost', 'Weekly Savings', 'Cumulative Savings']],
-    body: displayWeeks.map(w => [
-      `Week ${w.week}`,
-      fmtNoDecimals(w.oldPayment),
-      fmtNoDecimals(w.newPayment),
-      w.savings >= 0 ? `+${fmtNoDecimals(w.savings)}` : fmtNoDecimals(w.savings),
-      fmtNoDecimals(w.cumulativeSavings)
-    ]),
-    theme: 'striped',
-    headStyles: { fillColor: primaryColor, fontSize: 10 },
-    styles: { fontSize: 9, cellPadding: 4 },
-    margin: { left: margin, right: margin },
-    didParseCell: (data: any) => {
-      if (data.section === 'body') {
-        if (data.column.index === 3) {
-          const val = displayWeeks[data.row.index]?.savings ?? 0;
-          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
-          data.cell.styles.fontStyle = 'bold';
-        }
-        if (data.column.index === 4) {
-          const val = displayWeeks[data.row.index]?.cumulativeSavings ?? 0;
-          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
-          data.cell.styles.fontStyle = 'bold';
-        }
-      }
-    },
-  });
-
-  currentY = (doc as any).lastAutoTable.finalY + 20;
-
-  // KEY MILESTONES
-  doc.setFillColor(...successColor);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 15, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('KEY MILESTONES', margin + 5, currentY + 10);
-  currentY += 20;
-
-  const milestoneWidth = (pageWidth - margin * 2 - 20) / 3;
-  const milestoneHeight = 50;
-
-  // After 1 Month
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin, currentY, milestoneWidth, milestoneHeight, 3, 3, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('AFTER 1 MONTH', margin + milestoneWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(month1Savings), margin + milestoneWidth/2, currentY + 32, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('saved', margin + milestoneWidth/2, currentY + 44, { align: 'center' });
-
-  // After 3 Months
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin + milestoneWidth + 10, currentY, milestoneWidth, milestoneHeight, 3, 3, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('AFTER 3 MONTHS', margin + milestoneWidth + 10 + milestoneWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(month3Savings), margin + milestoneWidth + 10 + milestoneWidth/2, currentY + 32, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('saved', margin + milestoneWidth + 10 + milestoneWidth/2, currentY + 44, { align: 'center' });
-
-  // By Full Payoff
-  doc.setFillColor(...successColor);
-  doc.roundedRect(margin + (milestoneWidth + 10) * 2, currentY, milestoneWidth, milestoneHeight, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('BY FULL PAYOFF', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 12, { align: 'center' });
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(peakSavings), margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 32, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('total saved', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 44, { align: 'center' });
-
-  // ========== PAGE 4: THE FULL PICTURE ==========
-  doc.addPage();
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, pageWidth, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('THE FULL PICTURE', margin, 20);
-
-  currentY = 50;
-
-  // Important Information Box
-  const infoBoxHeight = 85;
-  doc.setFillColor(255, 243, 205);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, infoBoxHeight, 5, 5, 'F');
-  
-  // Amber header stripe
-  doc.setFillColor(245, 158, 11);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 22, 5, 5, 'F');
-  doc.rect(margin, currentY + 12, pageWidth - margin * 2, 10, 'F');
-  
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('IMPORTANT: WHAT YOU SHOULD KNOW', margin + 10, currentY + 14);
-  
-  doc.setTextColor(92, 64, 0);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('• You can stop this consolidation at any time by contacting us', margin + 10, currentY + 35);
-  doc.text(`• Total you will pay back: ${fmtNoDecimals(metrics.totalPayback)}`, margin + 10, currentY + 50);
-  doc.setFontSize(9);
-  doc.text('  (This is more than your current balances due to fees and factor rate)', margin + 10, currentY + 60);
-  doc.setFontSize(10);
-  doc.text(`• However, your daily cash flow improves by ${fmtNoDecimals(metrics.dailySavings)}/day during this period`, margin + 10, currentY + 75);
-
-  currentY += infoBoxHeight + 20;
-
-  // AFTER ALL POSITIONS FALL OFF
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`AFTER ALL POSITIONS FALL OFF (Day ${falloffDay})`, pageWidth / 2, currentY, { align: 'center' });
-  currentY += 10;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  doc.text(`On Day ${falloffDay}, all your existing funders will be paid off. Here's where you'll stand:`, pageWidth / 2, currentY, { align: 'center' });
-  currentY += 15;
-
-  const statBoxWidth = (pageWidth - margin * 2 - 15) / 2;
-  const statBoxHeight = 50;
-
-  // Cash Accumulated
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin, currentY, statBoxWidth, statBoxHeight, 5, 5, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('CASH ACCUMULATED', margin + statBoxWidth/2, currentY + 15, { align: 'center' });
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(cashAccumulatedAtFalloff), margin + statBoxWidth/2, currentY + 35, { align: 'center' });
-
-  // Balance With Us
-  doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin + statBoxWidth + 15, currentY, statBoxWidth, statBoxHeight, 5, 5, 'F');
-  doc.setTextColor(...primaryColor);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('BALANCE WITH US', margin + statBoxWidth + 15 + statBoxWidth/2, currentY + 15, { align: 'center' });
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(rtrAtFalloff), margin + statBoxWidth + 15 + statBoxWidth/2, currentY + 35, { align: 'center' });
-
-  currentY += statBoxHeight + 15;
-
-  // YOUR SINGLE PAYMENT GOING FORWARD
-  doc.setFillColor(...successColor);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 55, 5, 5, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('YOUR SINGLE PAYMENT GOING FORWARD', pageWidth / 2, currentY + 15, { align: 'center' });
-  doc.setFontSize(22);
-  doc.text(`${fmtNoDecimals(metrics.newDailyPayment)}/day for ${daysRemainingAfterFalloff} more days`, pageWidth / 2, currentY + 35, { align: 'center' });
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.text('No more multiple funders!', pageWidth / 2, currentY + 48, { align: 'center' });
-
-  // ========== PAGE 5: THE BOTTOM LINE ==========
-  doc.addPage();
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, pageWidth, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('THE BOTTOM LINE', margin, 20);
-
-  currentY = 50;
-
-  // Side-by-side comparison
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Without Consolidation vs. With Consolidation', pageWidth / 2, currentY, { align: 'center' });
-  currentY += 15;
-
-  const halfWidth = (pageWidth - margin * 2 - 10) / 2;
-  const compareHeight = 85;
-
-  // WITHOUT
-  doc.setFillColor(254, 226, 226);
-  doc.roundedRect(margin, currentY, halfWidth, compareHeight, 5, 5, 'F');
-  doc.setTextColor(185, 28, 28);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('WITHOUT CONSOLIDATION', margin + halfWidth/2, currentY + 15, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Daily Payment: ${fmtNoDecimals(metrics.totalCurrentDailyPayment)}`, margin + halfWidth/2, currentY + 33, { align: 'center' });
-  doc.text(`Weekly Payment: ${fmtNoDecimals(metrics.totalCurrentDailyPayment * 5)}`, margin + halfWidth/2, currentY + 46, { align: 'center' });
-  doc.text(`Monthly Payment: ${fmtNoDecimals(metrics.totalCurrentDailyPayment * 22)}`, margin + halfWidth/2, currentY + 59, { align: 'center' });
-  doc.text(`${includedPositions.length} separate payments to manage`, margin + halfWidth/2, currentY + 75, { align: 'center' });
-
-  // WITH
-  doc.setFillColor(...lightGreen);
-  doc.roundedRect(margin + halfWidth + 10, currentY, halfWidth, compareHeight, 5, 5, 'F');
-  doc.setTextColor(...successColor);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('WITH CONSOLIDATION', margin + halfWidth + 10 + halfWidth/2, currentY + 15, { align: 'center' });
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Daily Payment: ${fmtNoDecimals(metrics.newDailyPayment)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 33, { align: 'center' });
-  doc.text(`Weekly Payment: ${fmtNoDecimals(metrics.newWeeklyPayment)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 46, { align: 'center' });
-  doc.text(`Monthly Payment: ${fmtNoDecimals(metrics.newDailyPayment * 22)}`, margin + halfWidth + 10 + halfWidth/2, currentY + 59, { align: 'center' });
-  doc.text('1 simple payment', margin + halfWidth + 10 + halfWidth/2, currentY + 75, { align: 'center' });
-
-  currentY += compareHeight + 20;
-
-  // Big green TOTAL SAVINGS box
-  const bigBoxHeight = 70;
-  doc.setFillColor(...successColor);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, bigBoxHeight, 5, 5, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL SAVINGS OVER LIFE OF DEAL', pageWidth / 2, currentY + 20, { align: 'center' });
-  doc.setFontSize(36);
-  doc.text(fmtNoDecimals(peakSavings), pageWidth / 2, currentY + 50, { align: 'center' });
-
-  currentY += bigBoxHeight + 20;
-
-  // Call to action
-  doc.setFillColor(...lightBlue);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 40, 5, 5, 'F');
-  doc.setTextColor(...primaryColor);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Ready to improve your cash flow?', pageWidth / 2, currentY + 18, { align: 'center' });
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Contact us today to get started with your consolidation.', pageWidth / 2, currentY + 32, { align: 'center' });
-
-  // Footer on all pages
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text(
-      `${companyName} | Cash Flow Analysis for ${calculation.merchant_name || 'Merchant'} | Page ${i} of ${totalPages}`,
-      pageWidth / 2,
-      pageHeight - 10,
-      { align: 'center' }
-    );
-  }
-
+  const doc = createElement(MerchantProposalPDF, { data: pdfData }) as any;
+  const blob = await pdf(doc).toBlob();
   const filename = `${sanitizeFilename(calculation.merchant_name || calculation.name)}_Merchant_Proposal_${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(filename);
+  saveAs(blob, filename);
 }
