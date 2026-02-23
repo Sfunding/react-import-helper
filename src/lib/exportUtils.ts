@@ -1648,24 +1648,35 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     : 0;
   const totalWeeks = Math.ceil(maxDay / 5);
 
-  // SIMPLIFIED flat model: old payment stays constant for comparison
-  const weeklyOldPayment = metrics.totalCurrentDailyPayment * 5;
-  const weeklyNewPayment = metrics.newDailyPayment * 5;
-  const flatWeeklySavings = weeklyOldPayment - weeklyNewPayment;
-  const totalLifetimeSavings = metrics.dailySavings * metrics.numberOfDebits;
-
-  // Build flat weekly projection (12 weeks)
-  const weeklyProjection = Array.from({ length: 12 }, (_, i) => {
-    const week = i + 1;
-    const cumulative = flatWeeklySavings * week;
-    return {
-      week,
-      oldPayment: weeklyOldPayment,
-      newPayment: weeklyNewPayment,
-      savings: flatWeeklySavings,
-      cumulativeSavings: cumulative
-    };
+  // Weekly projection using REAL simulation data
+  let cumulativeSavingsForTable = 0;
+  const weeklyProjection = weeklySchedule.map((w) => {
+    const oldPayment = w.cashInfusion;
+    const newPayment = w.totalDebits;
+    const savings = oldPayment - newPayment;
+    cumulativeSavingsForTable += savings;
+    return { week: w.week, oldPayment, newPayment, savings, cumulativeSavings: cumulativeSavingsForTable };
   });
+
+  // Peak savings from real simulation
+  let cumTracker = 0;
+  const allWeeklyForPeak = weeklySchedule.map((w) => {
+    const net = w.cashInfusion - w.totalDebits;
+    cumTracker += net;
+    return { week: w.week, netCashFlow: net, cumulativeSavings: cumTracker };
+  });
+  const peakSavings = allWeeklyForPeak.length > 0
+    ? Math.max(0, ...allWeeklyForPeak.map(w => w.cumulativeSavings))
+    : 0;
+
+  // Crossover detection for capping milestones
+  const crossoverWeekData = allWeeklyForPeak.find(w => w.netCashFlow < 0);
+  const crossoverDay = crossoverWeekData ? crossoverWeekData.week * 5 : null;
+  const savingsDays = crossoverDay || maxDay;
+  const month1Savings = Math.min(metrics.dailySavings * Math.min(22, savingsDays), peakSavings);
+  const month3Savings = Math.min(metrics.dailySavings * Math.min(66, savingsDays), peakSavings);
+  const peakWeekData = allWeeklyForPeak.find(w => w.cumulativeSavings === peakSavings);
+  const peakWeekNum = peakWeekData ? peakWeekData.week : Math.ceil(maxDay / 5);
 
   // Falloff data
   const includedWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false && p.balance !== null && p.balance > 0);
@@ -1674,13 +1685,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   const daysRemainingAfterFalloff = rtrAtFalloff > 0 && metrics.newDailyPayment > 0 
     ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment) 
     : 0;
-
-  // Cash accumulated at falloff = dailySavings * falloffDay
-  const cashAccumulatedAtFalloff = metrics.dailySavings * falloffDay;
-
-  // Milestone calculations (simple arithmetic)
-  const month1Savings = metrics.dailySavings * Math.min(22, metrics.numberOfDebits);
-  const month3Savings = metrics.dailySavings * Math.min(66, metrics.numberOfDebits);
+  const cashAccumulatedAtFalloff = peakSavings;
 
   // ========== PAGE 1: CASH FLOW ANALYSIS ==========
   // Header bar
@@ -1727,7 +1732,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.text(`${fmtNoDecimals(metrics.monthlySavings)} PER MONTH`, pageWidth / 2, currentY + 44, { align: 'center' });
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`That's ${fmtNoDecimals(totalLifetimeSavings)} over ${Math.ceil(metrics.numberOfDebits / 5)} weeks!`, pageWidth / 2, currentY + 60, { align: 'center' });
+  doc.text(`That's ${fmtNoDecimals(peakSavings)} in peak cash flow savings!`, pageWidth / 2, currentY + 60, { align: 'center' });
 
   currentY += savingsBoxHeight + 12;
 
@@ -1861,7 +1866,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     `After Day ${maxDay}, all your existing funders will be fully paid off.`,
     `You'll continue with just ONE payment of ${fmtNoDecimals(metrics.newDailyPayment)}/day.`,
     `Your cash flow immediately improves by ${fmtNoDecimals(metrics.dailySavings)}/day.`,
-    `Total savings by payoff: ${fmtNoDecimals(totalLifetimeSavings)}`
+    `Peak cash flow savings: ${fmtNoDecimals(peakSavings)}`
   ];
   explanations.forEach((text, i) => {
     doc.text(`${i + 1}. ${text}`, margin + 5, currentY);
@@ -1939,25 +1944,36 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.text('See how your savings accumulate week by week:', margin, currentY);
   currentY += 10;
 
-  // 12-week table with FLAT model
+  // 12-week table with real simulation data
+  const displayWeeks = weeklyProjection.slice(0, 12);
   autoTable(doc, {
     startY: currentY,
     head: [['Week', 'Old Weekly Cost', 'New Weekly Cost', 'Weekly Savings', 'Cumulative Savings']],
-    body: weeklyProjection.map(w => [
+    body: displayWeeks.map(w => [
       `Week ${w.week}`,
       fmtNoDecimals(w.oldPayment),
       fmtNoDecimals(w.newPayment),
-      `+${fmtNoDecimals(w.savings)}`,
+      w.savings >= 0 ? `+${fmtNoDecimals(w.savings)}` : fmtNoDecimals(w.savings),
       fmtNoDecimals(w.cumulativeSavings)
     ]),
     theme: 'striped',
     headStyles: { fillColor: primaryColor, fontSize: 10 },
     styles: { fontSize: 9, cellPadding: 4 },
-    columnStyles: {
-      3: { textColor: successColor, fontStyle: 'bold' },
-      4: { textColor: successColor, fontStyle: 'bold' }
-    },
     margin: { left: margin, right: margin },
+    didParseCell: (data: any) => {
+      if (data.section === 'body') {
+        if (data.column.index === 3) {
+          const val = displayWeeks[data.row.index]?.savings ?? 0;
+          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+        if (data.column.index === 4) {
+          const val = displayWeeks[data.row.index]?.cumulativeSavings ?? 0;
+          data.cell.styles.textColor = val >= 0 ? successColor : [220, 38, 38];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
   });
 
   currentY = (doc as any).lastAutoTable.finalY + 20;
@@ -2011,7 +2027,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.text('BY FULL PAYOFF', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 12, { align: 'center' });
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text(fmtNoDecimals(totalLifetimeSavings), margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 32, { align: 'center' });
+  doc.text(fmtNoDecimals(peakSavings), margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 32, { align: 'center' });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text('total saved', margin + (milestoneWidth + 10) * 2 + milestoneWidth/2, currentY + 44, { align: 'center' });
@@ -2166,7 +2182,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
   doc.setFont('helvetica', 'bold');
   doc.text('TOTAL SAVINGS OVER LIFE OF DEAL', pageWidth / 2, currentY + 20, { align: 'center' });
   doc.setFontSize(36);
-  doc.text(fmtNoDecimals(totalLifetimeSavings), pageWidth / 2, currentY + 50, { align: 'center' });
+  doc.text(fmtNoDecimals(peakSavings), pageWidth / 2, currentY + 50, { align: 'center' });
 
   currentY += bigBoxHeight + 20;
 
