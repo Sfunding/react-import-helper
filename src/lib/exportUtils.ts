@@ -1676,8 +1676,9 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     ? Math.ceil(rtrAtFalloff / metrics.newDailyPayment)
     : 0;
 
-  // Cash to merchant
-  const cashToMerchant = metrics.totalFunding - metrics.totalBalance;
+  // Cash to merchant (net advance minus what's needed to pay off positions)
+  const netAdvance = metrics.totalFunding * (1 - settings.feePercent);
+  const cashToMerchant = Math.max(0, netAdvance - metrics.totalBalance);
 
   // Consolidation type
   const consolidationType = cashToMerchant > 0 ? 'Buyout + Cash Out' : 'Position Buyout Only';
