@@ -1,61 +1,62 @@
 
 
-## Redesign Merchant Proposal PDF to Match Claude's Layout
+## Rebuild Merchant Proposal PDF with @react-pdf/renderer
 
-The current PDF has layout overflow issues (Deal Terms spilling to page 2, creating wasted space) and the `+-$` formatting bug persists. The user provided a reference PDF from Claude that they prefer. This plan replaces the current `exportMerchantProposal` function with a completely new layout modeled after that reference.
+### What's Changing
+Replace the current jsPDF-based `exportMerchantProposal` with `@react-pdf/renderer` for a premium, pixel-perfect 4-page PDF. The new approach uses React components to define the PDF layout, giving much better control over typography, colors, gradients, and spacing.
 
-### New 5-Page Structure
+### New Dependency
+- Install `@react-pdf/renderer` (replaces jsPDF for this export only; existing Excel and internal PDF exports stay on jsPDF)
 
-**Page 1 -- "Cash Flow Analysis" (Executive Summary)**
-- Blue header bar with company name + "Cash Flow Analysis" subtitle
-- Merchant name + prepared date
-- Big green "YOUR SAVINGS AT A GLANCE" box: `$145,393 PER MONTH` + "That's $X over Y weeks!"
-- Three stat boxes: Positions Consolidated | Total Debt Being Paid | Days to Clear All
-- OLD PAYMENT vs NEW PAYMENT comparison boxes at bottom
+### New Files
 
-**Page 2 -- "Position Payoff Schedule"**
-- Single combined payoff table (Funder, Balance, Daily Payment, Days to Payoff, Paid Off By)
-- "ALL POSITIONS CLEAR" callout box with Day + Date
-- "What This Means For You" numbered bullet points:
-  1. After Day X, all funders paid off
-  2. One payment of $X/day
-  3. Cash flow improves by $X/day
-  4. Total savings by payoff: $X
+**1. `src/components/pdf/MerchantProposalPDF.tsx`** (~500 lines)
+The core React PDF document component with all 4 pages, using the specified color theme:
 
-**Page 3 -- "Weekly Cash Flow Projection"**
-- 12-week table using SIMPLIFIED flat model (old payment stays constant = totalCurrentDailyPayment * 5 for all weeks)
-- This avoids the negative savings / `+-$` issue entirely
-- Weekly Savings and Cumulative Savings columns in green
-- KEY MILESTONES: After 1 Month | After 3 Months | By Full Payoff
-- "By Full Payoff" = dailySavings * numberOfDebits (total lifetime savings)
+- **Page 1 -- Cover / Summary**: Navy gradient hero with merchant name, old vs new payment cards with reduction badge, savings row (daily/weekly/monthly + consolidation type), deal terms table, and conditional "Cash to Merchant" banner
+- **Page 2 -- Positions & Payoff Schedule**: Positions table with red daily payments and teal totals, payoff timeline sorted by days (ascending), "All Positions Clear" teal banner, visual payoff timeline bar with staggered labels when markers overlap
+- **Page 3 -- Weekly Cash Flow Projection**: Up to 18-week table using REAL simulation data (old weekly = `w.cashInfusion`, new weekly = `w.totalDebits`), green/red conditional formatting, negative rows get light red background, key milestones cards (1 month, 3 months, peak savings)
+- **Page 4 -- The Bottom Line**: Navy hero banner for falloff day, three status cards (Cash Accumulated, Balance With Us, Single Payment Forward), teal callout banner, side-by-side Without vs With comparison boxes, call to action
 
-**Page 4 -- "The Full Picture" (Transparency)**
-- Orange/yellow "IMPORTANT: WHAT YOU SHOULD KNOW" box with bullet points:
-  - You can stop at any time
-  - Total payback amount (higher due to fees/factor)
-  - But daily cash flow improves by $X/day
-- "AFTER ALL POSITIONS FALL OFF" section with Cash Accumulated + Balance With Us boxes
-- "YOUR SINGLE PAYMENT GOING FORWARD" green box
+**2. `src/components/pdf/pdfStyles.ts`** (~150 lines)
+Shared StyleSheet with the full color palette and reusable styles (header bars, stat cards, table rows, footer).
 
-**Page 5 -- "The Bottom Line"**
-- Side-by-side: WITHOUT vs WITH CONSOLIDATION (Daily, Weekly, Monthly, # payments)
-- Big green "TOTAL SAVINGS OVER LIFE OF DEAL" box with the total amount
-- Call to action: "Ready to improve your cash flow?"
+**3. `src/components/pdf/pdfHelpers.ts`** (~50 lines)
+Currency formatting (no decimals, commas), percentage formatting, date helpers specific to the PDF context.
 
-### Technical Details
+### Modified Files
 
-**File: `src/lib/exportUtils.ts`**
+**4. `src/lib/exportUtils.ts`**
+- Rewrite `exportMerchantProposal` to use `@react-pdf/renderer`'s `pdf()` function to generate and download the blob
+- Keep all existing calculation logic (`calculateSchedules`) untouched
+- The function still accepts `SavedCalculation` and triggers a download
+- Remove the ~600 lines of jsPDF drawing code for this export
 
-- Rewrite the `exportMerchantProposal` function completely (~550 lines replacing current ~650 lines)
-- Key change in weekly projection: use flat `metrics.totalCurrentDailyPayment * 5` as "Old Weekly Cost" for all weeks instead of the simulation-based declining `cashInfusion`. This matches what merchants expect to see (their current payment stays constant for comparison purposes)
-- Total savings calculation: `metrics.dailySavings * metrics.numberOfDebits` for lifetime savings figure
-- All savings figures use simple arithmetic (dailySavings * days), never negative
-- Proper formatting: no `+-$` possible since old payment is always >= new payment in this model
-- Footer on every page: `COMPANY NAME | Cash Flow Analysis for MERCHANT | Page X of 5`
+**5. `src/pages/Index.tsx`** and **`src/pages/SavedCalculations.tsx`**
+- No changes needed -- they already call `exportMerchantProposal(calc)` which will use the new renderer internally
 
-**Files: `src/pages/Index.tsx` and `src/pages/SavedCalculations.tsx`**
-- No changes needed -- they already call `exportMerchantProposal`
+### Data Flow (unchanged)
+All numbers come from the existing `calculateSchedules()` function using real simulation data. No simplified/flat models. Weekly projections use actual `weeklySchedule` entries where:
+- Old Weekly Cost = `w.cashInfusion` (sum of position payments that week)
+- New Weekly Cost = `w.totalDebits` (actual debits collected)
+- Savings can go negative after positions clear (shown in red)
 
-### Why This Approach Works
+### Key Design Details from the Spec
 
-The previous version used real simulation data where old payments decline as positions get paid off. While technically accurate, this created confusing negative savings weeks and the `+-$` formatting bug. The Claude approach uses a **simplified comparison model** -- "what you're paying now vs what you'll pay with us" -- which is what merchants actually care about. The transparency page (page 4) still shows the real numbers (total payback, balance remaining) for full disclosure.
+- **Color theme**: Navy #0B1D3A, Teal accent #00C9A7, Gold #F0B94D, Red #E8555A, Green #2ECC71
+- **Page size**: US Letter (612 x 792 points)
+- **Margins**: ~43pt (0.6 inches)
+- **Font**: Helvetica (built into @react-pdf/renderer)
+- **Currency**: No decimals, commas (e.g. "$1,984,580")
+- **Weekly = Daily x 5**, Monthly = Weekly x (52/12)
+- **Days to payoff**: ceil(balance / daily_payment)
+- **Visual timeline bar** on page 2 with staggered labels when markers are within 48px
+- **Footer** on every page: "Company | Merchant | Prepared date | Page X of 4"
+
+### What Stays the Same
+- `exportToExcel` -- unchanged (still uses xlsx)
+- `exportToPDF` (internal cash report) -- unchanged (still uses jsPDF)
+- `calculateSchedules` -- unchanged
+- All form inputs and UI -- unchanged
+- Early payoff options section on page 2 (if enabled) -- will be included
+
