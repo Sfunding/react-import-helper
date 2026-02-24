@@ -1,25 +1,35 @@
 
 
-## Fix: Login Page Always Shows "Create Admin Account"
+## Fix: "Failed to create user" Error
 
 ### Root Cause
 
-The `checkNeedsSetup` function queries the `profiles` table to see if any users exist. However, the RLS policy on `profiles` only allows `authenticated` users to read rows. When you are on the login page, you are **not authenticated** (anon), so the query returns zero rows. The code interprets this as "no users exist" and shows the setup form.
+The `manage-users` edge function uses `anonClient.auth.getClaims(token)` on line 28 to verify the caller's identity. This method is not reliably available in the version of `@supabase/supabase-js` loaded via `esm.sh`. When `getClaims` fails or returns an unexpected shape, the function either throws (caught as a 500 error) or returns a 401, which the frontend interprets as "Failed to create user".
+
+Note: The user `jackr1` was likely created on a retry (the network logs show a successful 200 response for that attempt), but the initial attempt failed due to this `getClaims` issue.
 
 ### The Fix
 
-Update the RLS SELECT policy on the `profiles` table to allow the `anon` role (unauthenticated users) to read profiles. This is safe because the profiles table only contains usernames and display names -- no sensitive data.
+**File: `supabase/functions/manage-users/index.ts`**
 
-**Database migration:**
-```sql
-DROP POLICY "Anyone can read profiles" ON public.profiles;
+Replace the unreliable `getClaims` call with the standard `getUser()` method, which is well-supported across all supabase-js v2 versions:
 
-CREATE POLICY "Anyone can read profiles"
-ON public.profiles
-FOR SELECT
-TO anon, authenticated
-USING (true);
+```typescript
+// BEFORE (line 27-32):
+const token = authHeader.replace('Bearer ', '')
+const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token)
+if (claimsError || !claimsData?.claims) {
+  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
+}
+const callerId = claimsData.claims.sub
+
+// AFTER:
+const { data: { user }, error: userError } = await anonClient.auth.getUser()
+if (userError || !user) {
+  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
+}
+const callerId = user.id
 ```
 
-No frontend code changes needed. Once the `anon` role can read from `profiles`, the existing `checkNeedsSetup` logic will correctly find your profile and show the "Sign In" form.
+`getUser()` uses the Authorization header already set on the client to verify the token server-side and return the user object. This is the standard, documented approach.
 
