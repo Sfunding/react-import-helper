@@ -1,41 +1,78 @@
 
 
-## Fix: Settings Page Stuck on Loading Spinner
+## Fix: Login Page Stuck on Loading Spinner
 
-### What I Found
+### Root Cause
 
-I tested the backend function directly and it works perfectly -- it returns your two users (Elazar and JackR1) correctly. The problem is on the browser side.
+The `AuthContext` useEffect has a deadlock between `onAuthStateChange` and `getSession()`:
 
-There are two issues:
+1. `onAuthStateChange` is registered with an **async callback** that awaits database queries
+2. `getSession()` internally waits for the `INITIAL_SESSION` event from `onAuthStateChange` to finish processing
+3. But `onAuthStateChange`'s async callback awaits `checkNeedsSetup()` (a network call) before completing
+4. This creates a circular dependency where both paths block each other, so `setIsLoading(false)` is never called
 
-### Issue 1: Incomplete CORS Headers
+This explains why there are **zero network requests** -- the auth system deadlocks before any REST calls can be made.
 
-The `manage-users` function's CORS `Access-Control-Allow-Headers` only lists `authorization, x-client-info, apikey, content-type`. The browser client sends additional headers (`x-supabase-client-platform`, `x-supabase-client-platform-version`, etc.) that are not listed. When the browser's preflight OPTIONS check sees unlisted headers, it silently blocks the request entirely. This causes the `fetchUsers` call to fail with no response, leaving the page stuck on the loading spinner.
+### The Fix
 
-**Fix:** Update the CORS headers in `supabase/functions/manage-users/index.ts`:
+**File: `src/contexts/AuthContext.tsx`**
+
+Rewrite the `useEffect` to:
+1. **Not use async callbacks** in `onAuthStateChange` -- fire-and-forget the async work instead
+2. Add **try/catch** around all async operations so `setIsLoading(false)` is always called
+3. Use a single `initializeAuth` function called from `getSession()` only (not duplicated in `onAuthStateChange`)
+4. Let `onAuthStateChange` handle only subsequent session changes (not initial load)
+
+```typescript
+useEffect(() => {
+  let initialized = false;
+
+  const initialize = async (session: any) => {
+    try {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+
+      if (currentUser) {
+        const admin = await checkAdminRole(currentUser.id);
+        setIsAdmin(admin);
+        setNeedsSetup(false);
+      } else {
+        setIsAdmin(false);
+        const setup = await checkNeedsSetup();
+        setNeedsSetup(setup);
+      }
+    } catch (err) {
+      console.error('Auth init error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
+      if (initialized) {
+        // Only handle subsequent changes, not initial
+        initialize(session);
+      }
+    }
+  );
+
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    initialized = true;
+    initialize(session);
+  });
+
+  return () => subscription.unsubscribe();
+}, []);
 ```
-'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-```
 
-Same fix needed in `supabase/functions/setup-admin/index.ts` for consistency.
+Key changes:
+- `onAuthStateChange` callback is **no longer async** -- avoids the deadlock
+- Only `getSession()` drives the initial load
+- Subsequent auth changes (login/logout) are handled by `onAuthStateChange` after initialization
+- `try/catch/finally` guarantees `setIsLoading(false)` always runs
 
-### Issue 2: RLS Policy Type Mismatch on `profiles`
+### Technical Details
 
-The RLS policies on `profiles` use `RESTRICTIVE` mode (shown as "Permissive: No" in the schema). The SELECT policy grants access to `true` but was applied as restrictive. With restrictive policies, ALL policies must pass. If there's no explicit grant for the `anon` role, the query still fails silently. The migration needs to ensure the policy is `PERMISSIVE` so the `anon` role can actually read profiles.
-
-**Fix:** Database migration to recreate the policy as permissive:
-```sql
-DROP POLICY IF EXISTS "Anyone can read profiles" ON public.profiles;
-CREATE POLICY "Anyone can read profiles"
-ON public.profiles
-FOR SELECT
-TO anon, authenticated
-USING (true);
-```
-
-### Summary of Changes
-
-1. **`supabase/functions/manage-users/index.ts`** -- Update CORS `Access-Control-Allow-Headers` to include all required headers
-2. **`supabase/functions/setup-admin/index.ts`** -- Same CORS fix
-3. **Database migration** -- Recreate profiles SELECT policy as permissive
+The deadlock happens because supabase-js v2.39+ changed `getSession()` to wait for `INITIAL_SESSION`. When the `onAuthStateChange` callback is async, the library tracks the promise. If that promise awaits I/O, `getSession()` hangs waiting for it, and both code paths stall indefinitely. Making the callback synchronous (fire-and-forget) breaks the cycle.
 
