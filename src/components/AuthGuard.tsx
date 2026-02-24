@@ -5,10 +5,11 @@ import { Loader2 } from 'lucide-react';
 
 interface AuthGuardProps {
   children: ReactNode;
+  requireAdmin?: boolean;
 }
 
-export function AuthGuard({ children }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+export function AuthGuard({ children, requireAdmin = false }: AuthGuardProps) {
+  const { isAuthenticated, isLoading, isAdmin } = useAuth();
 
   if (isLoading) {
     return (
@@ -20,6 +21,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
