@@ -41,37 +41,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
+    let initialized = false;
 
-      if (currentUser) {
-        const admin = await checkAdminRole(currentUser.id);
-        setIsAdmin(admin);
-        setNeedsSetup(false);
-      } else {
-        setIsAdmin(false);
-        const setup = await checkNeedsSetup();
-        setNeedsSetup(setup);
+    const initialize = async (session: any) => {
+      try {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          const admin = await checkAdminRole(currentUser.id);
+          setIsAdmin(admin);
+          setNeedsSetup(false);
+        } else {
+          setIsAdmin(false);
+          const setup = await checkNeedsSetup();
+          setNeedsSetup(setup);
+        }
+      } catch (err) {
+        console.error('Auth init error:', err);
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      setIsLoading(false);
-    });
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        const admin = await checkAdminRole(currentUser.id);
-        setIsAdmin(admin);
-        setNeedsSetup(false);
-      } else {
-        const setup = await checkNeedsSetup();
-        setNeedsSetup(setup);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (initialized) {
+          initialize(session);
+        }
       }
+    );
 
-      setIsLoading(false);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      initialized = true;
+      initialize(session);
     });
 
     return () => subscription.unsubscribe();
