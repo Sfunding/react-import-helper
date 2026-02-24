@@ -3,10 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { SavedCalculation, Settings, Position } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
 
-// Since we use shared password auth, all calculations are shared
-// We use a fixed "shared" user_id for RLS purposes
-const SHARED_USER_ID = '00000000-0000-0000-0000-000000000000';
-
 export function useCalculations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -39,10 +35,13 @@ export function useCalculations() {
       totalBalance: number;
       totalDailyPayment: number;
     }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
       const { data, error } = await supabase
         .from('saved_calculations')
         .insert({
-          user_id: SHARED_USER_ID,
+          user_id: session.user.id,
           name: params.name,
           merchant_name: params.merchant.name,
           merchant_business_type: params.merchant.businessType,
@@ -143,10 +142,13 @@ export function useCalculations() {
       newName: string;
       calculation: SavedCalculation;
     }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
       const { data, error } = await supabase
         .from('saved_calculations')
         .insert({
-          user_id: SHARED_USER_ID,
+          user_id: session.user.id,
           name: params.newName,
           merchant_name: params.calculation.merchant_name,
           merchant_business_type: params.calculation.merchant_business_type,
