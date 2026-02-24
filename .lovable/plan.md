@@ -1,41 +1,25 @@
 
 
-## Fix: "Setup Failed" Bug
+## Fix: Login Page Always Shows "Create Admin Account"
 
 ### Root Cause
 
-Your admin account **was actually created successfully** in the database. The "Setup failed" error is misleading.
-
-The bug: the `setup-admin` backend function returns JSON data but is missing the `Content-Type: application/json` header. Without that header, `supabase.functions.invoke()` returns a raw Blob instead of a parsed object. The code then checks `data.success`, which is `undefined` on a Blob, and falls through to display "Setup failed".
-
-### What Happened Step-by-Step
-
-1. You submitted the setup form with username "Elazar"
-2. The backend created your auth account, profile, and admin role -- all successfully
-3. The response `{"success":true}` came back with status 200, but no `Content-Type: application/json`
-4. The client received a Blob instead of `{success: true}`
-5. `data.success` was `undefined` → code showed "Setup failed"
-6. The automatic login step never ran
-
-### Current State
-
-Your admin account exists and is fully functional:
-- Username: `elazar`
-- Role: `admin`
-- Profile: Elazar Fischer
-
-Since a profile now exists in the database, the login page should already show the "Sign In" form (not the setup form). You should be able to log in right now with your username and password.
+The `checkNeedsSetup` function queries the `profiles` table to see if any users exist. However, the RLS policy on `profiles` only allows `authenticated` users to read rows. When you are on the login page, you are **not authenticated** (anon), so the query returns zero rows. The code interprets this as "no users exist" and shows the setup form.
 
 ### The Fix
 
-**File: `supabase/functions/setup-admin/index.ts`** -- Add `Content-Type: application/json` to all Response objects.
+Update the RLS SELECT policy on the `profiles` table to allow the `anon` role (unauthenticated users) to read profiles. This is safe because the profiles table only contains usernames and display names -- no sensitive data.
 
-**File: `supabase/functions/manage-users/index.ts`** -- Same fix, add `Content-Type: application/json` to all Response objects.
+**Database migration:**
+```sql
+DROP POLICY "Anyone can read profiles" ON public.profiles;
 
-This is a one-line addition to the `corsHeaders` object in each file:
+CREATE POLICY "Anyone can read profiles"
+ON public.profiles
+FOR SELECT
+TO anon, authenticated
+USING (true);
 ```
-'Content-Type': 'application/json',
-```
 
-This ensures `supabase.functions.invoke()` correctly parses the JSON response, preventing future issues if someone needs to run setup again or when admin manages users.
+No frontend code changes needed. Once the `anon` role can read from `profiles`, the existing `checkNeedsSetup` logic will correctly find your profile and show the "Sign In" form.
 
