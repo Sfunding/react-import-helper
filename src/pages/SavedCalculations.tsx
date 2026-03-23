@@ -35,8 +35,17 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
-  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
+  const { getUserName } = useProfiles();
+  const [userFilter, setUserFilter] = useState<string>('all');
+
+  // Determine the actual userId to filter by
+  const filterUserId = userFilter === 'all' ? null : userFilter === 'mine' ? user?.id ?? null : userFilter;
+
+  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations(
+    isAdmin ? filterUserId : user?.id
+  );
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [calcToDuplicate, setCalcToDuplicate] = useState<SavedCalculation | null>(null);
   const [duplicateName, setDuplicateName] = useState('');
