@@ -65,6 +65,41 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_shares: {
+        Row: {
+          access_level: string
+          calculation_id: string
+          created_at: string
+          id: string
+          shared_by: string
+          shared_with: string
+        }
+        Insert: {
+          access_level?: string
+          calculation_id: string
+          created_at?: string
+          id?: string
+          shared_by: string
+          shared_with: string
+        }
+        Update: {
+          access_level?: string
+          calculation_id?: string
+          created_at?: string
+          id?: string
+          shared_by?: string
+          shared_with?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_shares_calculation_id_fkey"
+            columns: ["calculation_id"]
+            isOneToOne: false
+            referencedRelation: "saved_calculations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       login_attempts: {
         Row: {
           attempted_at: string
@@ -148,6 +183,33 @@ export type Database = {
           total_balance?: number | null
           total_daily_payment?: number | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_permissions: {
+        Row: {
+          can_delete_deals: boolean
+          can_export: boolean
+          can_view_others: boolean
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          can_delete_deals?: boolean
+          can_export?: boolean
+          can_view_others?: boolean
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          can_delete_deals?: boolean
+          can_export?: boolean
+          can_view_others?: boolean
+          created_at?: string
+          id?: string
           user_id?: string
         }
         Relationships: []
