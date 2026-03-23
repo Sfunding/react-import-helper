@@ -8,6 +8,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isAdmin: boolean;
+  isManager: boolean;
   username: string | null;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -21,16 +22,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isManager, setIsManager] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  const checkAdminRole = async (userId: string) => {
+  const checkRoles = async (userId: string) => {
     const { data } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle();
-    return !!data;
+      .eq('user_id', userId);
+    const roles = (data || []).map(r => r.role);
+    return { admin: roles.includes('admin'), manager: roles.includes('manager') };
   };
 
   const checkNeedsSetup = async () => {
@@ -49,12 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
-        if (currentUser) {
-          const admin = await checkAdminRole(currentUser.id);
-          setIsAdmin(admin);
-          setNeedsSetup(false);
-        } else {
-          setIsAdmin(false);
+      if (currentUser) {
+        const { admin, manager } = await checkRoles(currentUser.id);
+        setIsAdmin(admin);
+        setIsManager(manager);
+        setNeedsSetup(false);
+      } else {
+        setIsAdmin(false);
+        setIsManager(false);
           const setup = await checkNeedsSetup();
           setNeedsSetup(setup);
         }
@@ -125,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       isAdmin,
+      isManager,
       username,
       login,
       logout,

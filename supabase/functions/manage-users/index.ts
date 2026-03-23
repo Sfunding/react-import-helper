@@ -12,7 +12,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify caller is admin
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders })
@@ -30,7 +29,6 @@ Deno.serve(async (req) => {
     }
     const callerId = user.id
 
-    // Admin client for privileged operations
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -58,7 +56,6 @@ Deno.serve(async (req) => {
 
       const email = `${username.toLowerCase()}@app.internal`
 
-      // Create auth user
       const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
         email,
         password,
@@ -75,19 +72,24 @@ Deno.serve(async (req) => {
 
       const userId = authData.user.id
 
-      // Create profile
       const { error: profileError } = await adminClient
         .from('profiles')
         .insert({ id: userId, username: username.toLowerCase(), full_name: fullName || username })
 
       if (profileError) throw profileError
 
-      // Assign 'user' role
       const { error: roleError } = await adminClient
         .from('user_roles')
         .insert({ user_id: userId, role: 'user' })
 
       if (roleError) throw roleError
+
+      // Create default permissions
+      const { error: permError } = await adminClient
+        .from('user_permissions')
+        .insert({ user_id: userId })
+
+      if (permError) throw permError
 
       return new Response(JSON.stringify({ success: true, userId }), { headers: corsHeaders })
     }
@@ -106,9 +108,16 @@ Deno.serve(async (req) => {
 
       if (rolesError) throw rolesError
 
+      const { data: permissions, error: permError } = await adminClient
+        .from('user_permissions')
+        .select('*')
+
+      if (permError) throw permError
+
       const users = (profiles || []).map(p => ({
         ...p,
-        roles: (roles || []).filter(r => r.user_id === p.id).map(r => r.role)
+        roles: (roles || []).filter(r => r.user_id === p.id).map(r => r.role),
+        permissions: (permissions || []).find(perm => perm.user_id === p.id) || null
       }))
 
       return new Response(JSON.stringify({ users }), { headers: corsHeaders })
@@ -132,7 +141,6 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: corsHeaders })
       }
 
-      // Prevent self-deletion
       if (userId === callerId) {
         return new Response(JSON.stringify({ error: 'Cannot delete your own account' }), { status: 400, headers: corsHeaders })
       }
@@ -143,20 +151,59 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
     }
 
-    if (action === 'setup-admin') {
-      // One-time: create the first admin account if no users exist
-      const { data: existingProfiles } = await adminClient
-        .from('profiles')
-        .select('id')
-        .limit(1)
-
-      if (existingProfiles && existingProfiles.length > 0) {
-        return new Response(JSON.stringify({ error: 'Admin already set up' }), { status: 400, headers: corsHeaders })
+    if (action === 'update-role') {
+      const { userId, role } = params
+      if (!userId || !role) {
+        return new Response(JSON.stringify({ error: 'userId and role required' }), { status: 400, headers: corsHeaders })
       }
 
-      // For setup-admin, we don't require admin role (no users exist yet)
-      // But we still need a valid auth token - we'll handle this differently
-      // Actually, for initial setup we need a special flow
+      const validRoles = ['admin', 'manager', 'user']
+      if (!validRoles.includes(role)) {
+        return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: corsHeaders })
+      }
+
+      // Prevent changing own role
+      if (userId === callerId) {
+        return new Response(JSON.stringify({ error: 'Cannot change your own role' }), { status: 400, headers: corsHeaders })
+      }
+
+      // Delete existing roles for this user
+      const { error: deleteError } = await adminClient
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+
+      if (deleteError) throw deleteError
+
+      // Insert new role
+      const { error: insertError } = await adminClient
+        .from('user_roles')
+        .insert({ user_id: userId, role })
+
+      if (insertError) throw insertError
+
+      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
+    }
+
+    if (action === 'update-permissions') {
+      const { userId, permissions } = params
+      if (!userId || !permissions) {
+        return new Response(JSON.stringify({ error: 'userId and permissions required' }), { status: 400, headers: corsHeaders })
+      }
+
+      // Upsert permissions
+      const { error } = await adminClient
+        .from('user_permissions')
+        .upsert({
+          user_id: userId,
+          can_export: permissions.can_export ?? true,
+          can_delete_deals: permissions.can_delete_deals ?? true,
+          can_view_others: permissions.can_view_others ?? false,
+        }, { onConflict: 'user_id' })
+
+      if (error) throw error
+
+      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders })
