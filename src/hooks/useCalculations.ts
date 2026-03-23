@@ -3,17 +3,23 @@ import { supabase } from '@/integrations/supabase/client';
 import { SavedCalculation, Settings, Position } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
 
-export function useCalculations() {
+export function useCalculations(filterUserId?: string | null) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: calculations = [], isLoading, error } = useQuery({
-    queryKey: ['saved-calculations'],
+    queryKey: ['saved-calculations', filterUserId ?? 'all'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('saved_calculations')
         .select('*')
         .order('updated_at', { ascending: false });
+      
+      if (filterUserId) {
+        query = query.eq('user_id', filterUserId);
+      }
+
+      const { data, error } = await query;
       
       if (error) throw error;
       

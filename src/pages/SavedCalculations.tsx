@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalculations } from '@/hooks/useCalculations';
+import { useProfiles } from '@/hooks/useProfiles';
+import { useAuth } from '@/contexts/AuthContext';
+import { UserFilter } from '@/components/UserFilter';
 import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,8 +35,17 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
-  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
+  const { getUserName } = useProfiles();
+  const [userFilter, setUserFilter] = useState<string>('all');
+
+  // Determine the actual userId to filter by
+  const filterUserId = userFilter === 'all' ? null : userFilter === 'mine' ? user?.id ?? null : userFilter;
+
+  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations(
+    isAdmin ? filterUserId : user?.id
+  );
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [calcToDuplicate, setCalcToDuplicate] = useState<SavedCalculation | null>(null);
   const [duplicateName, setDuplicateName] = useState('');
@@ -113,15 +125,18 @@ export default function SavedCalculations() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="max-w-6xl mx-auto p-4">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <FolderOpen className="w-6 h-6" />
             Saved Calculations
           </h1>
-          <Button onClick={() => navigate('/')} variant="outline">
-            <Calculator className="w-4 h-4 mr-2" />
-            New Calculation
-          </Button>
+          <div className="flex items-center gap-3">
+            <UserFilter value={userFilter} onChange={setUserFilter} />
+            <Button onClick={() => navigate('/')} variant="outline">
+              <Calculator className="w-4 h-4 mr-2" />
+              New Calculation
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -155,6 +170,11 @@ export default function SavedCalculations() {
                     {calc.merchant_name || 'No merchant name'}
                     {calc.merchant_business_type && ` • ${calc.merchant_business_type}`}
                   </CardDescription>
+                  {isAdmin && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      By: {getUserName(calc.user_id)}
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2 text-sm mb-4">
