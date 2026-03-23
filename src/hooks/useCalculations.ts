@@ -64,9 +64,9 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      // Toast is handled by the caller to allow custom content
+      logAuditEvent({ action: 'create_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name, merchant_name: data.merchant_name } });
     },
     onError: (error: Error) => {
       toast({
