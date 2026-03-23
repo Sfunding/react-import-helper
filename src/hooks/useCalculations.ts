@@ -129,15 +129,12 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+      logAuditEvent({ action: 'update_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name } });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Error updating calculation',
-        description: error.message,
-        variant: 'destructive'
-      });
+      toast({ title: 'Error updating calculation', description: error.message, variant: 'destructive' });
     }
   });
 
