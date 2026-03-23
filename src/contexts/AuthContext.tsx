@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logAuditEvent } from '@/lib/auditLog';
 import type { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
