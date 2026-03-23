@@ -86,11 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     const email = `${username.toLowerCase()}@app.internal`;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       return { success: false, error: 'Invalid username or password' };
     }
-    logAuditEvent({ action: 'login', resourceType: 'session', metadata: { username: username.toLowerCase() } });
+    logAuditEvent({ action: 'login', userId: data.session?.user.id, resourceType: 'session', metadata: { username: username.toLowerCase() } });
     return { success: true };
   };
 
