@@ -170,6 +170,11 @@ export default function SavedCalculations() {
                     {calc.merchant_name || 'No merchant name'}
                     {calc.merchant_business_type && ` • ${calc.merchant_business_type}`}
                   </CardDescription>
+                  {isAdmin && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      By: {getUserName(calc.user_id)}
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2 text-sm mb-4">
