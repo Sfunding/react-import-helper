@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, Trash2, KeyRound, Users } from 'lucide-react';
+import { AuditLogViewer } from '@/components/AuditLogViewer';
 import {
   AlertDialog,
   AlertDialogAction,
