@@ -25,14 +25,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isManager, setIsManager] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  const checkAdminRole = async (userId: string) => {
+  const checkRoles = async (userId: string) => {
     const { data } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle();
-    return !!data;
+      .eq('user_id', userId);
+    const roles = (data || []).map(r => r.role);
+    return { admin: roles.includes('admin'), manager: roles.includes('manager') };
   };
 
   const checkNeedsSetup = async () => {
