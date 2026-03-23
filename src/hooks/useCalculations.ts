@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SavedCalculation, Settings, Position } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
+import { logAuditEvent } from '@/lib/auditLog';
 
 export function useCalculations(filterUserId?: string | null) {
   const { toast } = useToast();
