@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalculations } from '@/hooks/useCalculations';
+import { useProfiles } from '@/hooks/useProfiles';
+import { useAuth } from '@/contexts/AuthContext';
+import { UserFilter } from '@/components/UserFilter';
 import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
