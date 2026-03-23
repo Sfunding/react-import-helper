@@ -50,12 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
-        if (currentUser) {
-          const admin = await checkAdminRole(currentUser.id);
-          setIsAdmin(admin);
-          setNeedsSetup(false);
-        } else {
-          setIsAdmin(false);
+      if (currentUser) {
+        const { admin, manager } = await checkRoles(currentUser.id);
+        setIsAdmin(admin);
+        setIsManager(manager);
+        setNeedsSetup(false);
+      } else {
+        setIsAdmin(false);
+        setIsManager(false);
           const setup = await checkNeedsSetup();
           setNeedsSetup(setup);
         }
