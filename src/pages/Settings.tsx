@@ -6,9 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Trash2, KeyRound, Users } from 'lucide-react';
+import { Loader2, UserPlus, Trash2, KeyRound, Users, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { AuditLogViewer } from '@/components/AuditLogViewer';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,18 +29,27 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
+interface UserPermissions {
+  can_export: boolean;
+  can_delete_deals: boolean;
+  can_view_others: boolean;
+}
+
 interface UserProfile {
   id: string;
   username: string;
   full_name: string | null;
   created_at: string;
   roles: string[];
+  permissions: UserPermissions | null;
 }
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   // Create user form
   const [newUsername, setNewUsername] = useState('');
@@ -135,6 +152,50 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-role', userId, role: newRole }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({ title: 'Role updated' });
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to update role', variant: 'destructive' });
+    }
+  };
+
+  const handlePermissionChange = async (userId: string, currentPerms: UserPermissions | null, key: keyof UserPermissions, value: boolean) => {
+    const updated = {
+      can_export: currentPerms?.can_export ?? true,
+      can_delete_deals: currentPerms?.can_delete_deals ?? true,
+      can_view_others: currentPerms?.can_view_others ?? false,
+      [key]: value,
+    };
+
+    // Optimistic update
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions: updated } : u));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-permissions', userId, permissions: updated }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to update permissions', variant: 'destructive' });
+      fetchUsers(); // Revert
+    }
+  };
+
+  const getUserRole = (u: UserProfile) => {
+    if (u.roles.includes('admin')) return 'admin';
+    if (u.roles.includes('manager')) return 'manager';
+    return 'user';
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -189,82 +250,139 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {users.map(user => (
-                  <div key={user.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                    <div>
-                      <div className="font-medium">{user.full_name || user.username}</div>
-                      <div className="text-sm text-muted-foreground">
-                        @{user.username} · {user.roles.includes('admin') ? 'Admin' : 'User'}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Reset Password */}
-                      <AlertDialog open={resetUserId === user.id} onOpenChange={(open) => { if (!open) { setResetUserId(null); setResetPassword(''); } }}>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => setResetUserId(user.id)}>
-                            <KeyRound className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Reset Password for @{user.username}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Enter a new password for this user.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <div className="py-2">
-                            <Input
-                              type="password"
-                              value={resetPassword}
-                              onChange={e => setResetPassword(e.target.value)}
-                              placeholder="New password (min 6 chars)"
-                            />
-                          </div>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <Button onClick={handleResetPassword} disabled={isResetting || resetPassword.length < 6}>
-                              {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                              Reset Password
-                            </Button>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                {users.map(user => {
+                  const isCurrentUser = user.id === currentUser?.id;
+                  const role = getUserRole(user);
+                  const isExpanded = expandedUserId === user.id;
 
-                      {/* Delete (not for admins) */}
-                      {!user.roles.includes('admin') && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete @{user.username}?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete this user and all their data. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteUser(user.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                {isDeletingId === user.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                  return (
+                    <div key={user.id} className="rounded-lg border bg-card">
+                      <div className="flex items-center justify-between p-3">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <div className="font-medium">{user.full_name || user.username}</div>
+                            <div className="text-sm text-muted-foreground">@{user.username}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Role selector */}
+                          <Select
+                            value={role}
+                            onValueChange={(v) => handleRoleChange(user.id, v)}
+                            disabled={isCurrentUser}
+                          >
+                            <SelectTrigger className="w-28 h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="manager">Manager</SelectItem>
+                              <SelectItem value="user">User</SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          {/* Expand permissions */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setExpandedUserId(isExpanded ? null : user.id)}
+                            title="Permissions"
+                          >
+                            <Shield className="w-4 h-4 mr-1" />
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </Button>
+
+                          {/* Reset Password */}
+                          <AlertDialog open={resetUserId === user.id} onOpenChange={(open) => { if (!open) { setResetUserId(null); setResetPassword(''); } }}>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" onClick={() => setResetUserId(user.id)}>
+                                <KeyRound className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reset Password for @{user.username}</AlertDialogTitle>
+                                <AlertDialogDescription>Enter a new password for this user.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="py-2">
+                                <Input type="password" value={resetPassword} onChange={e => setResetPassword(e.target.value)} placeholder="New password (min 6 chars)" />
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <Button onClick={handleResetPassword} disabled={isResetting || resetPassword.length < 6}>
+                                  {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                  Reset Password
+                                </Button>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+
+                          {/* Delete */}
+                          {!isCurrentUser && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete @{user.username}?</AlertDialogTitle>
+                                  <AlertDialogDescription>This will permanently delete this user and all their data.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    {isDeletingId === user.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expanded permissions panel */}
+                      {isExpanded && (
+                        <div className="border-t px-3 py-3 bg-muted/30 space-y-3">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Permissions</p>
+                          <div className="grid gap-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm">Can Export (Excel/PDF)</Label>
+                              <Switch
+                                checked={user.permissions?.can_export ?? true}
+                                onCheckedChange={(v) => handlePermissionChange(user.id, user.permissions, 'can_export', v)}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm">Can Delete Deals</Label>
+                              <Switch
+                                checked={user.permissions?.can_delete_deals ?? true}
+                                onCheckedChange={(v) => handlePermissionChange(user.id, user.permissions, 'can_delete_deals', v)}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm">Can View Others' Deals</Label>
+                              <Switch
+                                checked={user.permissions?.can_view_others ?? false}
+                                onCheckedChange={(v) => handlePermissionChange(user.id, user.permissions, 'can_view_others', v)}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
         </Card>
+
         {/* Audit Log */}
         <AuditLogViewer />
       </div>
