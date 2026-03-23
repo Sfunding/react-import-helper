@@ -1,4 +1,3 @@
-import { useAuth } from '@/contexts/AuthContext';
 import { useProfiles } from '@/hooks/useProfiles';
 import {
   Select,
@@ -15,10 +14,7 @@ interface UserFilterProps {
 }
 
 export function UserFilter({ value, onChange }: UserFilterProps) {
-  const { isAdmin } = useAuth();
   const { profiles, isLoading } = useProfiles();
-
-  if (!isAdmin) return null;
 
   return (
     <div className="flex items-center gap-2">
