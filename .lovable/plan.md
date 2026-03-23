@@ -1,78 +1,48 @@
 
 
-## Fix: Login Page Stuck on Loading Spinner
+## Admin User-Filter Toggle for Viewing Other Users' Deals
 
-### Root Cause
+### What You Want
+As an admin, you want a dropdown/toggle on both the **Saved Calculations** page and the **main Calculator page** that lets you filter deals by user -- see all deals, only your deals, or a specific user's deals.
 
-The `AuthContext` useEffect has a deadlock between `onAuthStateChange` and `getSession()`:
+### How It Works
 
-1. `onAuthStateChange` is registered with an **async callback** that awaits database queries
-2. `getSession()` internally waits for the `INITIAL_SESSION` event from `onAuthStateChange` to finish processing
-3. But `onAuthStateChange`'s async callback awaits `checkNeedsSetup()` (a network call) before completing
-4. This creates a circular dependency where both paths block each other, so `setIsLoading(false)` is never called
+Since RLS already returns all deals to admin users, we just need frontend filtering.
 
-This explains why there are **zero network requests** -- the auth system deadlocks before any REST calls can be made.
+### Changes
 
-### The Fix
+**1. New component: `src/components/UserFilter.tsx`**
+- A dropdown select showing: "All Users", "My Deals", and each individual user
+- Fetches the list of users from the `profiles` table
+- Only renders if the current user is an admin
+- Emits a `selectedUserId` (or `null` for "all")
 
-**File: `src/contexts/AuthContext.tsx`**
+**2. Update `src/hooks/useCalculations.ts`**
+- Accept an optional `filterUserId` parameter
+- When set, add `.eq('user_id', filterUserId)` to the query
+- When "My Deals" is selected, filter by `auth.uid()`
+- When "All Users" is selected, no filter (admin RLS returns everything)
+- Update query key to include the filter so React Query refetches on change
 
-Rewrite the `useEffect` to:
-1. **Not use async callbacks** in `onAuthStateChange` -- fire-and-forget the async work instead
-2. Add **try/catch** around all async operations so `setIsLoading(false)` is always called
-3. Use a single `initializeAuth` function called from `getSession()` only (not duplicated in `onAuthStateChange`)
-4. Let `onAuthStateChange` handle only subsequent session changes (not initial load)
+**3. Update `src/pages/SavedCalculations.tsx`**
+- Add `UserFilter` component next to the page header
+- Pass the selected user ID to `useCalculations`
+- Show the creator's name on each deal card (join with profiles data)
 
-```typescript
-useEffect(() => {
-  let initialized = false;
+**4. Update `src/pages/Index.tsx` (main calculator)**
+- Add `UserFilter` in the navbar area or top of page
+- When a user is selected, show that user's most recent loaded deal context
+- This primarily affects which deals appear when loading from saved
 
-  const initialize = async (session: any) => {
-    try {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        const admin = await checkAdminRole(currentUser.id);
-        setIsAdmin(admin);
-        setNeedsSetup(false);
-      } else {
-        setIsAdmin(false);
-        const setup = await checkNeedsSetup();
-        setNeedsSetup(setup);
-      }
-    } catch (err) {
-      console.error('Auth init error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    (_event, session) => {
-      if (initialized) {
-        // Only handle subsequent changes, not initial
-        initialize(session);
-      }
-    }
-  );
-
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    initialized = true;
-    initialize(session);
-  });
-
-  return () => subscription.unsubscribe();
-}, []);
-```
-
-Key changes:
-- `onAuthStateChange` callback is **no longer async** -- avoids the deadlock
-- Only `getSession()` drives the initial load
-- Subsequent auth changes (login/logout) are handled by `onAuthStateChange` after initialization
-- `try/catch/finally` guarantees `setIsLoading(false)` always runs
+**5. Fetch profiles for display**
+- Create a small `useProfiles` hook that queries `profiles` table
+- Used by UserFilter for the dropdown and by SavedCalculations to show deal owner names
+- Map `user_id` on each calculation to a username for display
 
 ### Technical Details
 
-The deadlock happens because supabase-js v2.39+ changed `getSession()` to wait for `INITIAL_SESSION`. When the `onAuthStateChange` callback is async, the library tracks the promise. If that promise awaits I/O, `getSession()` hangs waiting for it, and both code paths stall indefinitely. Making the callback synchronous (fire-and-forget) breaks the cycle.
+- No database changes needed -- RLS already gives admin access to all deals
+- The `profiles` table is already readable by authenticated users
+- The filter is purely client-side query parameter passed to the Supabase `.eq()` filter
+- Regular (non-admin) users won't see the filter at all
 
