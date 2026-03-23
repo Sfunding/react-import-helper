@@ -265,6 +265,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+        {/* Audit Log */}
+        <AuditLogViewer />
       </div>
     </div>
   );
