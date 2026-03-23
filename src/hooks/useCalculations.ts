@@ -166,12 +166,10 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      toast({
-        title: 'Calculation duplicated',
-        description: 'A copy has been created.'
-      });
+      logAuditEvent({ action: 'duplicate_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name } });
+      toast({ title: 'Calculation duplicated', description: 'A copy has been created.' });
     },
     onError: (error: Error) => {
       toast({
