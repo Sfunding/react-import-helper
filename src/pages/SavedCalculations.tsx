@@ -125,15 +125,18 @@ export default function SavedCalculations() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="max-w-6xl mx-auto p-4">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <FolderOpen className="w-6 h-6" />
             Saved Calculations
           </h1>
-          <Button onClick={() => navigate('/')} variant="outline">
-            <Calculator className="w-4 h-4 mr-2" />
-            New Calculation
-          </Button>
+          <div className="flex items-center gap-3">
+            <UserFilter value={userFilter} onChange={setUserFilter} />
+            <Button onClick={() => navigate('/')} variant="outline">
+              <Calculator className="w-4 h-4 mr-2" />
+              New Calculation
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
