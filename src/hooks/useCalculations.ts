@@ -86,12 +86,10 @@ export function useCalculations(filterUserId?: string | null) {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      toast({
-        title: 'Calculation deleted',
-        description: 'Your calculation has been deleted.'
-      });
+      logAuditEvent({ action: 'delete_deal', resourceType: 'saved_calculation', resourceId: id });
+      toast({ title: 'Calculation deleted', description: 'Your calculation has been deleted.' });
     },
     onError: (error: Error) => {
       toast({
