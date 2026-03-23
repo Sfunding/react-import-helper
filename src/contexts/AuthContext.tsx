@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       isAdmin,
+      isManager,
       username,
       login,
       logout,
