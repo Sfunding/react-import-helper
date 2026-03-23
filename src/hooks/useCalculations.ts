@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { SavedCalculation, Settings, Position } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
+import { logAuditEvent } from '@/lib/auditLog';
 
 export function useCalculations(filterUserId?: string | null) {
   const { toast } = useToast();
@@ -63,9 +64,9 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      // Toast is handled by the caller to allow custom content
+      logAuditEvent({ action: 'create_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name, merchant_name: data.merchant_name } });
     },
     onError: (error: Error) => {
       toast({
@@ -85,12 +86,10 @@ export function useCalculations(filterUserId?: string | null) {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      toast({
-        title: 'Calculation deleted',
-        description: 'Your calculation has been deleted.'
-      });
+      logAuditEvent({ action: 'delete_deal', resourceType: 'saved_calculation', resourceId: id });
+      toast({ title: 'Calculation deleted', description: 'Your calculation has been deleted.' });
     },
     onError: (error: Error) => {
       toast({
@@ -130,15 +129,12 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+      logAuditEvent({ action: 'update_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name } });
     },
     onError: (error: Error) => {
-      toast({
-        title: 'Error updating calculation',
-        description: error.message,
-        variant: 'destructive'
-      });
+      toast({ title: 'Error updating calculation', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -170,12 +166,10 @@ export function useCalculations(filterUserId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
-      toast({
-        title: 'Calculation duplicated',
-        description: 'A copy has been created.'
-      });
+      logAuditEvent({ action: 'duplicate_deal', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name } });
+      toast({ title: 'Calculation duplicated', description: 'A copy has been created.' });
     },
     onError: (error: Error) => {
       toast({

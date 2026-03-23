@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logAuditEvent } from '@/lib/auditLog';
 import type { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       return { success: false, error: 'Invalid username or password' };
     }
+    logAuditEvent({ action: 'login', resourceType: 'session', metadata: { username: username.toLowerCase() } });
     return { success: true };
   };
 
