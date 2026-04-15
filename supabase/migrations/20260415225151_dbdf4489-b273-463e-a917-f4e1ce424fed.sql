@@ -1,0 +1,1 @@
+ALTER TABLE public.saved_calculations ADD COLUMN funded_at timestamptz DEFAULT NULL;
