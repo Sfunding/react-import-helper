@@ -1456,21 +1456,12 @@ export default function Index() {
                           <td className="p-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              {(p.frequency || 'daily') === 'weekly' ? (
-                                <CurrencyInput 
-                                  value={p.dailyPayment ? p.dailyPayment / 5 : null} 
-                                  onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) * 5)} 
-                                  placeholder="0.00" 
-                                  className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-muted/50 ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                />
-                              ) : (
-                                <CurrencyInput 
-                                  value={p.dailyPayment || null} 
-                                  onChange={val => updatePosition(p.id, 'dailyPayment', val || 0)} 
-                                  placeholder="0.00" 
-                                  className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                />
-                              )}
+                              <CurrencyInput 
+                                value={p.dailyPayment || null} 
+                                onChange={val => updatePosition(p.id, 'dailyPayment', val || 0)} 
+                                placeholder="0.00" 
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right ${(p.frequency || 'daily') === 'weekly' ? 'bg-muted/50' : 'bg-background'} ${isExcluded ? 'text-muted-foreground' : ''}`}
+                              />
                             </div>
                           </td>
                           <td className="p-2">
@@ -1478,10 +1469,10 @@ export default function Index() {
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                               {(p.frequency || 'daily') === 'weekly' ? (
                                 <CurrencyInput 
-                                  value={p.dailyPayment || null} 
-                                  onChange={val => updatePosition(p.id, 'dailyPayment', val || 0)} 
+                                  value={p.dailyPayment ? p.dailyPayment * 5 : null} 
+                                  onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) / 5)} 
                                   placeholder="0.00" 
-                                  className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
+                                  className={`w-full p-2 pl-5 border-2 border-secondary rounded-md text-right bg-accent font-medium ${isExcluded ? 'text-muted-foreground' : ''}`}
                                 />
                               ) : (
                                 <CurrencyInput 
