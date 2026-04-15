@@ -1517,6 +1517,8 @@ export default function Index() {
                         {unknownBalanceCount > 0 && <span className="ml-1 font-normal text-xs">({unknownBalanceCount} unknown)</span>}
                       </td>
                       <td className="p-3 text-center">-</td>
+                      <td className="p-3 text-center">-</td>
+                      <td className="p-3 text-center">-</td>
                       <td className="p-3 text-right">{fmt(positions.reduce((sum, p) => sum + (p.amountFunded || 0), 0))}</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
