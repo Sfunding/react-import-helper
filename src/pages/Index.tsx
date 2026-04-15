@@ -22,7 +22,7 @@ import {
   EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
