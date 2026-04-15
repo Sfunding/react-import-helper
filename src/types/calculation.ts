@@ -26,6 +26,8 @@ export type Position = {
   includeInReverse: boolean;
   fundedDate: string | null;  // ISO date string when the position was funded
   amountFunded: number | null;  // Original funded amount for auto-balance calculation
+  frequency?: 'daily' | 'weekly';  // defaults to 'daily'
+  weeklyPullDay?: string | null;  // e.g. 'Monday', only relevant when frequency is 'weekly'
 };
 
 export type SavedCalculation = {
