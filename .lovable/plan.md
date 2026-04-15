@@ -1,31 +1,58 @@
 
 
-## Improve Current Positions Table
+## "Funded" Status and Live Position Balance Tracking
 
-### What Changes
+### The Problem
 
-1. **Entity name column** -- Make it wider and show full text. Currently the input is constrained; we'll increase the min-width and allow the text to wrap or use a tooltip on hover for very long names.
+When you save a deal and fund it (e.g. in February), then come back months later, the position balances are frozen at their saved values. The "Last Payment" and "Days Left" columns are calculated from **today** using those stale balances, so they're wrong -- you can't see which positions are about to fall off.
 
-2. **New "Frequency" field on Position** -- Add a `frequency` field (`'daily'` | `'weekly'`) and a `weeklyPullDay` field (`'Monday'` | `'Tuesday'` | ... | `'Friday'` | `null`) to the `Position` type. When frequency is "weekly", show a day-of-week selector. When weekly, the "Daily" column shows the per-day equivalent and the "Weekly" column shows the actual weekly pull amount.
+### Solution
+
+**1. Add a `funded_at` date field to `saved_calculations`**
+
+A new nullable `funded_at` column on the `saved_calculations` table. When null, the deal is "unfunded." When set, it records the date the reverse consolidation was actually funded.
+
+**2. "Mark as Funded" button on Saved Calculations page**
+
+- A new button on each deal card (e.g. a checkmark icon labeled "Funded")
+- Clicking it sets `funded_at` to today (or lets you pick a past date like February)
+- Once funded, the card shows a green "Funded" badge with the date
+- Can be un-funded by admin if needed
+
+**3. When loading a funded deal, auto-adjust position balances**
+
+When a funded deal is loaded into the calculator (via the "Load" button):
+- For each position, calculate how many business days have elapsed since `funded_at`
+- Subtract `dailyPayment × businessDaysElapsed` from the saved balance
+- This gives a **live estimated balance** so "Days Left" and "Last Payment" dates are accurate
+- The original saved balance is preserved in the database; the adjustment is applied on load
+
+This reuses the existing `getBusinessDaysBetween` function from `dateUtils.ts`.
+
+### Database Migration
+
+```sql
+ALTER TABLE public.saved_calculations
+ADD COLUMN funded_at timestamptz DEFAULT NULL;
+```
+
+No RLS changes needed -- same policies apply.
 
 ### File Changes
 
-**`src/types/calculation.ts`**
-- Add `frequency?: 'daily' | 'weekly'` (defaults to `'daily'`)
-- Add `weeklyPullDay?: string | null` (e.g. `'Monday'`, only relevant when frequency is `'weekly'`)
+| File | Change |
+|------|--------|
+| `saved_calculations` table | Add `funded_at` column |
+| `src/types/calculation.ts` | Add `funded_at?: string \| null` to `SavedCalculation` |
+| `src/hooks/useCalculations.ts` | Add `markAsFunded` mutation (updates `funded_at`) |
+| `src/pages/SavedCalculations.tsx` | Add "Funded" button, date picker for funding date, "Funded" badge on cards |
+| `src/pages/Index.tsx` | On load, if `funded_at` is set, adjust each position's balance by subtracting payments since that date |
 
-**`src/pages/Index.tsx`**
-- Widen the Entity column (remove fixed width constraint, set `min-w-[200px]`)
-- Add a new "Freq" column after Entity with a small toggle or select (`D` / `W`)
-- When "W" is selected, show a day-of-week dropdown (Mon-Fri) in the same cell or an adjacent mini-cell
-- Update `addPosition` to include default `frequency: 'daily'` and `weeklyPullDay: null`
-- Update `updatePosition` calls for the new fields
-- Adjust the daily/weekly payment display logic: if frequency is weekly, the entered value in "Weekly" is the actual pull, and "Daily" shows `weeklyPayment / 5`
-- Update footer totals to account for frequency
+### UX Flow
 
-**Calculations throughout `Index.tsx`**
-- Where `dailyPayment` is used for schedule generation, respect the frequency: weekly positions only debit on their specified day, not every day
-
-### No database migration needed
-The `positions` field is stored as JSONB in `saved_calculations`, so adding new fields to the Position type is backward-compatible. Existing positions without `frequency` default to `'daily'`.
+1. User creates and saves a deal as usual
+2. When the deal is actually funded, user clicks **"Mark Funded"** on the saved deal card
+3. A small dialog asks for the funding date (defaults to today, can backdate)
+4. The card now shows a green **"Funded · Feb 15, 2026"** badge
+5. When loading the deal later, positions show adjusted balances reflecting payments already made, so Days Left and Last Payment dates are accurate
 
