@@ -440,7 +440,7 @@ export default function Index() {
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true, fundedDate: null, amountFunded: null }]);
+    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true, fundedDate: null, amountFunded: null, frequency: 'daily', weeklyPullDay: null }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
@@ -1244,7 +1244,9 @@ export default function Index() {
                     <tr className="bg-muted">
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Ours</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
-                      <th className="p-3 text-left border-b-2 border-border font-semibold">Entity</th>
+                      <th className="p-3 text-left border-b-2 border-border font-semibold min-w-[200px]">Entity</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-20">Freq</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-28">Pull Day</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold">Funded Date</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Amount Funded</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
@@ -1300,13 +1302,49 @@ export default function Index() {
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
-                          <td className="p-2">
+                          <td className="p-2 min-w-[200px]">
                             <input 
                               value={p.entity} 
                               onChange={e => updatePosition(p.id, 'entity', e.target.value)} 
                               placeholder="Funder name" 
                               className={`w-full p-2 border border-input rounded-md bg-background ${isExcluded ? 'line-through text-muted-foreground' : ''}`}
                             />
+                          </td>
+                          {/* Frequency toggle */}
+                          <td className="p-2 text-center">
+                            <select
+                              value={p.frequency || 'daily'}
+                              onChange={e => {
+                                const freq = e.target.value as 'daily' | 'weekly';
+                                setPositions(positions.map(pos => pos.id === p.id ? { 
+                                  ...pos, 
+                                  frequency: freq, 
+                                  weeklyPullDay: freq === 'daily' ? null : (pos.weeklyPullDay || 'Monday')
+                                } : pos));
+                              }}
+                              className="p-1.5 border border-input rounded-md bg-background text-xs font-medium w-16"
+                            >
+                              <option value="daily">D</option>
+                              <option value="weekly">W</option>
+                            </select>
+                          </td>
+                          {/* Pull Day (only for weekly) */}
+                          <td className="p-2 text-center">
+                            {(p.frequency || 'daily') === 'weekly' ? (
+                              <select
+                                value={p.weeklyPullDay || 'Monday'}
+                                onChange={e => updatePosition(p.id, 'weeklyPullDay', e.target.value)}
+                                className="p-1.5 border border-input rounded-md bg-background text-xs w-24"
+                              >
+                                <option value="Monday">Mon</option>
+                                <option value="Tuesday">Tue</option>
+                                <option value="Wednesday">Wed</option>
+                                <option value="Thursday">Thu</option>
+                                <option value="Friday">Fri</option>
+                              </select>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
                           </td>
                           {/* Funded Date picker */}
                           <td className="p-2">
