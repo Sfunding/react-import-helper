@@ -43,7 +43,7 @@ export type SavedCalculation = {
   total_daily_payment: number | null;
   created_at: string;
   updated_at: string;
-  funded_at: string | null;
+  funded_at?: string | null;
 };
 
 export type CalculationState = {
