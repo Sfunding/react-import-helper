@@ -116,7 +116,31 @@ export default function Index() {
         const data = JSON.parse(stored);
         if (data.merchant) setMerchant(data.merchant);
         if (data.settings) setSettings(data.settings);
-        if (data.positions) setPositions(data.positions);
+        
+        // If deal is funded, auto-adjust position balances
+        let loadedPositions = data.positions || [];
+        if (data.funded_at && loadedPositions.length > 0) {
+          const fundedDate = new Date(data.funded_at);
+          const today = new Date();
+          const businessDaysElapsed = getBusinessDaysBetween(fundedDate, today);
+          
+          if (businessDaysElapsed > 0) {
+            loadedPositions = loadedPositions.map((p: Position) => {
+              if (p.balance !== null && p.balance > 0 && p.dailyPayment > 0) {
+                const totalPaid = businessDaysElapsed * p.dailyPayment;
+                const adjustedBalance = Math.max(0, p.balance - totalPaid);
+                return { ...p, balance: Math.round(adjustedBalance * 100) / 100 };
+              }
+              return p;
+            });
+            toast({
+              title: 'Balances adjusted',
+              description: `Position balances updated for ${businessDaysElapsed} business days since funding on ${format(fundedDate, 'MMM d, yyyy')}.`,
+            });
+          }
+        }
+        
+        if (loadedPositions) setPositions(loadedPositions);
         
         // Track the loaded calculation ID and name for updates
         if (data.id) {
@@ -129,7 +153,7 @@ export default function Index() {
         setLastSavedState(JSON.stringify({ 
           merchant: data.merchant || DEFAULT_MERCHANT, 
           settings: data.settings || DEFAULT_SETTINGS, 
-          positions: data.positions || [] 
+          positions: loadedPositions || [] 
         }));
         toast({
           title: 'Calculation loaded',
