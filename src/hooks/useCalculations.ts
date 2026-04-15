@@ -180,6 +180,27 @@ export function useCalculations(filterUserId?: string | null) {
     }
   });
 
+  const markAsFundedMutation = useMutation({
+    mutationFn: async (params: { id: string; funded_at: string | null }) => {
+      const { data, error } = await supabase
+        .from('saved_calculations')
+        .update({ funded_at: params.funded_at } as any)
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+      logAuditEvent({ action: 'mark_funded', resourceType: 'saved_calculation', resourceId: data.id, metadata: { funded_at: (data as any).funded_at } });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error updating funded status', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     calculations,
     isLoading,
@@ -191,6 +212,8 @@ export function useCalculations(filterUserId?: string | null) {
     duplicateCalculation: duplicateMutation.mutateAsync,
     isDuplicating: duplicateMutation.isPending,
     deleteCalculation: deleteMutation.mutateAsync,
-    isDeleting: deleteMutation.isPending
+    isDeleting: deleteMutation.isPending,
+    markAsFunded: markAsFundedMutation.mutateAsync,
+    isMarkingFunded: markAsFundedMutation.isPending
   };
 }
