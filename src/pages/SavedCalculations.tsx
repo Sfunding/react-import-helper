@@ -10,6 +10,8 @@ import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -24,17 +26,19 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText, Copy, Share2 } from 'lucide-react';
+import { FolderOpen, Trash2, ExternalLink, Loader2, Calculator, FileSpreadsheet, FileText, Copy, Share2, CheckCircle, CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { exportToExcel, exportToPDF } from '@/lib/exportUtils';
 import { SavedCalculation } from '@/types/calculation';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function SavedCalculations() {
   const navigate = useNavigate();
@@ -49,7 +53,7 @@ export default function SavedCalculations() {
   // Determine the actual userId to filter by
   const filterUserId = userFilter === 'all' ? null : userFilter === 'mine' ? user?.id ?? null : userFilter;
 
-  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating } = useCalculations(
+  const { calculations, isLoading, deleteCalculation, isDeleting, duplicateCalculation, isDuplicating, markAsFunded, isMarkingFunded } = useCalculations(
     showUserFilter ? filterUserId : user?.id
   );
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
@@ -59,6 +63,11 @@ export default function SavedCalculations() {
   // Share dialog
   const [shareCalcId, setShareCalcId] = useState<string | null>(null);
   const [shareCalcName, setShareCalcName] = useState('');
+
+  // Funded dialog
+  const [fundedDialogOpen, setFundedDialogOpen] = useState(false);
+  const [calcToFund, setCalcToFund] = useState<SavedCalculation | null>(null);
+  const [fundedDate, setFundedDate] = useState<Date | undefined>(new Date());
 
   const fmt = (v: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(v || 0);
@@ -91,7 +100,8 @@ export default function SavedCalculations() {
         monthlyRevenue: calc.merchant_monthly_revenue || 0
       },
       settings: calc.settings,
-      positions: calc.positions
+      positions: calc.positions,
+      funded_at: (calc as any).funded_at || null
     }));
     navigate('/');
   };
@@ -112,6 +122,25 @@ export default function SavedCalculations() {
     setDuplicateDialogOpen(false);
     setCalcToDuplicate(null);
     setDuplicateName('');
+  };
+
+  const openFundedDialog = (calc: SavedCalculation) => {
+    setCalcToFund(calc);
+    setFundedDate(calc.funded_at ? new Date(calc.funded_at) : new Date());
+    setFundedDialogOpen(true);
+  };
+
+  const handleMarkFunded = async () => {
+    if (!calcToFund || !fundedDate) return;
+    await markAsFunded({ id: calcToFund.id, funded_at: fundedDate.toISOString() });
+    toast({ title: 'Deal marked as funded', description: `Funded date set to ${format(fundedDate, 'MMM d, yyyy')}.` });
+    setFundedDialogOpen(false);
+    setCalcToFund(null);
+  };
+
+  const handleUnfund = async (calc: SavedCalculation) => {
+    await markAsFunded({ id: calc.id, funded_at: null });
+    toast({ title: 'Funded status removed' });
   };
 
   const canShare = isAdmin || hasPermission('can_view_others');
@@ -154,15 +183,24 @@ export default function SavedCalculations() {
             {calculations.map((calc) => {
               const isOwner = calc.user_id === user?.id;
               const isSharedWithMe = !isOwner && !isAdmin;
+              const isFunded = !!(calc as any).funded_at;
+              const fundedAtDate = isFunded ? new Date((calc as any).funded_at) : null;
 
               return (
-                <Card key={calc.id} className="hover:border-primary/50 transition-colors">
+                <Card key={calc.id} className={cn("hover:border-primary/50 transition-colors", isFunded && "border-green-500/30")}>
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <CardTitle className="text-lg truncate">{calc.name}</CardTitle>
-                      {isSharedWithMe && (
-                        <Badge variant="secondary" className="text-xs shrink-0 ml-2">Shared</Badge>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        {isFunded && fundedAtDate && (
+                          <Badge className="bg-green-600 hover:bg-green-700 text-xs">
+                            Funded · {format(fundedAtDate, 'MMM d, yyyy')}
+                          </Badge>
+                        )}
+                        {isSharedWithMe && (
+                          <Badge variant="secondary" className="text-xs">Shared</Badge>
+                        )}
+                      </div>
                     </div>
                     <CardDescription>
                       {calc.merchant_name || 'No merchant name'}
@@ -192,6 +230,15 @@ export default function SavedCalculations() {
                       <Button onClick={() => handleLoad(calc)} className="flex-1" size="sm">
                         <ExternalLink className="w-4 h-4 mr-1" />
                         Load
+                      </Button>
+                      <Button
+                        onClick={() => openFundedDialog(calc as SavedCalculation)}
+                        variant={isFunded ? "secondary" : "outline"}
+                        size="sm"
+                        title={isFunded ? "Update funded date" : "Mark as funded"}
+                        disabled={isMarkingFunded}
+                      >
+                        <CheckCircle className={cn("w-4 h-4", isFunded && "text-green-500")} />
                       </Button>
                       <Button onClick={() => openDuplicateDialog(calc)} variant="outline" size="sm" title="Duplicate" disabled={isDuplicating}>
                         <Copy className="w-4 h-4" />
@@ -277,6 +324,66 @@ export default function SavedCalculations() {
               <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>Cancel</Button>
               <Button onClick={handleDuplicate} disabled={!duplicateName.trim() || isDuplicating}>
                 {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Funded Dialog */}
+        <Dialog open={fundedDialogOpen} onOpenChange={setFundedDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                Mark as Funded
+              </DialogTitle>
+              <DialogDescription>
+                Set the date this deal was funded. Position balances will be auto-adjusted when loaded.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label className="text-sm font-medium mb-2 block">Funding Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !fundedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {fundedDate ? format(fundedDate, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fundedDate}
+                    onSelect={setFundedDate}
+                    disabled={(date) => date > new Date()}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              {calcToFund?.funded_at && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (calcToFund) handleUnfund(calcToFund);
+                    setFundedDialogOpen(false);
+                  }}
+                  className="sm:mr-auto"
+                >
+                  Remove Funded Status
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setFundedDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleMarkFunded} disabled={!fundedDate || isMarkingFunded}>
+                {isMarkingFunded ? 'Saving...' : 'Mark Funded'}
               </Button>
             </DialogFooter>
           </DialogContent>
