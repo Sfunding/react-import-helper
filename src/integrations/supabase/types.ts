@@ -145,6 +145,7 @@ export type Database = {
       saved_calculations: {
         Row: {
           created_at: string
+          funded_at: string | null
           id: string
           merchant_business_type: string | null
           merchant_monthly_revenue: number | null
@@ -159,6 +160,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          funded_at?: string | null
           id?: string
           merchant_business_type?: string | null
           merchant_monthly_revenue?: number | null
@@ -173,6 +175,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          funded_at?: string | null
           id?: string
           merchant_business_type?: string | null
           merchant_monthly_revenue?: number | null
