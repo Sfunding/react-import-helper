@@ -174,10 +174,7 @@ export default function Index() {
     return p.balance;
   };
 
-  // Helper to get expected balance from funded date/amount for discrepancy comparison
-  const getExpectedBalance = (p: Position): number | null => {
-    return calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-  };
+
 
   // All external positions with known balances (for leverage calculations - merchant's full debt picture)
   const allExternalPositions = positions.filter(p => {
