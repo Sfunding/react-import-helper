@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon, TrendingUp, AlertCircle } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, TrendingUp, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -12,6 +12,12 @@ import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Merchant, 
   Settings, 
@@ -22,12 +28,10 @@ import {
   EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { cn } from '@/lib/utils';
 import {
