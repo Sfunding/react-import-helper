@@ -411,6 +411,24 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
           );
         })}
 
+        {/* PAYOFF CONFIRMATION (always shows) */}
+        <View style={{
+          marginTop: 12,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          backgroundColor: COLORS.ACCENT,
+          borderRadius: 4,
+        }}>
+          <Text style={{
+            fontSize: 10,
+            fontFamily: 'Helvetica-Bold',
+            color: COLORS.NAVY,
+            textAlign: 'center',
+          }}>
+            Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) - {d.weeklyData.length} total weeks
+          </Text>
+        </View>
+
         {/* AFTER WEEK 18 PAYOFF SUMMARY */}
         {d.weeklyData.length > 18 && (() => {
           const remainingWeeks = d.weeklyData.slice(18);

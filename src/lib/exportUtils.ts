@@ -1745,6 +1745,7 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     earlyPayOptions: earlyPayOptionsData,
   };
 
+  console.log('[MerchantProposalPDF] weeklyData.length:', weeklyData.length, 'maxPayoffDay:', maxDay, 'maxPayoffDate:', pdfData.maxPayoffDate);
   const doc = createElement(MerchantProposalPDF, { data: pdfData }) as any;
   const blob = await pdf(doc).toBlob();
   const filename = `${sanitizeFilename(calculation.merchant_name || calculation.name)}_Merchant_Proposal_${new Date().toISOString().split('T')[0]}.pdf`;
