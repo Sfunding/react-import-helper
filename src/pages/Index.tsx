@@ -264,21 +264,7 @@ export default function Index() {
   );
   const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
 
-  // Auto-populate balance when funding data is entered (only if balance is null or 0)
-  useEffect(() => {
-    const updated = positions.map(p => {
-      const expected = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-      // Only auto-fill if balance is null or 0 and we have a calculated value > 0
-      if ((p.balance === null || p.balance === 0) && expected !== null && expected > 0) {
-        return { ...p, balance: expected };
-      }
-      return p;
-    });
-    // Only update if something changed
-    if (JSON.stringify(updated) !== JSON.stringify(positions)) {
-      setPositions(updated);
-    }
-  }, [positions.map(p => `${p.fundedDate}-${p.amountFunded}-${p.dailyPayment}`).join(',')]);
+
 
   const dailySchedule = useMemo(() => {
     if (includedBalance === 0) return [];
