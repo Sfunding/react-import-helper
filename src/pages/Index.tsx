@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, CalendarIcon, TrendingUp, AlertCircle } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, TrendingUp, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
@@ -12,6 +12,12 @@ import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Merchant, 
   Settings, 
@@ -22,12 +28,10 @@ import {
   EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, calculateRemainingBalance, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 import { cn } from '@/lib/utils';
 import {
@@ -170,10 +174,7 @@ export default function Index() {
     return p.balance;
   };
 
-  // Helper to get expected balance from funded date/amount for discrepancy comparison
-  const getExpectedBalance = (p: Position): number | null => {
-    return calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-  };
+
 
   // All external positions with known balances (for leverage calculations - merchant's full debt picture)
   const allExternalPositions = positions.filter(p => {
@@ -263,21 +264,7 @@ export default function Index() {
   );
   const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
 
-  // Auto-populate balance when funding data is entered (only if balance is null or 0)
-  useEffect(() => {
-    const updated = positions.map(p => {
-      const expected = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
-      // Only auto-fill if balance is null or 0 and we have a calculated value > 0
-      if ((p.balance === null || p.balance === 0) && expected !== null && expected > 0) {
-        return { ...p, balance: expected };
-      }
-      return p;
-    });
-    // Only update if something changed
-    if (JSON.stringify(updated) !== JSON.stringify(positions)) {
-      setPositions(updated);
-    }
-  }, [positions.map(p => `${p.fundedDate}-${p.amountFunded}-${p.dailyPayment}`).join(',')]);
+
 
   const dailySchedule = useMemo(() => {
     if (includedBalance === 0) return [];
@@ -1266,31 +1253,19 @@ export default function Index() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-muted">
-                      <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Ours</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold w-16">Include</th>
-                      <th className="p-3 text-left border-b-2 border-border font-semibold min-w-[200px]">Entity</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold w-20">Freq</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold w-28">Pull Day</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold">Funded Date</th>
-                      <th className="p-3 text-right border-b-2 border-border font-semibold">Amount Funded</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-14">O / I</th>
+                      <th className="p-3 text-left border-b-2 border-border font-semibold min-w-[260px]">Entity</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-32">Schedule</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold">Last Payment</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold">Actions</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left / Last Pay</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold w-12"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {positions.map(p => {
-                      // Get expected balance from funding data for discrepancy comparison
-                      const expectedBalance = getExpectedBalance(p);
                       const effectiveBalance = p.balance;
-                      
-                      // Check if there's a discrepancy between manual balance and calculated
-                      const hasDiscrepancy = expectedBalance !== null && p.balance !== null && 
-                        Math.abs(expectedBalance - p.balance) > 0.01;
-                      
                       const daysLeft = p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 
                         ? Math.ceil(effectiveBalance / p.dailyPayment) 
                         : 0;
@@ -1298,6 +1273,7 @@ export default function Index() {
                       const isOurs = p.isOurPosition;
                       const isUnknown = effectiveBalance === null;
                       const isExcluded = !isIncluded && !isOurs;
+                      const isWeekly = (p.frequency || 'daily') === 'weekly';
                       
                       return (
                         <tr 
@@ -1306,235 +1282,160 @@ export default function Index() {
                             ${isOurs ? 'bg-primary/10 border-l-4 border-l-primary' : ''} 
                             ${isExcluded ? 'opacity-50' : ''}`}
                         >
-                          {/* Ours checkbox */}
-                          <td className="p-2 text-center">
-                            <Checkbox
-                              checked={isOurs}
-                              onCheckedChange={(checked) => updatePosition(p.id, 'isOurPosition', !!checked)}
-                              className="mx-auto"
-                            />
+                          {/* Stacked O / I checkboxes */}
+                          <td className="py-3 px-2">
+                            <div className="flex flex-col gap-1.5 items-center">
+                              <label className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground cursor-pointer">
+                                <Checkbox
+                                  checked={isOurs}
+                                  onCheckedChange={(checked) => updatePosition(p.id, 'isOurPosition', !!checked)}
+                                />
+                                O
+                              </label>
+                              <label className={`flex items-center gap-1 text-[10px] font-semibold cursor-pointer ${isOurs ? 'opacity-30' : 'text-muted-foreground'}`}>
+                                <Checkbox
+                                  checked={isIncluded}
+                                  onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
+                                  disabled={isOurs}
+                                />
+                                I
+                              </label>
+                            </div>
                           </td>
-                          {/* Include checkbox - only for non-ours positions */}
-                          <td className="p-2 text-center">
-                            {!isOurs ? (
-                              <Checkbox
-                                checked={isIncluded}
-                                onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
-                                className="mx-auto"
-                              />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </td>
-                          <td className="p-2 min-w-[200px]">
+                          {/* Entity - wider */}
+                          <td className="py-3 px-2 min-w-[260px]">
                             <input 
                               value={p.entity} 
                               onChange={e => updatePosition(p.id, 'entity', e.target.value)} 
                               placeholder="Funder name" 
+                              title={p.entity}
                               className={`w-full p-2 border border-input rounded-md bg-background ${isExcluded ? 'line-through text-muted-foreground' : ''}`}
                             />
                           </td>
-                          {/* Frequency toggle */}
-                          <td className="p-2 text-center">
-                            <select
-                              value={p.frequency || 'daily'}
-                              onChange={e => {
-                                const freq = e.target.value as 'daily' | 'weekly';
-                                setPositions(positions.map(pos => pos.id === p.id ? { 
-                                  ...pos, 
-                                  frequency: freq, 
-                                  weeklyPullDay: freq === 'daily' ? null : (pos.weeklyPullDay || 'Monday')
-                                } : pos));
-                              }}
-                              className="p-1.5 border border-input rounded-md bg-background text-xs font-medium w-16"
-                            >
-                              <option value="daily">D</option>
-                              <option value="weekly">W</option>
-                            </select>
-                          </td>
-                          {/* Pull Day (only for weekly) */}
-                          <td className="p-2 text-center">
-                            {(p.frequency || 'daily') === 'weekly' ? (
+                          {/* Schedule - combined Freq + Pull Day */}
+                          <td className="py-3 px-2 text-center">
+                            <div className="flex items-center gap-1 justify-center">
                               <select
-                                value={p.weeklyPullDay || 'Monday'}
-                                onChange={e => updatePosition(p.id, 'weeklyPullDay', e.target.value)}
-                                className="p-1.5 border border-input rounded-md bg-background text-xs w-24"
+                                value={p.frequency || 'daily'}
+                                onChange={e => {
+                                  const freq = e.target.value as 'daily' | 'weekly';
+                                  setPositions(positions.map(pos => pos.id === p.id ? { 
+                                    ...pos, 
+                                    frequency: freq, 
+                                    weeklyPullDay: freq === 'daily' ? null : (pos.weeklyPullDay || 'Monday')
+                                  } : pos));
+                                }}
+                                className="p-1.5 border border-input rounded-md bg-background text-xs font-medium"
                               >
-                                <option value="Monday">Mon</option>
-                                <option value="Tuesday">Tue</option>
-                                <option value="Wednesday">Wed</option>
-                                <option value="Thursday">Thu</option>
-                                <option value="Friday">Fri</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
                               </select>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            )}
-                          </td>
-                          {/* Funded Date picker */}
-                          <td className="p-2">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full justify-start text-left font-normal h-10",
-                                    !p.fundedDate && "text-muted-foreground"
-                                  )}
+                              {isWeekly && (
+                                <select
+                                  value={p.weeklyPullDay || 'Monday'}
+                                  onChange={e => updatePosition(p.id, 'weeklyPullDay', e.target.value)}
+                                  className="p-1.5 border border-input rounded-md bg-background text-xs"
                                 >
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {p.fundedDate ? format(new Date(p.fundedDate), "MMM d, yyyy") : <span>Pick date</span>}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={p.fundedDate ? new Date(p.fundedDate) : undefined}
-                                  onSelect={(date) => updatePosition(p.id, 'fundedDate', date ? date.toISOString().split('T')[0] : null)}
-                                  initialFocus
-                                  className={cn("p-3 pointer-events-auto")}
-                                />
-                              </PopoverContent>
-                            </Popover>
-                          </td>
-                          {/* Amount Funded input */}
-                          <td className="p-2">
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <CurrencyInput 
-                                value={p.amountFunded} 
-                                onChange={val => updatePosition(p.id, 'amountFunded', val)} 
-                                allowNull
-                                placeholder="0.00" 
-                                className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
-                              />
-                            </div>
-                          </td>
-                          {/* Balance cell - always editable with discrepancy indicator */}
-                          <td className="p-2">
-                            <div className="space-y-1">
-                              {isUnknown ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
-                                    Unknown
-                                  </span>
-                                  <button 
-                                    onClick={() => updatePosition(p.id, 'balance', 0)}
-                                    className="text-xs text-muted-foreground hover:text-foreground underline"
-                                  >
-                                    Set
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="relative flex items-center gap-1">
-                                    <div className="relative flex-1">
-                                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                                      <CurrencyInput 
-                                        value={p.balance} 
-                                        onChange={val => updatePosition(p.id, 'balance', val)} 
-                                        allowNull
-                                        placeholder="0.00" 
-                                        className={`w-full p-2 pl-5 border rounded-md text-right bg-background 
-                                          ${hasDiscrepancy ? 'border-warning' : 'border-input'}
-                                          ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                      />
-                                    </div>
-                                    <button 
-                                      onClick={() => updatePosition(p.id, 'balance', null)}
-                                      className="text-xs text-muted-foreground hover:text-warning font-bold"
-                                      title="Mark as unknown"
-                                    >
-                                      ?
-                                    </button>
-                                    {/* Sync to calculated button (only shown when discrepancy exists) */}
-                                    {hasDiscrepancy && expectedBalance !== null && (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button 
-                                              onClick={() => updatePosition(p.id, 'balance', expectedBalance)}
-                                              className="text-xs text-warning hover:text-warning/80"
-                                              title="Sync to calculated balance"
-                                            >
-                                              🔄
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Reset to calculated: {fmt(expectedBalance)}</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    )}
-                                  </div>
-                                  {/* Discrepancy indicator */}
-                                  {hasDiscrepancy && expectedBalance !== null && (
-                                    <div className="flex items-center gap-1 text-xs text-warning">
-                                      <span>⚠️</span>
-                                      <span>Expected: {fmt(expectedBalance)}</span>
-                                    </div>
-                                  )}
-                                </>
+                                  <option value="Monday">Mon</option>
+                                  <option value="Tuesday">Tue</option>
+                                  <option value="Wednesday">Wed</option>
+                                  <option value="Thursday">Thu</option>
+                                  <option value="Friday">Fri</option>
+                                </select>
                               )}
                             </div>
                           </td>
-                          <td className="p-2">
+                          {/* Balance */}
+                          <td className="py-3 px-2">
+                            {isUnknown ? (
+                              <div className="flex items-center gap-2 justify-end">
+                                <span className="px-2 py-1 bg-warning/20 text-warning-foreground rounded text-xs font-semibold border border-warning/30">
+                                  Unknown
+                                </span>
+                                <button 
+                                  onClick={() => updatePosition(p.id, 'balance', 0)}
+                                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                                >
+                                  Set
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                                <CurrencyInput 
+                                  value={p.balance} 
+                                  onChange={val => updatePosition(p.id, 'balance', val)} 
+                                  allowNull
+                                  placeholder="0.00" 
+                                  className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
+                                />
+                              </div>
+                            )}
+                          </td>
+                          {/* Daily */}
+                          <td className="py-3 px-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                               <CurrencyInput 
                                 value={p.dailyPayment || null} 
                                 onChange={val => updatePosition(p.id, 'dailyPayment', val || 0)} 
                                 placeholder="0.00" 
-                                className={`w-full p-2 pl-5 border border-input rounded-md text-right ${(p.frequency || 'daily') === 'weekly' ? 'bg-muted/50' : 'bg-background'} ${isExcluded ? 'text-muted-foreground' : ''}`}
+                                className={`w-full p-2 pl-5 border border-input rounded-md text-right ${isWeekly ? 'bg-muted/50' : 'bg-background'} ${isExcluded ? 'text-muted-foreground' : ''}`}
                               />
                             </div>
                           </td>
-                          <td className="p-2">
+                          {/* Weekly */}
+                          <td className="py-3 px-2">
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              {(p.frequency || 'daily') === 'weekly' ? (
-                                <CurrencyInput 
-                                  value={p.dailyPayment ? p.dailyPayment * 5 : null} 
-                                  onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) / 5)} 
-                                  placeholder="0.00" 
-                                  className={`w-full p-2 pl-5 border-2 border-secondary rounded-md text-right bg-accent font-medium ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                />
-                              ) : (
-                                <CurrencyInput 
-                                  value={p.dailyPayment ? p.dailyPayment * 5 : null} 
-                                  onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) / 5)} 
-                                  placeholder="0.00" 
-                                  className={`w-full p-2 pl-5 border border-input rounded-md text-right bg-background ${isExcluded ? 'text-muted-foreground' : ''}`}
-                                />
-                              )}
+                              <CurrencyInput 
+                                value={p.dailyPayment ? p.dailyPayment * 5 : null} 
+                                onChange={val => updatePosition(p.id, 'dailyPayment', (val || 0) / 5)} 
+                                placeholder="0.00" 
+                                className={`w-full p-2 pl-5 rounded-md text-right ${isWeekly ? 'border-2 border-secondary bg-accent font-medium' : 'border border-input bg-background'} ${isExcluded ? 'text-muted-foreground' : ''}`}
+                              />
                             </div>
                           </td>
-                          <td className="p-2 text-center">
+                          {/* Days Left / Last Pay - stacked */}
+                          <td className="py-3 px-2 text-center">
                             {isUnknown ? (
                               <span className="text-xs text-muted-foreground">?</span>
                             ) : (
-                              <span className={`px-3 py-1 rounded-full font-semibold text-sm ${
-                                daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
-                              }`}>
-                                {daysLeft}
-                              </span>
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`px-3 py-0.5 rounded-full font-semibold text-sm ${
+                                  daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
+                                }`}>
+                                  {daysLeft} days
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {getFormattedLastPaymentDate(daysLeft)}
+                                </span>
+                              </div>
                             )}
                           </td>
-                          <td className="p-2 text-center">
-                            {isUnknown ? (
-                              <span className="text-xs text-muted-foreground">-</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {getFormattedLastPaymentDate(daysLeft)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-2 text-center">
-                            <button 
-                              onClick={() => deletePosition(p.id)} 
-                              className="px-4 py-2 bg-destructive/10 text-destructive rounded-md font-semibold cursor-pointer border-none hover:bg-destructive/20 transition-colors"
-                            >
-                              Delete
-                            </button>
+                          {/* Actions - dropdown */}
+                          <td className="py-3 px-2 text-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => updatePosition(p.id, 'balance', null)}
+                                  disabled={isUnknown}
+                                >
+                                  Mark balance unknown
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => deletePosition(p.id)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Delete position
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </td>
                         </tr>
                       );
@@ -1543,20 +1444,15 @@ export default function Index() {
                   <tfoot>
                     <tr className="bg-primary text-primary-foreground font-bold">
                       <td className="p-3 rounded-bl-md"></td>
-                      <td className="p-3"></td>
                       <td className="p-3">
                         {`REVERSING ${includedPositions.length} of ${allExternalPositions.length}`}
                         {ourPositionsCount > 0 && <span className="ml-1 font-normal text-xs">({ourPositionsCount} ours)</span>}
                         {unknownBalanceCount > 0 && <span className="ml-1 font-normal text-xs">({unknownBalanceCount} unknown)</span>}
                       </td>
                       <td className="p-3 text-center">-</td>
-                      <td className="p-3 text-center">-</td>
-                      <td className="p-3 text-center">-</td>
-                      <td className="p-3 text-right">{fmt(positions.reduce((sum, p) => sum + (p.amountFunded || 0), 0))}</td>
                       <td className="p-3 text-right">{fmt(totalBalance)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentDailyPayment)}</td>
                       <td className="p-3 text-right">{fmt(totalCurrentWeeklyPayment)}</td>
-                      <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center">-</td>
                       <td className="p-3 text-center rounded-br-md">-</td>
                     </tr>
