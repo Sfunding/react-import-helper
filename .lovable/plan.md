@@ -1,58 +1,53 @@
 
 
-## "Funded" Status and Live Position Balance Tracking
+## Redesign Current Positions Table
 
-### The Problem
+### What's Wrong Today
 
-When you save a deal and fund it (e.g. in February), then come back months later, the position balances are frozen at their saved values. The "Last Payment" and "Days Left" columns are calculated from **today** using those stale balances, so they're wrong -- you can't see which positions are about to fall off.
+Too many columns crammed into one row: Ours, Include, Entity, Freq, Pull Day, Funded Date, Amount Funded, Balance, Daily, Weekly, Days Left, Last Payment, Actions = **13 columns**. Even at wide viewports it's noisy, and "Funded Date" / "Amount Funded" eat the most space while being used rarely.
 
-### Solution
+### The Plan
 
-**1. Add a `funded_at` date field to `saved_calculations`**
+**1. Remove rarely-used columns from the main row**
+- Remove **Funded Date** column
+- Remove **Amount Funded** column
+- Remove the "discrepancy" warning UI tied to those fields (Expected balance, sync 🔄 button) -- it only exists to compare manual balance vs. calculated-from-funded-date
 
-A new nullable `funded_at` column on the `saved_calculations` table. When null, the deal is "unfunded." When set, it records the date the reverse consolidation was actually funded.
+These fields stay on the `Position` type for backward compatibility with already-saved deals, but the UI no longer surfaces them. The auto-populate effect that fills balance from `fundedDate + amountFunded` is removed too, since the inputs are gone.
 
-**2. "Mark as Funded" button on Saved Calculations page**
+**2. Tighter main row -- 9 columns instead of 13**
 
-- A new button on each deal card (e.g. a checkmark icon labeled "Funded")
-- Clicking it sets `funded_at` to today (or lets you pick a past date like February)
-- Once funded, the card shows a green "Funded" badge with the date
-- Can be un-funded by admin if needed
+| Ours | Include | Entity | Schedule | Balance | Daily | Weekly | Days Left / Last Pay | Actions |
 
-**3. When loading a funded deal, auto-adjust position balances**
+- **Schedule** combines Freq + Pull Day into one cell. Default shows "Daily". When toggled to weekly, it becomes a compact pill: `Weekly · Mon ▾` with the day editable inline.
+- **Days Left / Last Pay** stacks the two values vertically in one column (they're related and short).
+- **Entity** column gets `min-w-[260px]` so long names like "Mask C Consolidation" never clip.
 
-When a funded deal is loaded into the calculator (via the "Load" button):
-- For each position, calculate how many business days have elapsed since `funded_at`
-- Subtract `dailyPayment × businessDaysElapsed` from the saved balance
-- This gives a **live estimated balance** so "Days Left" and "Last Payment" dates are accurate
-- The original saved balance is preserved in the database; the adjustment is applied on load
+**3. Row layout improvements**
+- Increase row vertical padding (`py-3`) so inputs breathe
+- "Ours" + "Include" become a single narrower column with two stacked checkboxes labeled `O` / `I` (saves ~80px)
+- Remove the inline `?` "mark unknown" and `🔄` sync buttons -- move "mark unknown" into the row's Actions menu (3-dot dropdown) alongside Delete
 
-This reuses the existing `getBusinessDaysBetween` function from `dateUtils.ts`.
-
-### Database Migration
-
-```sql
-ALTER TABLE public.saved_calculations
-ADD COLUMN funded_at timestamptz DEFAULT NULL;
-```
-
-No RLS changes needed -- same policies apply.
+**4. Actions cell -> dropdown menu**
+Replace the bare delete button with a small `⋯` dropdown containing: **Mark balance unknown**, **Delete position**. Cleaner and leaves room for future actions.
 
 ### File Changes
 
-| File | Change |
-|------|--------|
-| `saved_calculations` table | Add `funded_at` column |
-| `src/types/calculation.ts` | Add `funded_at?: string \| null` to `SavedCalculation` |
-| `src/hooks/useCalculations.ts` | Add `markAsFunded` mutation (updates `funded_at`) |
-| `src/pages/SavedCalculations.tsx` | Add "Funded" button, date picker for funding date, "Funded" badge on cards |
-| `src/pages/Index.tsx` | On load, if `funded_at` is set, adjust each position's balance by subtracting payments since that date |
+**`src/pages/Index.tsx`**
+- Remove `<th>` for Funded Date and Amount Funded
+- Remove the corresponding `<td>` cells in the row map
+- Remove the discrepancy detection block (`expectedBalance`, `hasDiscrepancy`, sync button, warning row)
+- Remove the `useEffect` that auto-fills balance from `fundedDate + amountFunded` (lines ~266-280)
+- Combine Freq + Pull Day cells into one "Schedule" cell with conditional inline day picker
+- Combine Ours + Include into one stacked-checkbox cell
+- Combine Days Left + Last Payment into one stacked cell
+- Replace delete `<button>` with a `DropdownMenu` (Mark unknown / Delete)
+- Remove unused imports: `CalendarIcon`, `Calendar`, `Popover`, `PopoverContent`, `PopoverTrigger`, `calculateRemainingBalance`, `TooltipProvider/Tooltip` if no longer used elsewhere in this section
 
-### UX Flow
+**`src/types/calculation.ts`**
+- No changes. `fundedDate` and `amountFunded` stay as optional fields so existing saved deals don't break (the DB JSONB still has them; we just don't render inputs).
 
-1. User creates and saves a deal as usual
-2. When the deal is actually funded, user clicks **"Mark Funded"** on the saved deal card
-3. A small dialog asks for the funding date (defaults to today, can backdate)
-4. The card now shows a green **"Funded · Feb 15, 2026"** badge
-5. When loading the deal later, positions show adjusted balances reflecting payments already made, so Days Left and Last Payment dates are accurate
+### Result
+
+A clean, scannable 9-column table where the most-used fields (Entity, Balance, Daily, Days Left) get the room they deserve, and the rare fields are gone from view.
 
