@@ -198,27 +198,35 @@ const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
         </View>
 
         {/* DEAL TERMS */}
-        <Text style={[s.sectionHeader, { marginTop: 14 }]}>DEAL TERMS</Text>
-        <View style={{
-          backgroundColor: COLORS.LIGHT_GRAY, borderRadius: 6, flexDirection: 'row',
-          paddingVertical: 10, paddingHorizontal: 8,
-        }}>
-          {[
-            { label: 'AMOUNT FUNDED', value: fmtCurrency(d.amountFunded) },
-            { label: 'TOTAL PAYBACK', value: fmtCurrency(d.totalPayback) },
-            { label: 'FACTOR RATE', value: fmtFactor(d.factorRate) },
-            { label: 'ORIGINATION', value: fmtPct1(d.originationFeePct) },
-            { label: '# PAYMENTS', value: d.numPayments.toString() },
-          ].map((item, i) => (
-            <View key={i} style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 7, color: COLORS.DARK_GRAY, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</Text>
-              <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
+        {(() => {
+          const opts = d.options ?? DEFAULT_OPTS;
+          const cells: Array<{ label: string; value: string }> = [];
+          if (opts.showAmountFunded) cells.push({ label: 'AMOUNT FUNDED', value: fmtCurrency(d.amountFunded) });
+          if (opts.showTotalPayback) cells.push({ label: 'TOTAL PAYBACK', value: fmtCurrency(d.totalPayback) });
+          if (opts.showFactorRate) cells.push({ label: 'FACTOR RATE', value: fmtFactor(d.factorRate) });
+          if (opts.showOriginationFee) cells.push({ label: 'ORIGINATION', value: fmtPct1(d.originationFeePct) });
+          if (opts.showNumPayments) cells.push({ label: '# PAYMENTS', value: d.numPayments.toString() });
+          if (cells.length === 0) return null;
+          return (
+            <>
+              <Text style={[s.sectionHeader, { marginTop: 14 }]}>DEAL TERMS</Text>
+              <View style={{
+                backgroundColor: COLORS.LIGHT_GRAY, borderRadius: 6, flexDirection: 'row',
+                paddingVertical: 10, paddingHorizontal: 8,
+              }}>
+                {cells.map((item, i) => (
+                  <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 7, color: COLORS.DARK_GRAY, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          );
+        })()}
 
         {/* Cash to Merchant banner (conditional) */}
-        {d.cashToMerchant > 0 && (
+        {(d.options?.showCashToMerchant ?? true) && d.cashToMerchant > 0 && (
           <View style={{
             backgroundColor: COLORS.LIGHT_GREEN_BG, borderRadius: 6,
             paddingVertical: 8, alignItems: 'center', marginTop: 10,
