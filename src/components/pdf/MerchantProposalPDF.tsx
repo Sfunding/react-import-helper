@@ -412,7 +412,9 @@ const Page2Positions = ({ d }: { d: PDFProps }) => {
 const Page3Weekly = ({ d }: { d: PDFProps }) => {
   const opts = d.options ?? DEFAULT_OPTS;
   const showWeekly = opts.showWeeklySchedule;
-  const showMilestones = opts.showKeyMilestones;
+  const showSavings = opts.showSavingsColumns;
+  // Force milestones on when savings columns are hidden — Peak Savings bubble carries the savings story
+  const showMilestones = opts.showKeyMilestones || !showSavings;
   const allWeeks = d.weeklyData;
 
   return (
@@ -424,7 +426,9 @@ const Page3Weekly = ({ d }: { d: PDFProps }) => {
 
       <View style={s.content}>
         <Text style={{ fontSize: 9, color: COLORS.TEXT_MED, marginTop: 10, marginBottom: 8 }}>
-          See how your savings accumulate week by week, all the way through final payoff:
+          {showSavings
+            ? 'See how your savings accumulate week by week, all the way through final payoff:'
+            : "Here's your full week-by-week cash flow through final payoff:"}
         </Text>
 
         {/* Full Weekly Table — flows across pages automatically */}
@@ -432,10 +436,14 @@ const Page3Weekly = ({ d }: { d: PDFProps }) => {
           <>
             <View style={s.tableHeader} fixed>
               <Text style={[s.tableHeaderCell, { flex: 1 }]}>Week</Text>
-              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Old Weekly Cost</Text>
-              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>New Weekly Cost</Text>
-              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
-              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
+              <Text style={[s.tableHeaderCell, { flex: showSavings ? 1.5 : 2, textAlign: 'right' }]}>Old Weekly Cost</Text>
+              <Text style={[s.tableHeaderCell, { flex: showSavings ? 1.5 : 2, textAlign: 'right' }]}>New Weekly Cost</Text>
+              {showSavings && (
+                <>
+                  <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
+                  <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
+                </>
+              )}
             </View>
             {allWeeks.map((w, i) => {
               const isNeg = w.weeklySavings < 0;
@@ -443,23 +451,27 @@ const Page3Weekly = ({ d }: { d: PDFProps }) => {
                 <View key={i} wrap={false} style={[
                   s.tableRow,
                   i % 2 === 1 ? s.tableRowAlt : {},
-                  isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
+                  showSavings && isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
                 ]}>
                   <Text style={[s.tableCell, { flex: 1 }]}>Week {w.week}</Text>
-                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
-                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
-                  <Text style={[s.tableCellBold, {
-                    flex: 1.5, textAlign: 'right',
-                    color: isNeg ? COLORS.RED : COLORS.GREEN,
-                  }]}>
-                    {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
-                  </Text>
-                  <Text style={[s.tableCellBold, {
-                    flex: 1.5, textAlign: 'right',
-                    color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
-                  }]}>
-                    {fmtCurrency(w.cumulativeSavings)}
-                  </Text>
+                  <Text style={[s.tableCell, { flex: showSavings ? 1.5 : 2, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
+                  <Text style={[s.tableCell, { flex: showSavings ? 1.5 : 2, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
+                  {showSavings && (
+                    <>
+                      <Text style={[s.tableCellBold, {
+                        flex: 1.5, textAlign: 'right',
+                        color: isNeg ? COLORS.RED : COLORS.GREEN,
+                      }]}>
+                        {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
+                      </Text>
+                      <Text style={[s.tableCellBold, {
+                        flex: 1.5, textAlign: 'right',
+                        color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
+                      }]}>
+                        {fmtCurrency(w.cumulativeSavings)}
+                      </Text>
+                    </>
+                  )}
                 </View>
               );
             })}
