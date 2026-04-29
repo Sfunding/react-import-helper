@@ -25,6 +25,7 @@ export type MerchantPDFOptions = {
   showEarlyPayoffOptions: boolean;
   // Page 3
   showWeeklySchedule: boolean;
+  showSavingsColumns: boolean;
   showKeyMilestones: boolean;
   // Page 4
   showBottomLinePage: boolean;
@@ -40,6 +41,7 @@ export const DEFAULT_MERCHANT_PDF_OPTIONS: MerchantPDFOptions = {
   showPayoffTimelineVisual: true,
   showEarlyPayoffOptions: true,
   showWeeklySchedule: true,
+  showSavingsColumns: false,    // hidden by default — avoids showing negative savings late in schedule
   showKeyMilestones: true,
   showBottomLinePage: true,
 };
@@ -92,6 +94,7 @@ const SECTIONS: Array<{ title: string; rows: Row[] }> = [
     title: 'Page 3 — Cash Flow',
     rows: [
       { key: 'showWeeklySchedule', label: 'Full weekly schedule (through final payoff)' },
+      { key: 'showSavingsColumns', label: 'Weekly Savings & Cumulative Savings columns', hint: 'When off, only Week / Old / New columns shown — Peak Savings bubble still appears' },
       { key: 'showKeyMilestones', label: 'Key Milestones (1mo / 3mo / Peak)' },
     ],
   },
