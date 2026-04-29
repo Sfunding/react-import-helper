@@ -411,31 +411,31 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
           );
         })}
 
-        {/* PAYOFF CONFIRMATION (always shows) */}
-        <View style={{
-          marginTop: 12,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          backgroundColor: COLORS.ACCENT,
-          borderRadius: 4,
-        }}>
-          <Text style={{
-            fontSize: 10,
-            fontFamily: 'Helvetica-Bold',
-            color: COLORS.NAVY,
-            textAlign: 'center',
+        {/* PAYOFF CONFIRMATION (only for deals <= 18 weeks; longer deals get the full After Week 18 band below) */}
+        {d.weeklyData.length <= 18 && (
+          <View style={{
+            marginTop: 12,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            backgroundColor: COLORS.ACCENT,
+            borderRadius: 4,
           }}>
-            Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) - {d.weeklyData.length} total weeks
-          </Text>
-        </View>
+            <Text style={{
+              fontSize: 10,
+              fontFamily: 'Helvetica-Bold',
+              color: COLORS.NAVY,
+              textAlign: 'center',
+            }}>
+              Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) - {d.weeklyData.length} total weeks
+            </Text>
+          </View>
+        )}
 
         {/* AFTER WEEK 18 PAYOFF SUMMARY */}
         {d.weeklyData.length > 18 && (() => {
           const remainingWeeks = d.weeklyData.slice(18);
           const weeksRemaining = remainingWeeks.length;
           const remainingPayments = remainingWeeks.reduce((acc, w) => acc + w.newWeeklyCost, 0);
-          const remainingSavings = remainingWeeks.reduce((acc, w) => acc + w.weeklySavings, 0);
-          const savingsPositive = remainingSavings >= 0;
           return (
             <View style={{ marginTop: 14 }}>
               <View style={{
@@ -458,7 +458,7 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
+                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
                       {weeksRemaining} wks
                     </Text>
                     <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
@@ -466,7 +466,7 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
                     </Text>
                   </View>
                   <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
+                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
                       {d.maxPayoffDate}
                     </Text>
                     <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
@@ -474,23 +474,11 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
                     </Text>
                   </View>
                   <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
+                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
                       {fmtCurrency(remainingPayments)}
                     </Text>
                     <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
                       Remaining Payments
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{
-                      fontSize: 14,
-                      fontFamily: 'Helvetica-Bold',
-                      color: savingsPositive ? COLORS.GREEN : COLORS.RED,
-                    }}>
-                      {savingsPositive ? '+' : ''}{fmtCurrency(remainingSavings)}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Add'l Savings
                     </Text>
                   </View>
                 </View>
@@ -501,7 +489,7 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
                   textAlign: 'center',
                   fontStyle: 'italic',
                 }}>
-                  Your reverse consolidation is fully paid off on {d.maxPayoffDate} - {weeksRemaining} weeks after this projection ends.
+                  Your reverse consolidation is fully paid off on {d.maxPayoffDate} - just {weeksRemaining} weeks after this projection ends.
                 </Text>
               </View>
             </View>
