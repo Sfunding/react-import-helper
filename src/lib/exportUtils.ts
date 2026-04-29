@@ -1601,7 +1601,10 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
 }
 
 // ========== COMBINED MERCHANT PROPOSAL PDF (4 pages, @react-pdf/renderer) ==========
-export async function exportMerchantProposal(calculation: SavedCalculation) {
+export async function exportMerchantProposal(
+  calculation: SavedCalculation,
+  options?: import('@/components/pdf/ExportOptionsDialog').MerchantPDFOptions,
+) {
   const { pdf } = await import('@react-pdf/renderer');
   const { default: MerchantProposalPDF } = await import('@/components/pdf/MerchantProposalPDF');
   const { createElement } = await import('react');
@@ -1743,9 +1746,10 @@ export async function exportMerchantProposal(calculation: SavedCalculation) {
     daysRemainingAfterFalloff,
     numPositions: includedPositions.length,
     earlyPayOptions: earlyPayOptionsData,
+    options,
   };
 
-  console.log('[MerchantProposalPDF] weeklyData.length:', weeklyData.length, 'maxPayoffDay:', maxDay, 'maxPayoffDate:', pdfData.maxPayoffDate);
+  console.log('[MerchantProposalPDF] weeklyData.length:', weeklyData.length, 'maxPayoffDay:', maxDay, 'maxPayoffDate:', pdfData.maxPayoffDate, 'options:', options);
   const doc = createElement(MerchantProposalPDF, { data: pdfData }) as any;
   const blob = await pdf(doc).toBlob();
   const filename = `${sanitizeFilename(calculation.merchant_name || calculation.name)}_Merchant_Proposal_${new Date().toISOString().split('T')[0]}.pdf`;
