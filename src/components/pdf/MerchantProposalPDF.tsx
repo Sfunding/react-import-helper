@@ -67,20 +67,54 @@ export type PDFProps = {
       savings: number;
     }>;
   };
+  // Render-time options (chosen in the export dialog)
+  options?: MerchantPDFOptions;
+};
+
+export type MerchantPDFOptions = {
+  showAmountFunded: boolean;
+  showTotalPayback: boolean;
+  showFactorRate: boolean;
+  showOriginationFee: boolean;
+  showNumPayments: boolean;
+  showCashToMerchant: boolean;
+  showPayoffTimelineVisual: boolean;
+  showEarlyPayoffOptions: boolean;
+  showWeeklySchedule: boolean;
+  showKeyMilestones: boolean;
+  showBottomLinePage: boolean;
+};
+
+const DEFAULT_OPTS: MerchantPDFOptions = {
+  showAmountFunded: true,
+  showTotalPayback: true,
+  showFactorRate: false,
+  showOriginationFee: false,
+  showNumPayments: true,
+  showCashToMerchant: true,
+  showPayoffTimelineVisual: true,
+  showEarlyPayoffOptions: true,
+  showWeeklySchedule: true,
+  showKeyMilestones: true,
+  showBottomLinePage: true,
 };
 
 // ===== Footer Component =====
-const Footer = ({ companyName, merchantName, date, pageNum, totalPages }: {
-  companyName: string; merchantName: string; date: string; pageNum: number; totalPages: number;
+const Footer = ({ companyName, merchantName, date }: {
+  companyName: string; merchantName: string; date: string;
 }) => (
   <View style={s.footer} fixed>
     <Text style={s.footerText}>{companyName} | {merchantName} | Prepared {date}</Text>
-    <Text style={s.footerText}>Page {pageNum} of {totalPages}</Text>
+    <Text
+      style={s.footerText}
+      render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+      fixed
+    />
   </View>
 );
 
 // ===== PAGE 1: COVER / SUMMARY =====
-const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page1Cover = ({ d }: { d: PDFProps }) => {
   const oldWeekly = d.oldDailyPayment * 5;
   const newWeekly = d.newDailyPayment * 5;
   const monthlySavings = d.dailySavings * 5 * (52 / 12);
@@ -168,27 +202,35 @@ const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
         </View>
 
         {/* DEAL TERMS */}
-        <Text style={[s.sectionHeader, { marginTop: 14 }]}>DEAL TERMS</Text>
-        <View style={{
-          backgroundColor: COLORS.LIGHT_GRAY, borderRadius: 6, flexDirection: 'row',
-          paddingVertical: 10, paddingHorizontal: 8,
-        }}>
-          {[
-            { label: 'AMOUNT FUNDED', value: fmtCurrency(d.amountFunded) },
-            { label: 'TOTAL PAYBACK', value: fmtCurrency(d.totalPayback) },
-            { label: 'FACTOR RATE', value: fmtFactor(d.factorRate) },
-            { label: 'ORIGINATION', value: fmtPct1(d.originationFeePct) },
-            { label: '# PAYMENTS', value: d.numPayments.toString() },
-          ].map((item, i) => (
-            <View key={i} style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 7, color: COLORS.DARK_GRAY, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</Text>
-              <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
+        {(() => {
+          const opts = d.options ?? DEFAULT_OPTS;
+          const cells: Array<{ label: string; value: string }> = [];
+          if (opts.showAmountFunded) cells.push({ label: 'AMOUNT FUNDED', value: fmtCurrency(d.amountFunded) });
+          if (opts.showTotalPayback) cells.push({ label: 'TOTAL PAYBACK', value: fmtCurrency(d.totalPayback) });
+          if (opts.showFactorRate) cells.push({ label: 'FACTOR RATE', value: fmtFactor(d.factorRate) });
+          if (opts.showOriginationFee) cells.push({ label: 'ORIGINATION', value: fmtPct1(d.originationFeePct) });
+          if (opts.showNumPayments) cells.push({ label: '# PAYMENTS', value: d.numPayments.toString() });
+          if (cells.length === 0) return null;
+          return (
+            <>
+              <Text style={[s.sectionHeader, { marginTop: 14 }]}>DEAL TERMS</Text>
+              <View style={{
+                backgroundColor: COLORS.LIGHT_GRAY, borderRadius: 6, flexDirection: 'row',
+                paddingVertical: 10, paddingHorizontal: 8,
+              }}>
+                {cells.map((item, i) => (
+                  <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 7, color: COLORS.DARK_GRAY, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          );
+        })()}
 
         {/* Cash to Merchant banner (conditional) */}
-        {d.cashToMerchant > 0 && (
+        {(d.options?.showCashToMerchant ?? true) && d.cashToMerchant > 0 && (
           <View style={{
             backgroundColor: COLORS.LIGHT_GREEN_BG, borderRadius: 6,
             paddingVertical: 8, alignItems: 'center', marginTop: 10,
@@ -200,13 +242,13 @@ const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
         )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={1} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
 
 // ===== PAGE 2: POSITIONS & PAYOFF SCHEDULE =====
-const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page2Positions = ({ d }: { d: PDFProps }) => {
   const sorted = [...d.positions].sort((a, b) => a.daysToPayoff - b.daysToPayoff);
   const totalBalance = d.positions.reduce((s, p) => s + p.balance, 0);
   const totalDaily = d.positions.reduce((s, p) => s + p.dailyPayment, 0);
@@ -296,41 +338,45 @@ const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) 
         </View>
 
         {/* Visual Payoff Timeline Bar */}
-        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK, marginTop: 14, marginBottom: 6 }}>VISUAL PAYOFF TIMELINE</Text>
-        <View style={{ position: 'relative', height: 80, marginBottom: 10 }}>
-          {/* Bar */}
-          <View style={{
-            height: 16, backgroundColor: COLORS.ACCENT, borderRadius: 8,
-            width: CONTENT_WIDTH, position: 'absolute', top: 0,
-          }} />
-          {/* Markers */}
-          {markers.map((m, i) => (
-            <React.Fragment key={i}>
-              {/* Dot */}
+        {(d.options?.showPayoffTimelineVisual ?? true) && (
+          <>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK, marginTop: 14, marginBottom: 6 }}>VISUAL PAYOFF TIMELINE</Text>
+            <View style={{ position: 'relative', height: 80, marginBottom: 10 }}>
+              {/* Bar */}
               <View style={{
-                position: 'absolute', top: 3, left: m.x - 5,
-                width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.WHITE,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.NAVY }} />
-              </View>
-              {/* Connector line */}
-              <View style={{
-                position: 'absolute', top: 16, left: m.x,
-                width: 0.5, height: labelOffsets[levels[i]] - 2,
-                backgroundColor: COLORS.MED_GRAY,
+                height: 16, backgroundColor: COLORS.ACCENT, borderRadius: 8,
+                width: CONTENT_WIDTH, position: 'absolute', top: 0,
               }} />
-              {/* Label */}
-              <View style={{ position: 'absolute', top: 16 + labelOffsets[levels[i]], left: m.x - 25, width: 50, alignItems: 'center' }}>
-                <Text style={{ fontSize: 6.5, color: COLORS.TEXT_MED }}>{m.entity.substring(0, 12)}</Text>
-                <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>Day {m.day}</Text>
-              </View>
-            </React.Fragment>
-          ))}
-        </View>
+              {/* Markers */}
+              {markers.map((m, i) => (
+                <React.Fragment key={i}>
+                  {/* Dot */}
+                  <View style={{
+                    position: 'absolute', top: 3, left: m.x - 5,
+                    width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.WHITE,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.NAVY }} />
+                  </View>
+                  {/* Connector line */}
+                  <View style={{
+                    position: 'absolute', top: 16, left: m.x,
+                    width: 0.5, height: labelOffsets[levels[i]] - 2,
+                    backgroundColor: COLORS.MED_GRAY,
+                  }} />
+                  {/* Label */}
+                  <View style={{ position: 'absolute', top: 16 + labelOffsets[levels[i]], left: m.x - 25, width: 50, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 6.5, color: COLORS.TEXT_MED }}>{m.entity.substring(0, 12)}</Text>
+                    <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>Day {m.day}</Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Early Payoff Options */}
-        {d.earlyPayOptions?.enabled && d.earlyPayOptions.tiers.length > 0 && (
+        {(d.options?.showEarlyPayoffOptions ?? true) && d.earlyPayOptions?.enabled && d.earlyPayOptions.tiers.length > 0 && (
           <>
             <Text style={[s.sectionHeader, { marginTop: 8 }]}>EARLY PAYOFF OPTIONS</Text>
             <Text style={{ fontSize: 9, color: COLORS.TEXT_MED, marginBottom: 6 }}>Pay off your balance early after positions clear and save:</Text>
@@ -355,65 +401,72 @@ const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) 
         )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={2} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
 
 // ===== PAGE 3: WEEKLY CASH FLOW PROJECTION =====
-const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
-  const displayWeeks = d.weeklyData.slice(0, 18);
+const Page3Weekly = ({ d }: { d: PDFProps }) => {
+  const opts = d.options ?? DEFAULT_OPTS;
+  const showWeekly = opts.showWeeklySchedule;
+  const showMilestones = opts.showKeyMilestones;
+  const allWeeks = d.weeklyData;
 
   return (
-    <Page size="LETTER" style={s.page}>
-      <View style={s.headerBar}>
+    <Page size="LETTER" style={s.page} wrap>
+      <View style={s.headerBar} fixed>
         <Text style={s.headerBarTitle}>{d.companyName}</Text>
         <Text style={s.headerBarSubtitle}>WEEKLY CASH FLOW PROJECTION</Text>
       </View>
 
       <View style={s.content}>
         <Text style={{ fontSize: 9, color: COLORS.TEXT_MED, marginTop: 10, marginBottom: 8 }}>
-          See how your savings accumulate week by week:
+          See how your savings accumulate week by week, all the way through final payoff:
         </Text>
 
-        {/* Table */}
-        <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCell, { flex: 1 }]}>Week</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Old Weekly Cost</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>New Weekly Cost</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
-        </View>
-        {displayWeeks.map((w, i) => {
-          const isNeg = w.weeklySavings < 0;
-          return (
-            <View key={i} style={[
-              s.tableRow,
-              i % 2 === 1 ? s.tableRowAlt : {},
-              isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
-            ]}>
-              <Text style={[s.tableCell, { flex: 1 }]}>Week {w.week}</Text>
-              <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
-              <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
-              <Text style={[s.tableCellBold, {
-                flex: 1.5, textAlign: 'right',
-                color: isNeg ? COLORS.RED : COLORS.GREEN,
-              }]}>
-                {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
-              </Text>
-              <Text style={[s.tableCellBold, {
-                flex: 1.5, textAlign: 'right',
-                color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
-              }]}>
-                {fmtCurrency(w.cumulativeSavings)}
-              </Text>
+        {/* Full Weekly Table — flows across pages automatically */}
+        {showWeekly && (
+          <>
+            <View style={s.tableHeader} fixed>
+              <Text style={[s.tableHeaderCell, { flex: 1 }]}>Week</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Old Weekly Cost</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>New Weekly Cost</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
             </View>
-          );
-        })}
+            {allWeeks.map((w, i) => {
+              const isNeg = w.weeklySavings < 0;
+              return (
+                <View key={i} wrap={false} style={[
+                  s.tableRow,
+                  i % 2 === 1 ? s.tableRowAlt : {},
+                  isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
+                ]}>
+                  <Text style={[s.tableCell, { flex: 1 }]}>Week {w.week}</Text>
+                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
+                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
+                  <Text style={[s.tableCellBold, {
+                    flex: 1.5, textAlign: 'right',
+                    color: isNeg ? COLORS.RED : COLORS.GREEN,
+                  }]}>
+                    {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
+                  </Text>
+                  <Text style={[s.tableCellBold, {
+                    flex: 1.5, textAlign: 'right',
+                    color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
+                  }]}>
+                    {fmtCurrency(w.cumulativeSavings)}
+                  </Text>
+                </View>
+              );
+            })}
+          </>
+        )}
 
-        {/* PAYOFF CONFIRMATION (only for deals <= 18 weeks; longer deals get the full After Week 18 band below) */}
-        {d.weeklyData.length <= 18 && (
-          <View style={{
+        {/* PAYOFF CONFIRMATION — always shown after the weekly schedule */}
+        {showWeekly && (
+          <View wrap={false} style={{
             marginTop: 12,
             paddingVertical: 8,
             paddingHorizontal: 12,
@@ -426,107 +479,43 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
               color: COLORS.NAVY,
               textAlign: 'center',
             }}>
-              Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) - {d.weeklyData.length} total weeks
+              Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) — {allWeeks.length} total weeks
             </Text>
           </View>
         )}
 
-        {/* AFTER WEEK 18 PAYOFF SUMMARY */}
-        {d.weeklyData.length > 18 && (() => {
-          const remainingWeeks = d.weeklyData.slice(18);
-          const weeksRemaining = remainingWeeks.length;
-          const remainingPayments = remainingWeeks.reduce((acc, w) => acc + w.newWeeklyCost, 0);
-          return (
-            <View style={{ marginTop: 14 }}>
-              <View style={{
-                backgroundColor: COLORS.NAVY,
-                borderRadius: 6,
-                paddingVertical: 12,
-                paddingHorizontal: 14,
-                borderWidth: 1,
-                borderColor: COLORS.ACCENT,
-              }}>
-                <Text style={{
-                  fontSize: 10,
-                  fontFamily: 'Helvetica-Bold',
-                  color: COLORS.ACCENT,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                  letterSpacing: 1,
-                }}>
-                  After Week 18
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {weeksRemaining} wks
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Weeks Remaining
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {d.maxPayoffDate}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Final Payoff Date
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {fmtCurrency(remainingPayments)}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Remaining Payments
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{
-                  fontSize: 9,
-                  color: COLORS.WHITE,
-                  marginTop: 10,
-                  textAlign: 'center',
-                  fontStyle: 'italic',
-                }}>
-                  Your reverse consolidation is fully paid off on {d.maxPayoffDate} - just {weeksRemaining} weeks after this projection ends.
-                </Text>
+        {/* KEY MILESTONES */}
+        {showMilestones && (
+          <View wrap={false}>
+            <Text style={[s.sectionHeader, { marginTop: 16 }]}>KEY MILESTONES</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month1Savings)}</Text>
+                <Text style={s.statCardLabel}>After 1 Month</Text>
+              </View>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month3Savings)}</Text>
+                <Text style={s.statCardLabel}>After 3 Months</Text>
+              </View>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.GOLD }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GOLD }]}>{fmtCurrency(d.peakSavings)}</Text>
+                <Text style={s.statCardLabel}>Peak Savings (Wk {d.peakWeek})</Text>
               </View>
             </View>
-          );
-        })()}
-
-        {/* KEY MILESTONES */}
-        <Text style={[s.sectionHeader, { marginTop: 16 }]}>KEY MILESTONES</Text>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {/* After 1 Month */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month1Savings)}</Text>
-            <Text style={s.statCardLabel}>After 1 Month</Text>
           </View>
-          {/* After 3 Months */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month3Savings)}</Text>
-            <Text style={s.statCardLabel}>After 3 Months</Text>
-          </View>
-          {/* Peak Savings */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.GOLD }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GOLD }]}>{fmtCurrency(d.peakSavings)}</Text>
-            <Text style={s.statCardLabel}>Peak Savings (Wk {d.peakWeek})</Text>
-          </View>
-        </View>
+        )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={3} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
 
 // ===== PAGE 4: THE BOTTOM LINE =====
-const Page4BottomLine = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page4BottomLine = ({ d }: { d: PDFProps }) => {
   const oldMonthly = d.oldDailyPayment * 5 * (52 / 12);
   const newMonthly = d.newDailyPayment * 5 * (52 / 12);
 
@@ -628,20 +617,20 @@ const Page4BottomLine = ({ d, totalPages }: { d: PDFProps; totalPages: number })
         </View>
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={4} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
 
 // ===== MAIN DOCUMENT =====
 const MerchantProposalPDF: React.FC<{ data: PDFProps }> = ({ data }) => {
-  const totalPages = 4;
+  const opts = data.options ?? DEFAULT_OPTS;
   return (
     <Document>
-      <Page1Cover d={data} totalPages={totalPages} />
-      <Page2Positions d={data} totalPages={totalPages} />
-      <Page3Weekly d={data} totalPages={totalPages} />
-      <Page4BottomLine d={data} totalPages={totalPages} />
+      <Page1Cover d={data} />
+      <Page2Positions d={data} />
+      <Page3Weekly d={data} />
+      {opts.showBottomLinePage && <Page4BottomLine d={data} />}
     </Document>
   );
 };
