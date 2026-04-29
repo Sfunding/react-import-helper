@@ -1,35 +1,41 @@
+## Fix the "After Week 18" Band on the Merchant Proposal PDF
 
+### The Problem
 
-## Diagnose: "After Week 18" Summary Not Appearing in PDF
+The "Add'l Savings" stat in the After Week 18 band is showing a large negative number in red (e.g. -$160,121). This happens because:
 
-The code I added in the previous step is in place and correct in `src/components/pdf/MerchantProposalPDF.tsx` (lines 414-491). The summary band renders only when `d.weeklyData.length > 18`. So one of three things is happening:
+- By week 18, the merchant's old MCA stack has fully paid off in the comparison baseline.
+- The reverse consolidation, however, still has weeks of payments remaining.
+- So `weeklySavings = oldWeeklyCost (0) - newWeeklyCost (positive)` goes negative every week after the old stack would have ended.
 
-### Likely Causes
+Mathematically true. **Strategically terrible** to show a merchant. It frames the back half of their deal as "you're losing $160K" when in reality they've already pocketed massive savings during the consolidation period and are simply finishing out the term they agreed to.
 
-1. **Browser cached the old PDF bundle.** `@react-pdf/renderer` and the proposal component are dynamically imported (lazy-loaded). After a code change, an open tab can still hold the previous chunk. **Hard refresh the preview** (Cmd/Ctrl + Shift + R) and re-export.
+### The Fix
 
-2. **The deal you exported is ≤18 weeks total.** The summary intentionally hides when there's nothing past week 18 to summarize (e.g. shorter buyout-only deals). Check the on-screen Cash Buildup section — if the schedule ends on or before week 18, that's why.
+Reframe the After Week 18 band to focus on **payoff certainty**, not a misleading savings comparison.
 
-3. **You opened a previously-downloaded PDF.** Make sure you're opening the new file with today's date in the filename (`*_Merchant_Proposal_2026-04-20.pdf`), not an older copy in your Downloads folder.
+**Remove:** the "Add'l Savings" stat entirely (the red -$160K box).
 
-### Fix Plan
+**Keep:** Weeks Remaining, Final Payoff Date, Remaining Payments — these are useful, factual, and merchant-friendly.
 
-To remove all ambiguity and make this debuggable, I'll add two small improvements:
+**Restructure** to a 3-column layout (instead of 4) so the remaining stats breathe better.
 
-**`src/components/pdf/MerchantProposalPDF.tsx`**
-- **Lower the threshold from `> 18` to `> 0` weeks remaining** — actually, keep `> 18` but ALSO add a fallback summary line for ≤18-week deals saying *"Your reverse consolidation is fully paid off on [date] — Week [N]."* so something always appears below the table confirming the payoff.
-- **Tag the section with a clear visual marker** (a thin teal bar at the top edge) so it's unmistakable when present vs. absent.
+**Update the italic summary line** to be purely positive/factual:
+> *"Your reverse consolidation is fully paid off on Oct 1, 2026 — just 31 weeks after this projection ends."*
 
-**`src/lib/exportUtils.ts`**
-- After computing `weeklyData`, log `weeklyData.length` and `maxPayoffDay` to console at export time. This way, if it still doesn't show, you can check the browser console and confirm whether the deal is actually >18 weeks, narrowing the issue immediately.
+(Drop any savings framing here too.)
+
+### Also: Payoff Confirmation Banner
+
+The teal "Fully paid off on..." banner above the After Week 18 band is now redundant when the After Week 18 band is showing (same date appears twice). Hide the teal banner when the After Week 18 band renders; keep it for deals ≤ 18 weeks where the band doesn't show.
 
 ### Files Changed
+
 | File | Change |
 |------|--------|
-| `src/components/pdf/MerchantProposalPDF.tsx` | Add a short payoff confirmation line for ALL deals (so something always appears under the table), keep the full After Week 18 band for >18-week deals |
-| `src/lib/exportUtils.ts` | Add `console.log` of weekly count + payoff day at export time for diagnostics |
+| `src/components/pdf/MerchantProposalPDF.tsx` | Remove "Add'l Savings" column from After Week 18 band; switch to 3-column layout; rewrite italic summary line; hide teal payoff confirmation banner when After Week 18 band is visible |
 
-### After This Change
-- Every exported PDF will show *something* under the weekly table (either the full band or a single confirmation sentence).
-- If you still don't see the band on a >18-week deal, the console log will tell us exactly what `weeklyData.length` is, and we'll know whether the data or the renderer is the culprit.
+### Out of Scope
 
+- Internal/broker-facing views and the on-screen Cash Buildup section still show full savings math (negative weekly savings post-falloff is fine for internal users who understand the model).
+- No changes to calculation logic — only what's rendered on the merchant PDF.
