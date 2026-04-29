@@ -94,6 +94,7 @@ const SECTIONS: Array<{ title: string; rows: Row[] }> = [
     title: 'Page 3 — Cash Flow',
     rows: [
       { key: 'showWeeklySchedule', label: 'Full weekly schedule (through final payoff)' },
+      { key: 'showSavingsColumns', label: 'Weekly Savings & Cumulative Savings columns', hint: 'When off, only Week / Old / New columns shown — Peak Savings bubble still appears' },
       { key: 'showKeyMilestones', label: 'Key Milestones (1mo / 3mo / Peak)' },
     ],
   },
