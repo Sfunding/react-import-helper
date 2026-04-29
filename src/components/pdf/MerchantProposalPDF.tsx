@@ -100,12 +100,16 @@ const DEFAULT_OPTS: MerchantPDFOptions = {
 };
 
 // ===== Footer Component =====
-const Footer = ({ companyName, merchantName, date, pageNum, totalPages }: {
-  companyName: string; merchantName: string; date: string; pageNum: number; totalPages: number;
+const Footer = ({ companyName, merchantName, date }: {
+  companyName: string; merchantName: string; date: string;
 }) => (
   <View style={s.footer} fixed>
     <Text style={s.footerText}>{companyName} | {merchantName} | Prepared {date}</Text>
-    <Text style={s.footerText}>Page {pageNum} of {totalPages}</Text>
+    <Text
+      style={s.footerText}
+      render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+      fixed
+    />
   </View>
 );
 
