@@ -81,6 +81,7 @@ export type MerchantPDFOptions = {
   showPayoffTimelineVisual: boolean;
   showEarlyPayoffOptions: boolean;
   showWeeklySchedule: boolean;
+  showSavingsColumns: boolean;
   showKeyMilestones: boolean;
   showBottomLinePage: boolean;
 };
