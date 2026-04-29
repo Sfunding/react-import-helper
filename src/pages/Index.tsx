@@ -30,6 +30,7 @@ import {
 } from '@/types/calculation';
 import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
+import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { format } from 'date-fns';
 
@@ -61,6 +62,7 @@ export default function Index() {
   const [lastSavedCalculation, setLastSavedCalculation] = useState<SavedCalculation | null>(null);
   const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
   const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
+  const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
   
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
