@@ -67,6 +67,36 @@ export type PDFProps = {
       savings: number;
     }>;
   };
+  // Render-time options (chosen in the export dialog)
+  options?: MerchantPDFOptions;
+};
+
+export type MerchantPDFOptions = {
+  showAmountFunded: boolean;
+  showTotalPayback: boolean;
+  showFactorRate: boolean;
+  showOriginationFee: boolean;
+  showNumPayments: boolean;
+  showCashToMerchant: boolean;
+  showPayoffTimelineVisual: boolean;
+  showEarlyPayoffOptions: boolean;
+  showWeeklySchedule: boolean;
+  showKeyMilestones: boolean;
+  showBottomLinePage: boolean;
+};
+
+const DEFAULT_OPTS: MerchantPDFOptions = {
+  showAmountFunded: true,
+  showTotalPayback: true,
+  showFactorRate: false,
+  showOriginationFee: false,
+  showNumPayments: true,
+  showCashToMerchant: true,
+  showPayoffTimelineVisual: true,
+  showEarlyPayoffOptions: true,
+  showWeeklySchedule: true,
+  showKeyMilestones: true,
+  showBottomLinePage: true,
 };
 
 // ===== Footer Component =====
