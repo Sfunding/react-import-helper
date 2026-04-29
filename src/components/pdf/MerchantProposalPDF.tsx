@@ -624,13 +624,13 @@ const Page4BottomLine = ({ d }: { d: PDFProps }) => {
 
 // ===== MAIN DOCUMENT =====
 const MerchantProposalPDF: React.FC<{ data: PDFProps }> = ({ data }) => {
-  const totalPages = 4;
+  const opts = data.options ?? DEFAULT_OPTS;
   return (
     <Document>
-      <Page1Cover d={data} totalPages={totalPages} />
-      <Page2Positions d={data} totalPages={totalPages} />
-      <Page3Weekly d={data} totalPages={totalPages} />
-      <Page4BottomLine d={data} totalPages={totalPages} />
+      <Page1Cover d={data} />
+      <Page2Positions d={data} />
+      <Page3Weekly d={data} />
+      {opts.showBottomLinePage && <Page4BottomLine d={data} />}
     </Document>
   );
 };
