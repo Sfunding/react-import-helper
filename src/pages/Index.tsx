@@ -1649,8 +1649,14 @@ export default function Index() {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
               <div className="flex gap-2">
-                <Button
-                  onClick={() => {
+                <Button onClick={() => setExportOptionsOpen(true)}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export Merchant Proposal
+                </Button>
+                <ExportOptionsDialog
+                  open={exportOptionsOpen}
+                  onOpenChange={setExportOptionsOpen}
+                  onGenerate={(opts: MerchantPDFOptions) => {
                     const tempCalc = {
                       id: '',
                       user_id: '',
@@ -1665,13 +1671,10 @@ export default function Index() {
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     };
-                    exportMerchantProposal(tempCalc);
+                    exportMerchantProposal(tempCalc, opts);
                     toast({ title: 'Merchant Proposal exported', description: 'File downloaded successfully.' });
                   }}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Export Merchant Proposal
-                </Button>
+                />
               </div>
             </div>
 
