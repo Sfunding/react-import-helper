@@ -41,6 +41,7 @@ export const DEFAULT_MERCHANT_PDF_OPTIONS: MerchantPDFOptions = {
   showPayoffTimelineVisual: true,
   showEarlyPayoffOptions: true,
   showWeeklySchedule: true,
+  showSavingsColumns: false,    // hidden by default — avoids showing negative savings late in schedule
   showKeyMilestones: true,
   showBottomLinePage: true,
 };
