@@ -372,7 +372,7 @@ const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) 
         )}
 
         {/* Early Payoff Options */}
-        {d.earlyPayOptions?.enabled && d.earlyPayOptions.tiers.length > 0 && (
+        {(d.options?.showEarlyPayoffOptions ?? true) && d.earlyPayOptions?.enabled && d.earlyPayOptions.tiers.length > 0 && (
           <>
             <Text style={[s.sectionHeader, { marginTop: 8 }]}>EARLY PAYOFF OPTIONS</Text>
             <Text style={{ fontSize: 9, color: COLORS.TEXT_MED, marginBottom: 6 }}>Pay off your balance early after positions clear and save:</Text>
