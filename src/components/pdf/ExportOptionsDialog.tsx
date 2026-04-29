@@ -25,6 +25,7 @@ export type MerchantPDFOptions = {
   showEarlyPayoffOptions: boolean;
   // Page 3
   showWeeklySchedule: boolean;
+  showSavingsColumns: boolean;
   showKeyMilestones: boolean;
   // Page 4
   showBottomLinePage: boolean;
