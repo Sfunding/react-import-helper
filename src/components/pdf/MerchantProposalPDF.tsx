@@ -334,38 +334,42 @@ const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) 
         </View>
 
         {/* Visual Payoff Timeline Bar */}
-        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK, marginTop: 14, marginBottom: 6 }}>VISUAL PAYOFF TIMELINE</Text>
-        <View style={{ position: 'relative', height: 80, marginBottom: 10 }}>
-          {/* Bar */}
-          <View style={{
-            height: 16, backgroundColor: COLORS.ACCENT, borderRadius: 8,
-            width: CONTENT_WIDTH, position: 'absolute', top: 0,
-          }} />
-          {/* Markers */}
-          {markers.map((m, i) => (
-            <React.Fragment key={i}>
-              {/* Dot */}
+        {(d.options?.showPayoffTimelineVisual ?? true) && (
+          <>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK, marginTop: 14, marginBottom: 6 }}>VISUAL PAYOFF TIMELINE</Text>
+            <View style={{ position: 'relative', height: 80, marginBottom: 10 }}>
+              {/* Bar */}
               <View style={{
-                position: 'absolute', top: 3, left: m.x - 5,
-                width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.WHITE,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.NAVY }} />
-              </View>
-              {/* Connector line */}
-              <View style={{
-                position: 'absolute', top: 16, left: m.x,
-                width: 0.5, height: labelOffsets[levels[i]] - 2,
-                backgroundColor: COLORS.MED_GRAY,
+                height: 16, backgroundColor: COLORS.ACCENT, borderRadius: 8,
+                width: CONTENT_WIDTH, position: 'absolute', top: 0,
               }} />
-              {/* Label */}
-              <View style={{ position: 'absolute', top: 16 + labelOffsets[levels[i]], left: m.x - 25, width: 50, alignItems: 'center' }}>
-                <Text style={{ fontSize: 6.5, color: COLORS.TEXT_MED }}>{m.entity.substring(0, 12)}</Text>
-                <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>Day {m.day}</Text>
-              </View>
-            </React.Fragment>
-          ))}
-        </View>
+              {/* Markers */}
+              {markers.map((m, i) => (
+                <React.Fragment key={i}>
+                  {/* Dot */}
+                  <View style={{
+                    position: 'absolute', top: 3, left: m.x - 5,
+                    width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.WHITE,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.NAVY }} />
+                  </View>
+                  {/* Connector line */}
+                  <View style={{
+                    position: 'absolute', top: 16, left: m.x,
+                    width: 0.5, height: labelOffsets[levels[i]] - 2,
+                    backgroundColor: COLORS.MED_GRAY,
+                  }} />
+                  {/* Label */}
+                  <View style={{ position: 'absolute', top: 16 + labelOffsets[levels[i]], left: m.x - 25, width: 50, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 6.5, color: COLORS.TEXT_MED }}>{m.entity.substring(0, 12)}</Text>
+                    <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>Day {m.day}</Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Early Payoff Options */}
         {d.earlyPayOptions?.enabled && d.earlyPayOptions.tiers.length > 0 && (
