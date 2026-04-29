@@ -407,59 +407,66 @@ const Page2Positions = ({ d }: { d: PDFProps }) => {
 };
 
 // ===== PAGE 3: WEEKLY CASH FLOW PROJECTION =====
-const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
-  const displayWeeks = d.weeklyData.slice(0, 18);
+const Page3Weekly = ({ d }: { d: PDFProps }) => {
+  const opts = d.options ?? DEFAULT_OPTS;
+  const showWeekly = opts.showWeeklySchedule;
+  const showMilestones = opts.showKeyMilestones;
+  const allWeeks = d.weeklyData;
 
   return (
-    <Page size="LETTER" style={s.page}>
-      <View style={s.headerBar}>
+    <Page size="LETTER" style={s.page} wrap>
+      <View style={s.headerBar} fixed>
         <Text style={s.headerBarTitle}>{d.companyName}</Text>
         <Text style={s.headerBarSubtitle}>WEEKLY CASH FLOW PROJECTION</Text>
       </View>
 
       <View style={s.content}>
         <Text style={{ fontSize: 9, color: COLORS.TEXT_MED, marginTop: 10, marginBottom: 8 }}>
-          See how your savings accumulate week by week:
+          See how your savings accumulate week by week, all the way through final payoff:
         </Text>
 
-        {/* Table */}
-        <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCell, { flex: 1 }]}>Week</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Old Weekly Cost</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>New Weekly Cost</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
-        </View>
-        {displayWeeks.map((w, i) => {
-          const isNeg = w.weeklySavings < 0;
-          return (
-            <View key={i} style={[
-              s.tableRow,
-              i % 2 === 1 ? s.tableRowAlt : {},
-              isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
-            ]}>
-              <Text style={[s.tableCell, { flex: 1 }]}>Week {w.week}</Text>
-              <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
-              <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
-              <Text style={[s.tableCellBold, {
-                flex: 1.5, textAlign: 'right',
-                color: isNeg ? COLORS.RED : COLORS.GREEN,
-              }]}>
-                {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
-              </Text>
-              <Text style={[s.tableCellBold, {
-                flex: 1.5, textAlign: 'right',
-                color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
-              }]}>
-                {fmtCurrency(w.cumulativeSavings)}
-              </Text>
+        {/* Full Weekly Table — flows across pages automatically */}
+        {showWeekly && (
+          <>
+            <View style={s.tableHeader} fixed>
+              <Text style={[s.tableHeaderCell, { flex: 1 }]}>Week</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Old Weekly Cost</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>New Weekly Cost</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Weekly Savings</Text>
+              <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Cumulative Savings</Text>
             </View>
-          );
-        })}
+            {allWeeks.map((w, i) => {
+              const isNeg = w.weeklySavings < 0;
+              return (
+                <View key={i} wrap={false} style={[
+                  s.tableRow,
+                  i % 2 === 1 ? s.tableRowAlt : {},
+                  isNeg ? { backgroundColor: COLORS.LIGHT_RED_BG } : {},
+                ]}>
+                  <Text style={[s.tableCell, { flex: 1 }]}>Week {w.week}</Text>
+                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.oldWeeklyCost)}</Text>
+                  <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(w.newWeeklyCost)}</Text>
+                  <Text style={[s.tableCellBold, {
+                    flex: 1.5, textAlign: 'right',
+                    color: isNeg ? COLORS.RED : COLORS.GREEN,
+                  }]}>
+                    {isNeg ? '' : '+'}{fmtCurrency(w.weeklySavings)}
+                  </Text>
+                  <Text style={[s.tableCellBold, {
+                    flex: 1.5, textAlign: 'right',
+                    color: w.cumulativeSavings < 0 ? COLORS.RED : COLORS.GREEN,
+                  }]}>
+                    {fmtCurrency(w.cumulativeSavings)}
+                  </Text>
+                </View>
+              );
+            })}
+          </>
+        )}
 
-        {/* PAYOFF CONFIRMATION (only for deals <= 18 weeks; longer deals get the full After Week 18 band below) */}
-        {d.weeklyData.length <= 18 && (
-          <View style={{
+        {/* PAYOFF CONFIRMATION — always shown after the weekly schedule */}
+        {showWeekly && (
+          <View wrap={false} style={{
             marginTop: 12,
             paddingVertical: 8,
             paddingHorizontal: 12,
@@ -472,101 +479,37 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
               color: COLORS.NAVY,
               textAlign: 'center',
             }}>
-              Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) - {d.weeklyData.length} total weeks
+              Fully paid off on {d.maxPayoffDate} (Week {Math.ceil(d.maxPayoffDay / 5)}) — {allWeeks.length} total weeks
             </Text>
           </View>
         )}
 
-        {/* AFTER WEEK 18 PAYOFF SUMMARY */}
-        {d.weeklyData.length > 18 && (() => {
-          const remainingWeeks = d.weeklyData.slice(18);
-          const weeksRemaining = remainingWeeks.length;
-          const remainingPayments = remainingWeeks.reduce((acc, w) => acc + w.newWeeklyCost, 0);
-          return (
-            <View style={{ marginTop: 14 }}>
-              <View style={{
-                backgroundColor: COLORS.NAVY,
-                borderRadius: 6,
-                paddingVertical: 12,
-                paddingHorizontal: 14,
-                borderWidth: 1,
-                borderColor: COLORS.ACCENT,
-              }}>
-                <Text style={{
-                  fontSize: 10,
-                  fontFamily: 'Helvetica-Bold',
-                  color: COLORS.ACCENT,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                  letterSpacing: 1,
-                }}>
-                  After Week 18
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {weeksRemaining} wks
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Weeks Remaining
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {d.maxPayoffDate}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Final Payoff Date
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>
-                      {fmtCurrency(remainingPayments)}
-                    </Text>
-                    <Text style={{ fontSize: 7, color: COLORS.MED_GRAY, textTransform: 'uppercase', marginTop: 2 }}>
-                      Remaining Payments
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{
-                  fontSize: 9,
-                  color: COLORS.WHITE,
-                  marginTop: 10,
-                  textAlign: 'center',
-                  fontStyle: 'italic',
-                }}>
-                  Your reverse consolidation is fully paid off on {d.maxPayoffDate} - just {weeksRemaining} weeks after this projection ends.
-                </Text>
+        {/* KEY MILESTONES */}
+        {showMilestones && (
+          <View wrap={false}>
+            <Text style={[s.sectionHeader, { marginTop: 16 }]}>KEY MILESTONES</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month1Savings)}</Text>
+                <Text style={s.statCardLabel}>After 1 Month</Text>
+              </View>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month3Savings)}</Text>
+                <Text style={s.statCardLabel}>After 3 Months</Text>
+              </View>
+              <View style={[s.statCard, { flex: 1 }]}>
+                <View style={[s.statCardAccentTop, { backgroundColor: COLORS.GOLD }]} />
+                <Text style={[s.statCardValue, { color: COLORS.GOLD }]}>{fmtCurrency(d.peakSavings)}</Text>
+                <Text style={s.statCardLabel}>Peak Savings (Wk {d.peakWeek})</Text>
               </View>
             </View>
-          );
-        })()}
-
-        {/* KEY MILESTONES */}
-        <Text style={[s.sectionHeader, { marginTop: 16 }]}>KEY MILESTONES</Text>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          {/* After 1 Month */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month1Savings)}</Text>
-            <Text style={s.statCardLabel}>After 1 Month</Text>
           </View>
-          {/* After 3 Months */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.ACCENT }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GREEN }]}>{fmtCurrency(d.month3Savings)}</Text>
-            <Text style={s.statCardLabel}>After 3 Months</Text>
-          </View>
-          {/* Peak Savings */}
-          <View style={[s.statCard, { flex: 1 }]}>
-            <View style={[s.statCardAccentTop, { backgroundColor: COLORS.GOLD }]} />
-            <Text style={[s.statCardValue, { color: COLORS.GOLD }]}>{fmtCurrency(d.peakSavings)}</Text>
-            <Text style={s.statCardLabel}>Peak Savings (Wk {d.peakWeek})</Text>
-          </View>
-        </View>
+        )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={3} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
