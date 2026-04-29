@@ -96,6 +96,7 @@ const DEFAULT_OPTS: MerchantPDFOptions = {
   showPayoffTimelineVisual: true,
   showEarlyPayoffOptions: true,
   showWeeklySchedule: true,
+  showSavingsColumns: false,
   showKeyMilestones: true,
   showBottomLinePage: true,
 };
