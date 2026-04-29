@@ -114,7 +114,7 @@ const Footer = ({ companyName, merchantName, date }: {
 );
 
 // ===== PAGE 1: COVER / SUMMARY =====
-const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page1Cover = ({ d }: { d: PDFProps }) => {
   const oldWeekly = d.oldDailyPayment * 5;
   const newWeekly = d.newDailyPayment * 5;
   const monthlySavings = d.dailySavings * 5 * (52 / 12);
@@ -242,13 +242,13 @@ const Page1Cover = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
         )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={1} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
 
 // ===== PAGE 2: POSITIONS & PAYOFF SCHEDULE =====
-const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page2Positions = ({ d }: { d: PDFProps }) => {
   const sorted = [...d.positions].sort((a, b) => a.daysToPayoff - b.daysToPayoff);
   const totalBalance = d.positions.reduce((s, p) => s + p.balance, 0);
   const totalDaily = d.positions.reduce((s, p) => s + p.dailyPayment, 0);
@@ -401,7 +401,7 @@ const Page2Positions = ({ d, totalPages }: { d: PDFProps; totalPages: number }) 
         )}
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={2} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
@@ -572,7 +572,7 @@ const Page3Weekly = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => 
 };
 
 // ===== PAGE 4: THE BOTTOM LINE =====
-const Page4BottomLine = ({ d, totalPages }: { d: PDFProps; totalPages: number }) => {
+const Page4BottomLine = ({ d }: { d: PDFProps }) => {
   const oldMonthly = d.oldDailyPayment * 5 * (52 / 12);
   const newMonthly = d.newDailyPayment * 5 * (52 / 12);
 
@@ -674,7 +674,7 @@ const Page4BottomLine = ({ d, totalPages }: { d: PDFProps; totalPages: number })
         </View>
       </View>
 
-      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} pageNum={4} totalPages={totalPages} />
+      <Footer companyName={d.companyName} merchantName={d.merchantName} date={d.preparedDate} />
     </Page>
   );
 };
