@@ -324,6 +324,12 @@ const Page2Positions = ({ d }: { d: PDFProps }) => {
 
   const labelOffsets = [16, 36, 56];
 
+  const opts = d.options ?? DEFAULT_OPTS;
+  const view = opts.paymentView;
+  const showDaily = view === 'daily' || view === 'both';
+  const showWeekly = view === 'weekly' || view === 'both';
+  const totalWeekly = totalDaily * 5;
+
   return (
     <Page size="LETTER" style={s.page}>
       {/* Header bar */}
@@ -340,37 +346,47 @@ const Page2Positions = ({ d }: { d: PDFProps }) => {
         <View style={s.tableHeader}>
           <Text style={[s.tableHeaderCell, { flex: 3 }]}>Funder</Text>
           <Text style={[s.tableHeaderCell, { flex: 2, textAlign: 'right' }]}>Current Balance</Text>
-          <Text style={[s.tableHeaderCell, { flex: 2, textAlign: 'right' }]}>Daily Payment</Text>
+          {showDaily && <Text style={[s.tableHeaderCell, { flex: 2, textAlign: 'right' }]}>Daily Payment</Text>}
+          {showWeekly && <Text style={[s.tableHeaderCell, { flex: 2, textAlign: 'right' }]}>Weekly Payment</Text>}
         </View>
         {d.positions.map((p, i) => (
           <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
             <Text style={[s.tableCell, { flex: 3 }]}>{p.entity}</Text>
             <Text style={[s.tableCell, { flex: 2, textAlign: 'right' }]}>{fmtCurrency(p.balance)}</Text>
-            <Text style={[s.tableCell, { flex: 2, textAlign: 'right', color: COLORS.RED, fontFamily: 'Helvetica-Bold' }]}>{fmtCurrency(p.dailyPayment)}</Text>
+            {showDaily && <Text style={[s.tableCell, { flex: 2, textAlign: 'right', color: COLORS.RED, fontFamily: 'Helvetica-Bold' }]}>{fmtCurrency(p.dailyPayment)}</Text>}
+            {showWeekly && <Text style={[s.tableCell, { flex: 2, textAlign: 'right', color: COLORS.RED, fontFamily: 'Helvetica-Bold' }]}>{fmtCurrency(p.dailyPayment * 5)}</Text>}
           </View>
         ))}
         {/* Total row */}
         <View style={s.tableTotalRow}>
           <Text style={[s.tableTotalCell, { flex: 3 }]}>TOTAL</Text>
           <Text style={[s.tableTotalCell, { flex: 2, textAlign: 'right' }]}>{fmtCurrency(totalBalance)}</Text>
-          <Text style={[s.tableTotalCellAccent, { flex: 2, textAlign: 'right' }]}>{fmtCurrency(totalDaily)}</Text>
+          {showDaily && <Text style={[s.tableTotalCellAccent, { flex: 2, textAlign: 'right' }]}>{fmtCurrency(totalDaily)}</Text>}
+          {showWeekly && <Text style={[s.tableTotalCellAccent, { flex: 2, textAlign: 'right' }]}>{fmtCurrency(totalWeekly)}</Text>}
         </View>
+        {showWeekly && (
+          <Text style={{ fontSize: 7, color: COLORS.TEXT_MED, marginTop: 4, fontStyle: 'italic' }}>
+            Weekly = daily x 5 business days.
+          </Text>
+        )}
 
         {/* Payoff Timeline Table */}
         <Text style={[s.sectionHeader, { marginTop: 16 }]}>POSITION PAYOFF TIMELINE</Text>
         <View style={s.tableHeader}>
-          <Text style={[s.tableHeaderCell, { flex: 2.5 }]}>Funder</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Balance</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Daily Payment</Text>
-          <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Days to Payoff</Text>
+          <Text style={[s.tableHeaderCell, { flex: 2.3 }]}>Funder</Text>
+          <Text style={[s.tableHeaderCell, { flex: 1.4, textAlign: 'right' }]}>Balance</Text>
+          {showDaily && <Text style={[s.tableHeaderCell, { flex: 1.4, textAlign: 'right' }]}>Daily Payment</Text>}
+          {showWeekly && <Text style={[s.tableHeaderCell, { flex: 1.4, textAlign: 'right' }]}>Weekly Payment</Text>}
+          <Text style={[s.tableHeaderCell, { flex: 1.3, textAlign: 'right' }]}>Days to Payoff</Text>
           <Text style={[s.tableHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Paid Off By</Text>
         </View>
         {sorted.map((p, i) => (
           <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
-            <Text style={[s.tableCell, { flex: 2.5 }]}>{p.entity}</Text>
-            <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(p.balance)}</Text>
-            <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right' }]}>{fmtCurrency(p.dailyPayment)}</Text>
-            <Text style={[s.tableCellBold, { flex: 1.5, textAlign: 'right', color: COLORS.DARK_BLUE }]}>Day {p.daysToPayoff}</Text>
+            <Text style={[s.tableCell, { flex: 2.3 }]}>{p.entity}</Text>
+            <Text style={[s.tableCell, { flex: 1.4, textAlign: 'right' }]}>{fmtCurrency(p.balance)}</Text>
+            {showDaily && <Text style={[s.tableCell, { flex: 1.4, textAlign: 'right' }]}>{fmtCurrency(p.dailyPayment)}</Text>}
+            {showWeekly && <Text style={[s.tableCell, { flex: 1.4, textAlign: 'right' }]}>{fmtCurrency(p.dailyPayment * 5)}</Text>}
+            <Text style={[s.tableCellBold, { flex: 1.3, textAlign: 'right', color: COLORS.DARK_BLUE }]}>Day {p.daysToPayoff}</Text>
             <Text style={[s.tableCell, { flex: 1.5, textAlign: 'right', color: COLORS.TEXT_MED }]}>{p.payoffDate}</Text>
           </View>
         ))}
