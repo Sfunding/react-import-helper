@@ -149,6 +149,33 @@ export function ExportOptionsDialog({ open, onOpenChange, onGenerate }: Props) {
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {/* Payment View */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-primary uppercase tracking-wide">
+              Payment View
+            </h4>
+            <div className="grid grid-cols-3 gap-2 pl-1">
+              {(['daily', 'weekly', 'both'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setPaymentView(v)}
+                  className={
+                    'px-3 py-2 rounded-md border text-sm font-medium capitalize transition-colors ' +
+                    (options.paymentView === v
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background hover:bg-muted/50 border-border')
+                  }
+                >
+                  {v === 'both' ? 'Daily + Weekly' : v + ' only'}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground pl-1">
+              Controls how Old Payment, New Debits, and Savings are shown on Page 1 and Page 4. We fund weekly, debit daily.
+            </p>
+          </div>
+
           {SECTIONS.map(section => (
             <div key={section.title} className="space-y-2">
               <h4 className="text-sm font-semibold text-primary uppercase tracking-wide">
