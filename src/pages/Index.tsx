@@ -63,6 +63,16 @@ export default function Index() {
   const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
   const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  const [paymentView, setPaymentView] = useState<'daily' | 'weekly' | 'both'>(() => {
+    try {
+      const v = localStorage.getItem('merchantOfferPaymentView:v1');
+      if (v === 'daily' || v === 'weekly' || v === 'both') return v;
+    } catch { /* ignore */ }
+    return 'both';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('merchantOfferPaymentView:v1', paymentView); } catch { /* ignore */ }
+  }, [paymentView]);
   
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
