@@ -46,6 +46,7 @@ export const DEFAULT_MERCHANT_PDF_OPTIONS: MerchantPDFOptions = {
   showSavingsColumns: false,    // hidden by default — avoids showing negative savings late in schedule
   showKeyMilestones: true,
   showBottomLinePage: true,
+  paymentView: 'both',
 };
 
 const STORAGE_KEY = 'merchantProposalExportOptions:v1';
