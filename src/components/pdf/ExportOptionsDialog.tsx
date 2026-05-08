@@ -120,8 +120,11 @@ export function ExportOptionsDialog({ open, onOpenChange, onGenerate }: Props) {
     if (open) setOptions(loadStoredOptions());
   }, [open]);
 
-  const toggle = (key: keyof MerchantPDFOptions) =>
+  const toggle = (key: BoolOptionKey) =>
     setOptions(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const setPaymentView = (v: 'daily' | 'weekly' | 'both') =>
+    setOptions(prev => ({ ...prev, paymentView: v }));
 
   const handleGenerate = () => {
     try {
