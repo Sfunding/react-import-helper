@@ -68,8 +68,12 @@ type Props = {
   onGenerate: (options: MerchantPDFOptions) => void;
 };
 
+type BoolOptionKey = {
+  [K in keyof MerchantPDFOptions]: MerchantPDFOptions[K] extends boolean ? K : never;
+}[keyof MerchantPDFOptions];
+
 type Row = {
-  key: keyof MerchantPDFOptions;
+  key: BoolOptionKey;
   label: string;
   hint?: string;
 };
