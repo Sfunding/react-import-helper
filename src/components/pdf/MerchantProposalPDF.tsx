@@ -574,6 +574,9 @@ const Page3Weekly = ({ d }: { d: PDFProps }) => {
 const Page4BottomLine = ({ d }: { d: PDFProps }) => {
   const oldMonthly = d.oldDailyPayment * 5 * (52 / 12);
   const newMonthly = d.newDailyPayment * 5 * (52 / 12);
+  const view = (d.options ?? DEFAULT_OPTS).paymentView;
+  const showDaily = view === 'daily' || view === 'both';
+  const showWeeklyView = view === 'weekly' || view === 'both';
 
   return (
     <Page size="LETTER" style={s.page}>
