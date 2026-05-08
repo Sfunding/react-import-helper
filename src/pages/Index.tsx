@@ -1658,7 +1658,28 @@ export default function Index() {
           <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Payment View segmented control */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Payment View:</span>
+                  <div className="inline-flex rounded-md border border-border overflow-hidden">
+                    {(['daily', 'weekly', 'both'] as const).map(v => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setPaymentView(v)}
+                        className={cn(
+                          'px-3 py-1 text-xs font-medium capitalize transition-colors',
+                          paymentView === v
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background hover:bg-muted/50',
+                        )}
+                      >
+                        {v === 'both' ? 'Daily + Weekly' : v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <Button onClick={() => setExportOptionsOpen(true)}>
                   <FileText className="w-4 h-4 mr-2" />
                   Export Merchant Proposal
