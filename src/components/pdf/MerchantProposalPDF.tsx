@@ -102,6 +102,7 @@ const DEFAULT_OPTS: MerchantPDFOptions = {
   showSavingsColumns: false,
   showKeyMilestones: true,
   showBottomLinePage: true,
+  paymentView: 'both',
 };
 
 // ===== Footer Component =====
