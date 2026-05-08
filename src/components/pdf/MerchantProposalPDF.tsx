@@ -86,6 +86,7 @@ export type MerchantPDFOptions = {
   showSavingsColumns: boolean;
   showKeyMilestones: boolean;
   showBottomLinePage: boolean;
+  paymentView: 'daily' | 'weekly' | 'both';
 };
 
 const DEFAULT_OPTS: MerchantPDFOptions = {
