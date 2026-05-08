@@ -652,8 +652,8 @@ const Page4BottomLine = ({ d }: { d: PDFProps }) => {
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>WITHOUT CONSOLIDATION</Text>
             </View>
             <View style={{ padding: 12, alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 10, color: COLORS.RED }}>{fmtCurrency(d.oldDailyPayment)}/day</Text>
-              <Text style={{ fontSize: 10, color: COLORS.RED }}>{fmtCurrency(d.oldDailyPayment * 5)}/week</Text>
+              {showDaily && <Text style={{ fontSize: 10, color: COLORS.RED }}>{fmtCurrency(d.oldDailyPayment)}/day</Text>}
+              {showWeeklyView && <Text style={{ fontSize: 10, color: COLORS.RED }}>{fmtCurrency(d.oldDailyPayment * 5)}/week</Text>}
               <Text style={{ fontSize: 10, color: COLORS.RED }}>{fmtCurrency(oldMonthly)}/month</Text>
               <Text style={{ fontSize: 9, color: COLORS.RED, marginTop: 4 }}>{d.numPositions} separate payments</Text>
             </View>
@@ -667,8 +667,8 @@ const Page4BottomLine = ({ d }: { d: PDFProps }) => {
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.WHITE }}>WITH CONSOLIDATION</Text>
             </View>
             <View style={{ padding: 12, alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 10, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold' }}>{fmtCurrency(d.newDailyPayment)}/day</Text>
-              <Text style={{ fontSize: 10, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold' }}>{fmtCurrency(d.newDailyPayment * 5)}/week</Text>
+              {showDaily && <Text style={{ fontSize: 10, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold' }}>{fmtCurrency(d.newDailyPayment)}/day</Text>}
+              {showWeeklyView && <Text style={{ fontSize: 10, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold' }}>{fmtCurrency(d.newDailyPayment * 5)}/week</Text>}
               <Text style={{ fontSize: 10, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold' }}>{fmtCurrency(newMonthly)}/month</Text>
               <Text style={{ fontSize: 9, color: COLORS.GREEN, fontFamily: 'Helvetica-Bold', marginTop: 4 }}>1 simple payment</Text>
             </View>
