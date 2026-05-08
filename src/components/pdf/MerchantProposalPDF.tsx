@@ -38,6 +38,8 @@ export type PDFProps = {
   reductionPct: number;
   dailySavings: number;
   cashToMerchant: number;
+  // Weekly funding clip (the merchant receives this amount weekly)
+  weeklyFundingClip: number;
   // Positions
   positions: PDFPosition[];
   maxPayoffDay: number;
