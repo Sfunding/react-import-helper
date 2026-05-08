@@ -29,6 +29,8 @@ export type MerchantPDFOptions = {
   showKeyMilestones: boolean;
   // Page 4
   showBottomLinePage: boolean;
+  // Payment view (controls daily / weekly visibility on Page 1 + Page 4)
+  paymentView: 'daily' | 'weekly' | 'both';
 };
 
 export const DEFAULT_MERCHANT_PDF_OPTIONS: MerchantPDFOptions = {
