@@ -124,6 +124,11 @@ const Page1Cover = ({ d }: { d: PDFProps }) => {
   const oldWeekly = d.oldDailyPayment * 5;
   const newWeekly = d.newDailyPayment * 5;
   const monthlySavings = d.dailySavings * 5 * (52 / 12);
+  const opts = d.options ?? DEFAULT_OPTS;
+  const view = opts.paymentView;
+  const showDaily = view === 'daily' || view === 'both';
+  const showWeeklyView = view === 'weekly' || view === 'both';
+  const newCardLabel = view === 'daily' ? 'NEW PAYMENT' : 'NEW DEBITS';
 
   return (
     <Page size="LETTER" style={s.page}>
@@ -160,11 +165,22 @@ const Page1Cover = ({ d }: { d: PDFProps }) => {
             backgroundColor: COLORS.WHITE, padding: 12, alignItems: 'center',
           }}>
             <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: COLORS.RED, marginBottom: 6 }}>OLD PAYMENT</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(d.oldDailyPayment)}</Text>
-              <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/day</Text>
-            </View>
-            <Text style={{ fontSize: 10, color: COLORS.DARK_GRAY, marginTop: 4 }}>{fmtCurrency(oldWeekly)}/week</Text>
+            {showDaily && (
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={{ fontSize: showWeeklyView && view === 'both' ? 26 : 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(d.oldDailyPayment)}</Text>
+                <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/day</Text>
+              </View>
+            )}
+            {showWeeklyView && (
+              view === 'both' ? (
+                <Text style={{ fontSize: 10, color: COLORS.DARK_GRAY, marginTop: 4 }}>{fmtCurrency(oldWeekly)}/week</Text>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(oldWeekly)}</Text>
+                  <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/week</Text>
+                </View>
+              )
+            )}
           </View>
 
           {/* Reduction badge */}
@@ -176,29 +192,51 @@ const Page1Cover = ({ d }: { d: PDFProps }) => {
             <Text style={{ fontSize: 5, color: COLORS.WHITE, fontFamily: 'Helvetica-Bold' }}>REDUCTION</Text>
           </View>
 
-          {/* NEW PAYMENT card */}
+          {/* NEW PAYMENT / NEW DEBITS card */}
           <View style={{
             flex: 1, borderRadius: 8, borderWidth: 1, borderColor: COLORS.GREEN_BORDER,
             backgroundColor: COLORS.WHITE, padding: 12, alignItems: 'center',
           }}>
-            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: COLORS.ACCENT_DK, marginBottom: 6 }}>NEW PAYMENT</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(d.newDailyPayment)}</Text>
-              <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/day</Text>
-            </View>
-            <Text style={{ fontSize: 10, color: COLORS.DARK_GRAY, marginTop: 4 }}>{fmtCurrency(newWeekly)}/week</Text>
+            <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: COLORS.ACCENT_DK, marginBottom: 6 }}>{newCardLabel}</Text>
+            {showDaily && (
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(d.newDailyPayment)}</Text>
+                <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/day</Text>
+              </View>
+            )}
+            {showWeeklyView && (
+              view === 'both' ? (
+                <Text style={{ fontSize: 10, color: COLORS.DARK_GRAY, marginTop: 4 }}>{fmtCurrency(newWeekly)}/week</Text>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <Text style={{ fontSize: 26, fontFamily: 'Helvetica-Bold', color: COLORS.TEXT_DARK }}>{fmtCurrency(newWeekly)}</Text>
+                  <Text style={{ fontSize: 11, color: COLORS.TEXT_MED }}>/week</Text>
+                </View>
+              )
+            )}
+            {view !== 'daily' && d.weeklyFundingClip > 0 && (
+              <Text style={{ fontSize: 8, color: COLORS.ACCENT_DK, marginTop: 4, fontFamily: 'Helvetica-Bold' }}>
+                Funded weekly: {fmtCurrency(d.weeklyFundingClip)}
+              </Text>
+            )}
           </View>
         </View>
+
+        {view !== 'daily' && (
+          <Text style={{ fontSize: 8, color: COLORS.TEXT_MED, textAlign: 'center', marginTop: 6, fontStyle: 'italic' }}>
+            We fund you weekly, debit you daily.
+          </Text>
+        )}
 
         {/* YOUR SAVINGS row */}
         <Text style={[s.sectionHeader, { marginTop: 14 }]}>YOUR SAVINGS</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {[
-            { label: 'DAILY', value: fmtCurrency(d.dailySavings), color: COLORS.GREEN },
-            { label: 'WEEKLY', value: fmtCurrency(d.dailySavings * 5), color: COLORS.GREEN },
-            { label: 'MONTHLY', value: fmtCurrency(monthlySavings), color: COLORS.GREEN },
-            { label: 'CONSOLIDATION', value: d.consolidationType, color: COLORS.GOLD, isText: true },
-          ].map((item, i) => (
+            { label: 'DAILY', value: fmtCurrency(d.dailySavings), color: COLORS.GREEN, show: showDaily },
+            { label: 'WEEKLY', value: fmtCurrency(d.dailySavings * 5), color: COLORS.GREEN, show: showWeeklyView },
+            { label: 'MONTHLY', value: fmtCurrency(monthlySavings), color: COLORS.GREEN, show: true },
+            { label: 'CONSOLIDATION', value: d.consolidationType, color: COLORS.GOLD, isText: true, show: true },
+          ].filter(item => item.show).map((item, i) => (
             <View key={i} style={[s.statCard, { flex: 1 }]}>
               <View style={[s.statCardAccentTop, { backgroundColor: item.color }]} />
               <Text style={[s.statCardValue, { color: item.color, fontSize: (item as any).isText ? 10 : 18 }]}>{item.value}</Text>
