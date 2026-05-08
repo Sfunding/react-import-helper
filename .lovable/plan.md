@@ -1,26 +1,74 @@
-## Hide Weekly/Cumulative Savings Columns Option
+## Goal
 
-The merchant PDF's Page 3 weekly schedule currently shows: Week | Old Weekly Cost | New Weekly Cost | Weekly Savings | Cumulative Savings. Once cash infusions stop and the merchant resumes paying us back, the savings columns go negative — visually noisy and a bad sales look. Add a toggle to drop those two columns.
+Right now the Merchant's Offer tab and PDF lean heavily on **daily** numbers. Add a "Payment View" control so we can show **Daily / Weekly / Both** for both Old (current) and New (Avion) payments — in the app and in the PDF — and make the **New Debits** view explicitly call out that funding goes out *weekly* while debits come back *daily*.
 
-### Behavior
+## What changes
 
-- New checkbox in the Export Options dialog: **"Show Weekly Savings & Cumulative Savings columns"** — defaults **OFF** (cleaner look by default).
-- When OFF:
-  - Page 3 table renders only 3 columns: **Week | Old Weekly Cost | New Weekly Cost**.
-  - The red row highlight for negative-savings weeks is also dropped (no need to flag rows when the savings columns aren't shown).
-  - The **Key Milestones** trio (After 1 Month / After 3 Months / **Peak Savings**) is force-shown so the merchant still sees the savings story via the bubbles — even if "Key Milestones" was unchecked. The peak-savings card stays the visual anchor.
-  - The intro line above the table softens from "See how your savings accumulate week by week..." to "Here's your full week-by-week cash flow through final payoff:"
-- When ON: current 5-column layout is preserved exactly.
+### 1. New "Payment View" toggle (app)
 
-### Files
+On the Merchant's Offer tab, add a small segmented control near the top-right ("Payment View: Daily | Weekly | Both", default **Both**). Persisted to `localStorage` under `merchantOfferPaymentView:v1`.
+
+It controls the rendering of:
+
+- **Old Payment** card (red box, top-left of the comparison)
+- **New Payment** card (green box, top-right) — relabeled as **"New Debits"**
+- **Your Savings** highlighted block (Daily / Weekly / Monthly cards)
+- The **Without vs With Consolidation** mini-cards downstream (consistent)
+
+Behavior per mode:
+
+| Mode | Old Payment | New Debits | Savings cards |
+|---|---|---|---|
+| Daily | `$X/day` only | `$X/day` only | Daily + Monthly |
+| Weekly | `$X/week` only | `$X/week` (debits) + `$X/week funded in` callout | Weekly + Monthly |
+| Both | `$X/day` + `$X/week` (current) | `$X/day debited` + `$X/week debited` + `$X/week funded in` | Daily + Weekly + Monthly (current) |
+
+### 2. "New Debits" framing — funding vs. debits
+
+The New Payment card becomes **"New Debits"** with a small subtitle: *"We fund you weekly, debit you daily."* In Weekly and Both modes it shows two distinct lines:
+
+- **Debited:** `$X/day` and/or `$X/week` (= daily × 5)
+- **Funded in:** `$Y/week` (the weekly clip = `cashInfusion` from the schedule, averaged or first-week — see Technical)
+
+This makes clear the merchant pays daily but receives a weekly clip.
+
+### 3. PDF Export Options dialog
+
+In `ExportOptionsDialog.tsx`, add a new section **"Payment View"** above the page sections, with a 3-way radio:
+
+- Daily only
+- Weekly only
+- Both (default)
+
+Stored in `MerchantPDFOptions` as `paymentView: 'daily' | 'weekly' | 'both'` and persisted with the rest of the export options. Defaults to **Both**.
+
+### 4. PDF rendering
+
+- **Page 1 — Old/New cards**: respect `paymentView`. In Weekly/Both, the New card adds the "Funded weekly: $Y" line.
+- **Page 1 — Your Savings strip**: Daily card hidden in Weekly mode; Weekly card hidden in Daily mode; Monthly always visible. Consolidation card unchanged.
+- **Page 4 — Without vs With Consolidation**: same daily/weekly/monthly visibility rules as Page 1.
+- **Page 3 — Weekly Cash Flow** table: unchanged (it's already weekly).
+
+The Old/New card subtitle on Page 1 also gets the *"We fund you weekly, debit you daily."* line in Weekly/Both modes.
+
+## Files
 
 | File | Change |
 |---|---|
-| `src/components/pdf/ExportOptionsDialog.tsx` | Add `showSavingsColumns: boolean` to `MerchantPDFOptions` (default `false`). Add checkbox under "Page 3 — Cash Flow" section with hint: "When off, only Week / Old / New columns are shown — Peak Savings bubble still appears." |
-| `src/components/pdf/MerchantProposalPDF.tsx` | In Page 3: read `showSavingsColumns` from options. Conditionally render the two savings header cells, the two savings body cells, and the negative-row red background. Adjust `flex` weights so the 3-column layout looks balanced (e.g. Week:1, Old:2, New:2). When `showSavingsColumns` is false, treat `showMilestones` as forced true. |
+| `src/pages/Index.tsx` | Add `paymentView` state + segmented control in the Merchant's Offer tab header. Conditionally render daily/weekly lines on Old Payment, New Debits, Savings block. Compute `weeklyFundingClip` from `dailySchedule` (first non-zero `cashInfusion`) and pass to PDF + display. |
+| `src/components/pdf/ExportOptionsDialog.tsx` | Add `paymentView: 'daily' \| 'weekly' \| 'both'` to `MerchantPDFOptions` (default `'both'`). Render a radio group at the top of the dialog. Update default + storage merge. |
+| `src/components/pdf/MerchantProposalPDF.tsx` | Read `opts.paymentView`. Update Page 1 Old/New cards, Page 1 "Your Savings" strip, and Page 4 Without/With cards to honor it. Add `weeklyFundingClip: number` to `PDFProps` and render the "Funded weekly: $Y" line on the New card in Weekly/Both. |
+| `src/lib/exportUtils.ts` | Pass the computed `weeklyFundingClip` through to `MerchantProposalPDF` props. |
 
-### Out of Scope
+## Technical notes
 
-- Page 4 "Bottom Line" savings figures — unchanged (those are aggregate, not week-by-week, and stay positive).
-- The "Daily/Weekly/Monthly Savings" cards on Page 1 — unchanged.
+- `weeklyFundingClip` = the weekly cash infusion the merchant receives. Use `dailySchedule[0].cashInfusion` (first payday's clip) as the representative number; it equals the sum of 5 daily debits the merchant *would have paid* the prior week. If the schedule is empty, fall back to `totalCurrentDailyPayment * 5`.
+- All weekly amounts use the existing convention: `daily × 5` (5 business days/week, per project memory).
+- Default behavior with no user interaction = **Both**, so existing exports look the same except for the added "Funded weekly" line on the New card.
+- "New Payment" label changes to **"New Debits"** in both UI and PDF — this is intentional and reinforces the framing.
+
+## Out of scope
+
+- The Daily/Weekly internal calculator tabs (`'daily'`, `'weekly'`) — unchanged.
 - Excel and internal cash report exports — unchanged.
+- Cash Buildup section — unchanged (already weekly-oriented).

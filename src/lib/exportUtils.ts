@@ -1732,6 +1732,7 @@ export async function exportMerchantProposal(
     reductionPct: metrics.impliedDiscount * 100,
     dailySavings: metrics.dailySavings,
     cashToMerchant: Math.max(0, cashToMerchant),
+    weeklyFundingClip: (dailySchedule.find(d => d.cashInfusion > 0)?.cashInfusion) ?? (metrics.totalCurrentDailyPayment * 5),
     positions: positionTimeline,
     maxPayoffDay: maxDay,
     maxPayoffDate: getFormattedLastPaymentDate(maxDay),

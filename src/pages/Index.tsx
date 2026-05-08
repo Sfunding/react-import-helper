@@ -63,6 +63,16 @@ export default function Index() {
   const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
   const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  const [paymentView, setPaymentView] = useState<'daily' | 'weekly' | 'both'>(() => {
+    try {
+      const v = localStorage.getItem('merchantOfferPaymentView:v1');
+      if (v === 'daily' || v === 'weekly' || v === 'both') return v;
+    } catch { /* ignore */ }
+    return 'both';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('merchantOfferPaymentView:v1', paymentView); } catch { /* ignore */ }
+  }, [paymentView]);
   
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
@@ -1648,7 +1658,28 @@ export default function Index() {
           <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <h2 className="text-xl font-bold text-primary">Your Consolidation Offer</h2>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Payment View segmented control */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Payment View:</span>
+                  <div className="inline-flex rounded-md border border-border overflow-hidden">
+                    {(['daily', 'weekly', 'both'] as const).map(v => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setPaymentView(v)}
+                        className={cn(
+                          'px-3 py-1 text-xs font-medium capitalize transition-colors',
+                          paymentView === v
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background hover:bg-muted/50',
+                        )}
+                      >
+                        {v === 'both' ? 'Daily + Weekly' : v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <Button onClick={() => setExportOptionsOpen(true)}>
                   <FileText className="w-4 h-4 mr-2" />
                   Export Merchant Proposal
@@ -1711,18 +1742,39 @@ export default function Index() {
             </div>
 
             {/* Payment Comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-destructive/10 border-2 border-destructive/30 rounded-lg p-4 text-center">
-                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Old Payment</div>
-                <div className="text-2xl font-bold text-destructive">{fmt(totalCurrentDailyPayment)}/day</div>
-                <div className="text-lg text-destructive/80">{fmt(totalCurrentWeeklyPayment)}/week</div>
-              </div>
-              <div className="bg-success/10 border-2 border-success/30 rounded-lg p-4 text-center">
-                <div className="text-sm text-muted-foreground font-medium uppercase mb-2">New Payment</div>
-                <div className="text-2xl font-bold text-success">{fmt(newDailyPayment)}/day</div>
-                <div className="text-lg text-success/80">{fmt(newWeeklyPayment)}/week</div>
-              </div>
-            </div>
+            {(() => {
+              const showDaily = paymentView === 'daily' || paymentView === 'both';
+              const showWeekly = paymentView === 'weekly' || paymentView === 'both';
+              // Weekly clip funded into merchant's account
+              const weeklyFundingClip = (dailySchedule.find(d => d.cashInfusion > 0)?.cashInfusion) ?? (totalCurrentDailyPayment * 5);
+              const newCardLabel = paymentView === 'daily' ? 'New Payment' : 'New Debits';
+              return (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-destructive/10 border-2 border-destructive/30 rounded-lg p-4 text-center">
+                      <div className="text-sm text-muted-foreground font-medium uppercase mb-2">Old Payment</div>
+                      {showDaily && <div className="text-2xl font-bold text-destructive">{fmt(totalCurrentDailyPayment)}/day</div>}
+                      {showWeekly && <div className={cn(showDaily ? 'text-lg text-destructive/80' : 'text-2xl font-bold text-destructive')}>{fmt(totalCurrentWeeklyPayment)}/week</div>}
+                    </div>
+                    <div className="bg-success/10 border-2 border-success/30 rounded-lg p-4 text-center">
+                      <div className="text-sm text-muted-foreground font-medium uppercase mb-2">{newCardLabel}</div>
+                      {showDaily && <div className="text-2xl font-bold text-success">{fmt(newDailyPayment)}/day</div>}
+                      {showWeekly && <div className={cn(showDaily ? 'text-lg text-success/80' : 'text-2xl font-bold text-success')}>{fmt(newWeeklyPayment)}/week</div>}
+                      {paymentView !== 'daily' && weeklyFundingClip > 0 && (
+                        <div className="mt-2 text-xs font-semibold text-success">
+                          Funded weekly: {fmt(weeklyFundingClip)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {paymentView !== 'daily' && (
+                    <p className="text-xs text-muted-foreground text-center italic mt-2">
+                      We fund you weekly, debit you daily.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Reduction Badge */}
             <div className="text-center">
@@ -1736,17 +1788,24 @@ export default function Index() {
               <h3 className="text-center text-success font-bold text-xl mb-4 uppercase tracking-wide">
                 💰 Your Savings 💰
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
-                  <div className="text-sm text-muted-foreground uppercase mb-1">Daily Savings</div>
-                  <div className="text-3xl font-bold text-success">{fmt(dailySavings)}</div>
-                  <div className="text-xs text-muted-foreground">per day</div>
-                </div>
-                <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
-                  <div className="text-sm text-muted-foreground uppercase mb-1">Weekly Savings</div>
-                  <div className="text-3xl font-bold text-success">{fmt(weeklySavings)}</div>
-                  <div className="text-xs text-muted-foreground">per week</div>
-                </div>
+              <div className={cn(
+                "grid grid-cols-1 gap-4",
+                paymentView === 'both' ? 'md:grid-cols-3' : 'md:grid-cols-2'
+              )}>
+                {(paymentView === 'daily' || paymentView === 'both') && (
+                  <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
+                    <div className="text-sm text-muted-foreground uppercase mb-1">Daily Savings</div>
+                    <div className="text-3xl font-bold text-success">{fmt(dailySavings)}</div>
+                    <div className="text-xs text-muted-foreground">per day</div>
+                  </div>
+                )}
+                {(paymentView === 'weekly' || paymentView === 'both') && (
+                  <div className="bg-card rounded-lg p-4 text-center shadow-sm border border-success/30">
+                    <div className="text-sm text-muted-foreground uppercase mb-1">Weekly Savings</div>
+                    <div className="text-3xl font-bold text-success">{fmt(weeklySavings)}</div>
+                    <div className="text-xs text-muted-foreground">per week</div>
+                  </div>
+                )}
                 <div className="bg-success text-success-foreground rounded-lg p-4 text-center shadow-md">
                   <div className="text-sm uppercase mb-1 opacity-90">Monthly Savings</div>
                   <div className="text-4xl font-bold">{fmt(monthlySavings)}</div>
