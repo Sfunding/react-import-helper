@@ -78,7 +78,7 @@ export function useDealScenarios(calculationId: string | undefined) {
     if (patch.scenario) payload.scenario = patch.scenario as unknown as Record<string, unknown>;
     const { error } = await supabase
       .from('deal_scenarios')
-      .update(payload)
+      .update(payload as never)
       .eq('id', id);
     if (error) {
       toast({ title: 'Failed to save scenario', description: error.message, variant: 'destructive' });
