@@ -655,6 +655,7 @@ export default function Index() {
     });
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    clearDraft();
     
     // Clear loaded ID since this is now a new calculation
     setLoadedCalculationId(result?.id || null);
@@ -731,6 +732,7 @@ export default function Index() {
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
     setLoadedCalculationName(name);
+    clearDraft();
     
     // Store the saved calculation for export options
     if (result) {
