@@ -9,6 +9,8 @@ export interface StraightStep {
   id: string;
   kind: 'straight';
   label?: string;
+  /** Funder name shown on the active position list, labels and summary. */
+  funderName?: string;
   /** ISO date (YYYY-MM-DD) the step runs on. If unset, runs immediately after prior step. */
   runOn?: string;
   grossFunding: number;
@@ -41,6 +43,8 @@ export interface ReverseStep {
   id: string;
   kind: 'reverse';
   label?: string;
+  /** Funder name shown on the active position list, labels and summary. */
+  funderName?: string;
   /** ISO date the reverse runs on. Takes precedence over runAtWeek. */
   runOn?: string;
   factorRate: number;
