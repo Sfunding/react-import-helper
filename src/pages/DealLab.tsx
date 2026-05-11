@@ -148,8 +148,6 @@ export default function DealLabPage() {
     const a = new Date(asOfDate + 'T00:00:00');
     const t = new Date(todayIso + 'T00:00:00');
     if (Number.isNaN(a.getTime()) || t <= a) return 0;
-    // Reuse the same util the projector uses for symmetry
-    const { getBusinessDaysBetween } = require('@/lib/dateUtils') as typeof import('@/lib/dateUtils');
     return getBusinessDaysBetween(a, t);
   }, [asOfDate, todayIso]);
 
