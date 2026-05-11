@@ -1,0 +1,1 @@
+ALTER TABLE public.saved_calculations ADD COLUMN IF NOT EXISTS recommended_scenario JSONB;
