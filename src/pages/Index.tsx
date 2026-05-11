@@ -1100,14 +1100,13 @@ export default function Index() {
               <Calendar
                 mode="single"
                 selected={asOfDate ? new Date(asOfDate + 'T00:00:00') : undefined}
-                onSelect={(d) => d && setAsOfDate(format(d, 'yyyy-MM-dd'))}
-                disabled={(date) => date > new Date()}
+                onSelect={(d) => d && handleAsOfDateChange(format(d, 'yyyy-MM-dd'))}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
             </PopoverContent>
           </Popover>
-          <span className="text-[11px]">— balances will be projected forward to today in the Deal Lab.</span>
+          <span className="text-[11px]">— move this date to reprice balances. Funded positions reprice from their funding date; manually-entered balances reprice from when you entered them.</span>
         </div>
       </div>
 
