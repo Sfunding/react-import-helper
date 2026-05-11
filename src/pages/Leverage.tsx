@@ -22,8 +22,11 @@ import {
   simulateStraightMCA,
   simulateReverseSnapshot,
   simulateHybrid,
+  buildExposureTimeline,
   HybridTrigger,
   LeverageBand,
+  PaymentCadence,
+  BUSINESS_DAYS_PER_WEEK,
 } from '@/lib/leverageMath';
 import { Download, TrendingDown, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
