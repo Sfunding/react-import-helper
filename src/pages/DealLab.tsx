@@ -109,11 +109,13 @@ function MetricsBlock({
 
 type ScenarioKind = 'reverse' | 'straight' | 'hybrid';
 
-export default function LeveragePage() {
+export default function DealLabPage() {
+  const { id: routeId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { calculations, isLoading, updateCalculation } = useCalculations();
   const { toast } = useToast();
 
-  const [selectedId, setSelectedId] = useState<string>('');
+  const selectedId = routeId ?? '';
   const [chosenScenario, setChosenScenario] = useState<ScenarioKind | null>(null);
   const [activeTab, setActiveTab] = useState<'compare' | 'builder'>('compare');
 
@@ -125,12 +127,16 @@ export default function LeveragePage() {
     [calculations, selectedId]
   );
 
-  // Manual overrides when no deal is loaded
-  const [manualRevenue, setManualRevenue] = useState<number>(0);
-  const monthlyRevenue =
-    selectedCalc?.merchant_monthly_revenue && selectedCalc.merchant_monthly_revenue > 0
-      ? selectedCalc.merchant_monthly_revenue
-      : manualRevenue;
+  // If finished loading and the deal doesn't exist, bounce back to calculator
+  useEffect(() => {
+    if (!isLoading && selectedId && !selectedCalc) {
+      toast({ title: 'Deal not found', description: 'Returning to the calculator.', variant: 'destructive' });
+      navigate('/', { replace: true });
+    }
+  }, [isLoading, selectedId, selectedCalc, navigate, toast]);
+
+  // Revenue is always sourced from the loaded deal
+  const monthlyRevenue = selectedCalc?.merchant_monthly_revenue ?? 0;
 
   const positions: Position[] = useMemo(
     () =>
