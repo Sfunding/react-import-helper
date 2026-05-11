@@ -434,15 +434,8 @@ export default function DealLabPage() {
               Understand the ins and outs of this deal — straight, reverse, or a mix on your timeline.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={exportPDF} disabled={noData}>
-              <Download className="w-4 h-4 mr-2" />
-              Export Comparison
-            </Button>
-            {selectedCalc && chosenScenario && (
-              <Button onClick={handleSaveChoice}>Save Selection to Deal</Button>
-            )}
-          </div>
+          <div />
+
         </div>
 
         {isLoading && !selectedCalc && (
