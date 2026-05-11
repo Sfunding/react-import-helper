@@ -204,26 +204,31 @@ export function CommitScenarioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Commit snapshot to Calculator</DialogTitle>
+          <DialogTitle>{isFinal ? 'Commit final state to Calculator' : 'Commit snapshot to Calculator'}</DialogTitle>
           <DialogDescription>
-            Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span>
+            {isFinal
+              ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
+              : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
+            }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
-          <div>
-            <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
-            <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="snap-before" value="before" />
-                <Label htmlFor="snap-before" className="font-normal cursor-pointer">Before this step fires</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="snap-after" value="after" />
-                <Label htmlFor="snap-after" className="font-normal cursor-pointer">After this step fires</Label>
-              </div>
-            </RadioGroup>
-          </div>
+          {!isFinal && (
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
+              <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="snap-before" value="before" />
+                  <Label htmlFor="snap-before" className="font-normal cursor-pointer">Before this step fires</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="snap-after" value="after" />
+                  <Label htmlFor="snap-after" className="font-normal cursor-pointer">After this step fires</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
 
           <div>
             <Label className="text-xs uppercase text-muted-foreground">Settings to carry over</Label>
