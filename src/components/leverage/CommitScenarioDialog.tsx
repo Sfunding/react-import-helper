@@ -71,10 +71,9 @@ export function CommitScenarioDialog({
   // Reset defaults when dialog opens / step changes
   useEffect(() => {
     if (!open || !step || !originalCalc) return;
-    const defaultWhen: 'before' | 'after' = isReverse ? 'before' : 'after';
+    const defaultWhen: 'before' | 'after' = isFinal ? 'after' : (isReverse ? 'before' : 'after');
     setSnapshotWhen(defaultWhen);
     setCarryover('all');
-    // For Custom, pre-check reverse params if reverse
     setCustomKeys({
       rate: !!isReverse,
       feePercent: !!isReverse,
@@ -86,13 +85,13 @@ export function CommitScenarioDialog({
       whiteLabelCompany: false,
     });
 
-    const cpIdx = defaultWhen === 'before' ? (stepIndex ?? 0) : (stepIndex ?? 0) + 1;
-    const cp = scenarioRun.checkpoints[cpIdx] ?? scenarioRun.checkpoints[scenarioRun.checkpoints.length - 1];
-    const snapDate = cp ? format(new Date(), 'MMM d') : '';
-    void snapDate;
-    const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
-    setName(`${originalCalc.name} @ ${stepLabel}`);
-  }, [open, step, originalCalc, isReverse, stepIndex, scenarioRun.checkpoints]);
+    if (isFinal) {
+      setName(`${originalCalc.name} — Final State`);
+    } else {
+      const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
+      setName(`${originalCalc.name} @ ${stepLabel}`);
+    }
+  }, [open, step, originalCalc, isReverse, isFinal, stepIndex, scenarioRun.checkpoints]);
 
   const checkpoint = useMemo(() => {
     if (stepIndex == null) return null;
