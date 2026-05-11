@@ -36,6 +36,7 @@ import {
 import { StepCard } from '@/components/leverage/StepCard';
 import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
 import { ScenarioSummary } from '@/components/leverage/ScenarioSummary';
+import { CommitScenarioDialog } from '@/components/leverage/CommitScenarioDialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
