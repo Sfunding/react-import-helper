@@ -1,68 +1,111 @@
-# Builder Tab Summary-First Restructure
+# Commit Scenario Snapshot to Calculator
 
-## Goal
-Make the Builder tab open to a clean underwriter-friendly summary (start → sequence → end), with the existing step-card editor hidden behind a "Show steps" toggle.
+Spec as previously approved, with Section 3 recurring-straight fundedDate fix applied.
 
-## Files touched
-- `src/pages/DealLab.tsx` (rename existing panel + add new summary + toggle wiring)
-- `src/components/leverage/ScenarioSummary.tsx` (new)
+## Files
 
-## 1. Rename existing builder
-In `src/pages/DealLab.tsx`, rename `ScenarioBuilderPanel` → `ScenarioStepEditor`. Strip from this component:
-- the header card with the Add Step dropdown + Export PDF (lines ~586–617) — these move to the always-visible top bar in section 3
-- the 5-tile end-state strip (lines ~619–645) — moves into the new summary
-- the `ScenarioSparkline` (line ~647) — moves into the new summary
+- `supabase/migrations/*` — add `parent_calculation_id`
+- `src/types/calculation.ts` — add field to `SavedCalculation`
+- `src/lib/leverageMath.ts` — add `checkpointToPositions`
+- `src/hooks/useCalculations.ts` — add `commitScenarioMutation`
+- `src/components/leverage/CommitScenarioDialog.tsx` — new
+- `src/pages/DealLab.tsx` — wire commit triggers in sequence rows + step card menus
+- `src/pages/SavedCalculations.tsx` — include `parent_calculation_id` and parent name in load payload
+- `src/pages/Index.tsx` — render "↩ Derived from …" breadcrumb when present
 
-Keep: the empty-state card and the per-step `StepCard` + `AfterStepRow` rendering loop.
-
-## 2. New `ScenarioSummary` component
-Props: `{ scenario, scenarioRun, monthlyRevenue, onJumpToStep(idx) }`.
-
-Three stacked sections plus the existing sparkline:
-
-**a. Starting state card** — single card titled "Starting state · As of today". Source: `scenarioRun.checkpoints[0]`. Show: Total Balance, Daily, Weekly (= daily × 5), Leverage badge (band coloring reused from `AfterStepRow`), Burden badge.
-
-**b. Sequence panel** — card titled "Sequence".
-- If `scenario.steps.length === 0`: muted "Add a step above to start modeling".
-- Otherwise: one button-row per step. Layout: `<date> · <action> → <delta>`.
-  - Date: `step.runOn` if set; else compute by accumulating prior-step durations using `addBusinessDays(today, checkpoint.dayOffset)` from `dateUtils`. For wait steps, render the after-checkpoint date.
-  - Action: the engine-emitted `Checkpoint.stepLabel` (fallback: step.kind label).
-  - Delta: two pieces — `cashToMerchantStep` (signed, colored) and Δdaily = `after.totalDaily - before.totalDaily` (signed; negative is good).
-- Each row is a button (keyboard accessible) calling `onJumpToStep(idx)`.
-
-**c. Sparkline** — render `<ScenarioSparkline>` between Sequence and Ending state, with `weeklyExposure` + `stepMarkers` (move marker-build logic out of `ScenarioStepEditor` into the summary).
-
-**d. Ending state card** — titled "Ending state". Two-column side-by-side: left = starting metrics, right = `scenarioRun.finalState` metrics (balance/daily/weekly/leverage/burden). Below, a 3-tile journey-stats row:
-- Peak Combined Exposure → `scenarioRun.peakCombinedExposure`
-- Total Cash to Merchant → `finalState.cashToMerchantCumulative` (color emerald/rose by sign)
-- Total Profit → `finalState.profitCumulative`
-
-Hide sparkline + ending state when `scenario.steps.length === 0`.
-
-## 3. Builder tab wiring (DealLab.tsx, around lines 527–540)
-Replace the single `<ScenarioBuilderPanel …/>` with:
-
-```text
-<TopActionsBar>   // single always-visible card: Add Step dropdown + Export PDF + "Show steps" Switch
-<ScenarioSummary scenario scenarioRun monthlyRevenue onJumpToStep />
-{showSteps && <ScenarioStepEditor … />}
-<ScenarioStory … />   // unchanged
+## 1. Schema
+```sql
+ALTER TABLE saved_calculations
+  ADD COLUMN parent_calculation_id uuid REFERENCES saved_calculations(id) ON DELETE SET NULL;
+CREATE INDEX idx_saved_calculations_parent ON saved_calculations(parent_calculation_id);
 ```
 
-State: `const [showSteps, setShowSteps] = useState(false)`. Toggle is a shadcn `Switch` labeled "Show steps". The Add Step dropdown and Export PDF button live **only** in this top bar — they no longer appear inside `ScenarioStepEditor`.
+## 2. Types
+`SavedCalculation.parent_calculation_id: string | null`.
 
-## 4. Click-through from sequence row
-- Lift `stepRefs = useRef<Record<string, HTMLDivElement | null>>({})` into the DealLab Builder block. Pass it down to `ScenarioStepEditor`, which attaches `ref={el => stepRefs.current[step.id] = el}` on the wrapper div around each `StepCard`.
-- `onJumpToStep(idx)`:
-  1. `setShowSteps(true)`
-  2. `requestAnimationFrame(() => stepRefs.current[scenario.steps[idx].id]?.scrollIntoView({ behavior:'smooth', block:'center' }))`
-  3. Set `focusedStepId` state, cleared after ~1.5s; `StepCard` wrapper applies `ring-2 ring-primary` while matched.
+## 3. `checkpointToPositions(checkpoint, scenarioSteps, originalPositions, today, checkpoints)`
 
-## 5. Acceptance
-- 3-step scenario, default view: start card → 3 sequence rows → sparkline → end card with side-by-side + 3 journey tiles. Step cards hidden.
-- Toggle Switch on → step cards render below summary.
-- Click a sequence row → toggle flips on, target step scrolls into view with ring highlight.
-- 0-step scenario → start card + "Add a step above to start modeling"; sparkline + ending card hidden.
+```ts
+export function checkpointToPositions(
+  checkpoint: Checkpoint,
+  scenarioSteps: ScenarioStep[],
+  originalPositions: Position[],
+  today: Date,
+  checkpoints: Checkpoint[]
+): { positions: Position[]; asOfDate: string }
+```
+
+Helpers inside:
+```ts
+const stepEmitOffset = (stepId: string) => {
+  const idx = scenarioSteps.findIndex(s => s.id === stepId);
+  // Engine emits one checkpoint per step at checkpoints[idx + 1] (checkpoints[0] is the start state).
+  // For instant steps this offset IS the fire offset. For recurring, it's the LAST fire offset.
+  return checkpoints[idx + 1]?.dayOffset ?? checkpoint.dayOffset;
+};
+const fundedDateFor = (offset: number) => format(addBusinessDays(today, offset), 'yyyy-MM-dd');
+```
+
+Per `ActivePosition` (skip when `balance <= 0`):
+
+- **`original`**: match by `originalId`. Carry `entity, fundedDate, amountFunded, isOurPosition, frequency, weeklyPullDay, includeInReverse`. Overwrite `balance` and `dailyPayment` from active.
+
+- **`straight-rtr` single-fire** (id `straight-{stepId}`):
+  - `fundedOffset = stepEmitOffset(stepId)` (instant — emit-checkpoint == fire).
+  - `fundedDate = step.runOn ?? fundedDateFor(fundedOffset)`.
+
+- **`straight-rtr` recurring** (id `rstraight-{stepId}-{N}`, N is 1-indexed):
+  - Find step + `idx`.
+  - **Fix:** `firstFireOffset = checkpoints[idx + 1].dayOffset - (step.count - 1) * step.cadenceWeeks * 5`. (The emit-checkpoint sits at the LAST fire, not the first.)
+  - `fundedOffset = firstFireOffset + (N - 1) * step.cadenceWeeks * 5`.
+  - `fundedDate = fundedDateFor(fundedOffset)` — recurring always uses computed per-N offset; `step.runOn` is not honored for recurring fires.
+
+  Both straight cases: `entity` = step.funderName || 'Straight RTR'; `amountFunded` = step.grossFunding || step.amountEach; `isOurPosition: false`; `includeInReverse: true`; `frequency` from step.paymentCadence.
+
+- **`outside-added`** (`add-{stepId}`): instant. `fundedDate = step.runOn ?? fundedDateFor(stepEmitOffset(stepId))`. `entity` = step.entity; `amountFunded: null`; `isOurPosition: false`; `includeInReverse: true`; `frequency: 'daily'`.
+
+- **`reverse-rtr`** (`rev-{stepId}`): instant. `fundedDate = step.runOn ?? fundedDateFor(stepEmitOffset(stepId))`. `entity` = step.funderName || 'Reverse RTR'; `amountFunded` = totalFunding (gross of fees); `isOurPosition: false`; `includeInReverse: false`; `frequency: 'daily'`.
+
+New numeric ids start at `Math.max(...originalPositions.map(p => p.id), 0) + 1`. `asOfDate = fundedDateFor(checkpoint.dayOffset)`.
+
+All scenario-sourced positions land with `isOurPosition: false` regardless of funder name strings.
+
+## 4. `commitScenarioMutation` in `useCalculations.ts`
+Inserts a row with `parent_calculation_id = params.parentId`. On success: invalidate `saved-calculations`, log `commit_scenario` audit event, return the new row.
+
+## 5. `CommitScenarioDialog`
+Props: `{ open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc }`.
+
+Body:
+- Read-only: `Snapshot at: Step {N} — {step label}`
+- **Snapshot state** radio: "Before this step fires" (default for reverse) / "After this step fires" (default for everything else).
+- **Settings carryover** radio:
+  - "Reverse params only" — defaults + step's reverse params (factor/fee/dailyDecrease) if reverse.
+  - "All settings from original deal" (default) — copy `originalCalc.settings`; if reverse, override factor/fee/dailyDecrease with step values.
+  - "Custom" — checkbox list (rate, feePercent, dailyPaymentDecrease, brokerCommission, fee schedule, fee schedule percent, earlyPayOptions, whiteLabelCompany). Checked = original, unchecked = default. If reverse, factor/fee/dailyDecrease pre-checked and overridden with step values.
+- **Name** text input, prefilled `"{originalCalc.name} @ {snapshotDate} {stepLabel}"`.
+- Footer: Cancel / Commit to Calculator.
+
+On commit:
+1. `checkpoint = scenarioRun.checkpoints[ before ? stepIndex : stepIndex + 1 ]`.
+2. `{positions, asOfDate} = checkpointToPositions(checkpoint, scenario.steps, originalCalc.positions, new Date(), scenarioRun.checkpoints)`.
+3. Build `settings` per carryover.
+4. `merchant` from `originalCalc.merchant_*`.
+5. `stackTotals(positions)` for totals.
+6. Call mutation. On success: write `loadCalculation` payload to `sessionStorage` (id/name/merchant/settings/positions/as_of_date/parent_calculation_id/parent_name), `navigate('/')`, close dialog.
+
+## 6. DealLab triggers
+Shared state: `const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null)`.
+- `ScenarioSummary` Sequence row: small Lucide `GitBranch` icon button on far right, tooltip "Commit to Calculator".
+- `StepCard` per-step dropdown menu: new "Commit to Calculator" item.
+- Render `<CommitScenarioDialog open={commitStepIndex != null} stepIndex={commitStepIndex ?? 0} … />`.
+- Disabled when `originalCalc` isn't loaded yet (unsaved Deal Lab session).
+
+## 7. "Derived from" breadcrumb in Index
+Above merchant info, when loaded calc has `parent_calculation_id`: muted line `↩ Derived from <parent name>`. Parent name is a button that triggers the same `loadCalculation` flow against the parent id. Parent name comes via the `loadCalculation` payload on commit; on hard refresh, fetch by id from `saved_calculations`.
+
+## Acceptance
+Per spec: 3-step scenario, Commit on reverse row → dialog defaults to "Before"/"All settings"/prefilled name → Calculator opens with projected positions, as-of = step date, factor/fee/decrease from the reverse, other settings from parent, breadcrumb visible and navigates back. Add-position step defaults to "After". A 4-fire weekly recurring straight produces 4 positions with `fundedDate` at D_first, D_first+5, D_first+10, D_first+15 (last fire = step's emit-checkpoint offset). All scenario-sourced positions land with `isOurPosition: false`. New deal appears in Saved Calculations.
 
 ## Out of scope
-Engine math, new step kinds, Current Position card, as-of-date display, ScenarioStory, ScenarioTabs.
+Children list on parent, cascading-commit UI, bulk commit, auto-detection of `isOurPosition`.
