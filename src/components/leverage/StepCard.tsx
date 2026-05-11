@@ -100,28 +100,48 @@ export function StepCard({
   return (
     <Card className="border-l-4" style={{ borderLeftColor: 'hsl(var(--primary))' }}>
       <CardContent className="pt-4 space-y-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className={meta.color}>
             <span className="mr-1 inline-flex">{meta.icon}</span>
             Step {index + 1} · {meta.label}
           </Badge>
-          <div className="flex-1" />
-          <Button size="icon" variant="ghost" onClick={() => onMove(-1)} disabled={index === 0}>
-            <ArrowUp className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => onMove(1)} disabled={index === total - 1}>
-            <ArrowDown className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onDuplicate}>
-            <Copy className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onDelete}>
-            <Trash2 className="w-4 h-4 text-rose-600" />
-          </Button>
+          <Input
+            value={step.label ?? ''}
+            placeholder="Add a nickname (e.g. 'Bridge funding')"
+            onChange={(e) => onChange({ ...step, label: e.target.value || undefined } as ScenarioStep)}
+            className="h-8 text-sm max-w-xs flex-1 min-w-[160px]"
+          />
+          <div className="flex items-center">
+            <Button size="icon" variant="ghost" onClick={() => onMove(-1)} disabled={index === 0}>
+              <ArrowUp className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => onMove(1)} disabled={index === total - 1}>
+              <ArrowDown className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={onDuplicate}>
+              <Copy className="w-4 h-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={onDelete}>
+              <Trash2 className="w-4 h-4 text-rose-600" />
+            </Button>
+          </div>
         </div>
 
         {step.kind !== 'wait' && (
-          <StepDatePicker step={step} onChange={onChange} />
+          <div className="flex flex-wrap items-end gap-3">
+            <StepDatePicker step={step} onChange={onChange} />
+            {(step.kind === 'straight' || step.kind === 'reverse') && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs whitespace-nowrap">Funder</Label>
+                <Input
+                  value={step.funderName ?? ''}
+                  placeholder={step.kind === 'reverse' ? 'e.g. Avion Funding' : 'e.g. Velocity Capital'}
+                  onChange={(e) => onChange({ ...step, funderName: e.target.value || undefined } as ScenarioStep)}
+                  className="h-8 text-sm w-48"
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {step.kind === 'straight' && (

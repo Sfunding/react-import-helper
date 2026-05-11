@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { useCalculations } from '@/hooks/useCalculations';
 import { ArrowLeft } from 'lucide-react';
+import { useDealScenarios } from '@/hooks/useDealScenarios';
+import { ScenarioTabs } from '@/components/leverage/ScenarioTabs';
+import { ScenarioStory } from '@/components/leverage/ScenarioStory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -285,32 +288,120 @@ export default function DealLabPage() {
   const winner: ScenarioKind = chosenScenario ?? recommendation;
 
   // ---------------- Scenario Builder ----------------
+
+  // ---------------- Multi-scenario plumbing ----------------
+  const {
+    rows: scenarioRows,
+    isLoading: scenariosLoading,
+    createScenario: createScenarioRow,
+    updateScenario: updateScenarioRow,
+    deleteScenario: deleteScenarioRow,
+  } = useDealScenarios(selectedCalc?.id);
+
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [compareScenarioId, setCompareScenarioId] = useState<string | null>(null);
+  const [lastSavedJson, setLastSavedJson] = useState<string>('');
+  const [hasBootstrappedLegacy, setHasBootstrappedLegacy] = useState(false);
+
+  // When the deal loads, pick a scenario to display:
+  // 1) If we have rows, pick the pinned-or-first one.
+  // 2) If no rows but the legacy `recommended_scenario` exists, create one row from it (auto-migrate).
+  // 3) Otherwise, create a fresh "Untitled Scenario" row.
+  React.useEffect(() => {
+    if (!selectedCalc || scenariosLoading) return;
+    if (activeScenarioId && scenarioRows.some(r => r.id === activeScenarioId)) return;
+    if (scenarioRows.length > 0) {
+      const pinned = scenarioRows.find(r => r.is_pinned) ?? scenarioRows[0];
+      setActiveScenarioId(pinned.id);
+      setScenario(pinned.scenario);
+      setLastSavedJson(JSON.stringify(pinned.scenario));
+      return;
+    }
+    if (hasBootstrappedLegacy) return;
+    setHasBootstrappedLegacy(true);
+    const legacy = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
+      .recommended_scenario;
+    const seed = (legacy?.scenario && Array.isArray(legacy.scenario.steps)) ? legacy.scenario : newScenario();
+    (async () => {
+      const created = await createScenarioRow(legacy?.scenario ? 'Saved scenario' : 'Untitled Scenario', seed);
+      if (created) {
+        setActiveScenarioId(created.id);
+        setScenario(created.scenario);
+        setLastSavedJson(JSON.stringify(created.scenario));
+      }
+    })();
+  }, [selectedCalc, scenariosLoading, scenarioRows, activeScenarioId, hasBootstrappedLegacy, createScenarioRow]);
+
+  // Switch active scenario → load its data
+  const handleSelectScenario = (id: string) => {
+    const row = scenarioRows.find(r => r.id === id);
+    if (!row) return;
+    setActiveScenarioId(id);
+    setScenario(row.scenario);
+    setLastSavedJson(JSON.stringify(row.scenario));
+  };
+
+  const handleCreateScenario = async () => {
+    const created = await createScenarioRow('New scenario', newScenario());
+    if (created) {
+      setActiveScenarioId(created.id);
+      setScenario(created.scenario);
+      setLastSavedJson(JSON.stringify(created.scenario));
+    }
+  };
+
+  const handleDuplicateScenario = async (id: string) => {
+    const src = scenarioRows.find(r => r.id === id);
+    if (!src) return;
+    const copy: Scenario = { ...src.scenario, id: Math.random().toString(36).slice(2, 10) };
+    const created = await createScenarioRow(`${src.name} (copy)`, copy);
+    if (created) {
+      setActiveScenarioId(created.id);
+      setScenario(created.scenario);
+      setLastSavedJson(JSON.stringify(created.scenario));
+    }
+  };
+
+  const handleRenameScenario = async (id: string, name: string) => {
+    await updateScenarioRow(id, { name });
+  };
+
+  const handleDeleteScenario = async (id: string) => {
+    if (scenarioRows.length <= 1) return;
+    const ok = await deleteScenarioRow(id);
+    if (ok && id === activeScenarioId) {
+      const remaining = scenarioRows.filter(r => r.id !== id);
+      const next = remaining[0];
+      if (next) {
+        setActiveScenarioId(next.id);
+        setScenario(next.scenario);
+        setLastSavedJson(JSON.stringify(next.scenario));
+      }
+    }
+  };
+
   const scenarioRun = useMemo(
     () => runScenario(positions, scenario, monthlyRevenue),
     [positions, scenario, monthlyRevenue]
   );
 
-  // Reset scenario when deal changes; try to load saved scenario from row
-  React.useEffect(() => {
-    if (!selectedCalc) {
-      setScenario(newScenario());
-      return;
-    }
-    const saved = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
-      .recommended_scenario;
-    if (saved?.scenario && Array.isArray(saved.scenario.steps)) {
-      setScenario(saved.scenario);
-    } else {
-      setScenario(newScenario());
-    }
-  }, [selectedCalc]);
+  // Compare-mode: compute the second run
+  const compareRow = useMemo(
+    () => scenarioRows.find(r => r.id === compareScenarioId),
+    [scenarioRows, compareScenarioId]
+  );
+  const compareRun = useMemo(
+    () => compareRow ? runScenario(positions, compareRow.scenario, monthlyRevenue) : null,
+    [positions, compareRow, monthlyRevenue]
+  );
+
+  const isDirty = activeScenarioId !== null && JSON.stringify(scenario) !== lastSavedJson;
 
   const updateStep = (idx: number, next: ScenarioStep) =>
     setScenario(s => ({ ...s, steps: s.steps.map((st, i) => (i === idx ? next : st)) }));
 
   const addStep = (kind: StepKind) => {
     const newStep = makeStep(kind);
-    // For reverse: pre-select all active positions at that point
     if (newStep.kind === 'reverse') {
       const activeBefore = scenarioRun.checkpoints[scenarioRun.checkpoints.length - 1]?.activePositions ?? [];
       newStep.includedPositionIds = activeBefore.map(p => p.id);
@@ -333,21 +424,11 @@ export default function DealLabPage() {
     setScenario(s => ({ ...s, steps: s.steps.filter((_, i) => i !== idx) }));
 
   const saveScenarioToDeal = async () => {
-    if (!selectedCalc) return;
-    const payload = {
-      scenario,
-      checkpoints: scenarioRun.checkpoints,
-      savedAt: new Date().toISOString(),
-    };
-    const { error } = await supabase
-      .from('saved_calculations')
-      // recommended_scenario is jsonb; cast through unknown to bypass strict typing
-      .update({ recommended_scenario: payload } as unknown as Record<string, unknown>)
-      .eq('id', selectedCalc.id);
-    if (error) {
-      toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Scenario saved', description: `${scenario.name} saved to deal.` });
+    if (!activeScenarioId) return;
+    const ok = await updateScenarioRow(activeScenarioId, { scenario });
+    if (ok) {
+      setLastSavedJson(JSON.stringify(scenario));
+      toast({ title: 'Scenario saved', description: `${scenario.name || 'Scenario'} saved to deal.` });
     }
   };
 
@@ -1013,20 +1094,53 @@ export default function DealLabPage() {
               </TabsContent>
 
               <TabsContent value="builder" className="mt-4 space-y-4">
-                <ScenarioBuilderPanel
-                  scenario={scenario}
-                  setScenario={setScenario}
-                  scenarioRun={scenarioRun}
-                  monthlyRevenue={monthlyRevenue}
-                  onAddStep={addStep}
-                  onUpdateStep={updateStep}
-                  onMoveStep={moveStep}
-                  onDuplicateStep={duplicateStep}
-                  onDeleteStep={deleteStep}
-                  onSave={saveScenarioToDeal}
-                  onExport={exportScenarioPDF}
-                  canSave={!!selectedCalc}
+                <ScenarioTabs
+                  rows={scenarioRows}
+                  activeId={activeScenarioId}
+                  dirty={isDirty}
+                  onSelect={handleSelectScenario}
+                  onCreate={handleCreateScenario}
+                  onRename={handleRenameScenario}
+                  onDuplicate={handleDuplicateScenario}
+                  onDelete={handleDeleteScenario}
+                  compareId={compareScenarioId}
+                  onSetCompare={setCompareScenarioId}
                 />
+
+                {compareScenarioId && compareRun && compareRow ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                        {scenarioRows.find(r => r.id === activeScenarioId)?.name || 'Active'}
+                      </div>
+                      <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                        {compareRow.name}
+                      </div>
+                      <ScenarioStory scenario={compareRow.scenario} checkpoints={compareRun.checkpoints} />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ScenarioBuilderPanel
+                      scenario={scenario}
+                      setScenario={setScenario}
+                      scenarioRun={scenarioRun}
+                      monthlyRevenue={monthlyRevenue}
+                      onAddStep={addStep}
+                      onUpdateStep={updateStep}
+                      onMoveStep={moveStep}
+                      onDuplicateStep={duplicateStep}
+                      onDeleteStep={deleteStep}
+                      onSave={saveScenarioToDeal}
+                      onExport={exportScenarioPDF}
+                      canSave={!!selectedCalc && !!activeScenarioId}
+                    />
+                    <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
+                  </>
+                )}
               </TabsContent>
             </Tabs>
           </>
