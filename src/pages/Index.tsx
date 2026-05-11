@@ -213,6 +213,11 @@ export default function Index() {
         
         if (loadedPositions) setPositions(loadedPositions);
         
+        // Hydrate as-of date: prefer explicit field, fallback to created_at::date or today
+        const loadedAsOf: string = data.as_of_date
+          || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+        setAsOfDate(loadedAsOf);
+
         // Track the loaded calculation ID and name for updates
         if (data.id) {
           setLoadedCalculationId(data.id);
@@ -224,7 +229,8 @@ export default function Index() {
         setLastSavedState(JSON.stringify({ 
           merchant: data.merchant || DEFAULT_MERCHANT, 
           settings: data.settings || DEFAULT_SETTINGS, 
-          positions: loadedPositions || [] 
+          positions: loadedPositions || [],
+          asOfDate: loadedAsOf,
         }));
         toast({
           title: 'Calculation loaded',
