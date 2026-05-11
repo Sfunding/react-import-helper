@@ -163,8 +163,9 @@ export function useCalculations(filterUserId?: string | null) {
           settings: params.calculation.settings,
           positions: params.calculation.positions,
           total_balance: params.calculation.total_balance,
-          total_daily_payment: params.calculation.total_daily_payment
-        })
+          total_daily_payment: params.calculation.total_daily_payment,
+          as_of_date: new Date().toISOString().slice(0, 10),
+        } as any)
         .select()
         .single();
 
