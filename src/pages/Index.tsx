@@ -45,6 +45,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
 
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
 
@@ -56,6 +59,7 @@ export default function Index() {
   const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [asOfDate, setAsOfDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<TabType>('positions');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
@@ -94,7 +98,7 @@ export default function Index() {
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
-    const currentState = JSON.stringify({ merchant, settings, positions });
+    const currentState = JSON.stringify({ merchant, settings, positions, asOfDate });
     // If we have data (positions or merchant name or settings changed from default)
     const hasData = positions.length > 0 || 
                     merchant.name !== '' || 
@@ -108,7 +112,7 @@ export default function Index() {
     
     // Compare current state to last saved state
     return currentState !== lastSavedState;
-  }, [merchant, settings, positions, lastSavedState]);
+  }, [merchant, settings, positions, asOfDate, lastSavedState]);
 
   // Handle navigation with unsaved changes check
   const handleNavigation = useCallback((path: string) => {
@@ -212,6 +216,11 @@ export default function Index() {
         
         if (loadedPositions) setPositions(loadedPositions);
         
+        // Hydrate as-of date: prefer explicit field, fallback to created_at::date or today
+        const loadedAsOf: string = data.as_of_date
+          || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+        setAsOfDate(loadedAsOf);
+
         // Track the loaded calculation ID and name for updates
         if (data.id) {
           setLoadedCalculationId(data.id);
@@ -223,7 +232,8 @@ export default function Index() {
         setLastSavedState(JSON.stringify({ 
           merchant: data.merchant || DEFAULT_MERCHANT, 
           settings: data.settings || DEFAULT_SETTINGS, 
-          positions: loadedPositions || [] 
+          positions: loadedPositions || [],
+          asOfDate: loadedAsOf,
         }));
         toast({
           title: 'Calculation loaded',
@@ -651,10 +661,11 @@ export default function Index() {
       settings,
       positions,
       totalBalance,
-      totalDailyPayment: totalCurrentDailyPayment
+      totalDailyPayment: totalCurrentDailyPayment,
+      asOfDate,
     });
     // Mark current state as saved
-    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
     clearDraft();
     
     // Clear loaded ID since this is now a new calculation
@@ -726,11 +737,12 @@ export default function Index() {
       settings,
       positions,
       totalBalance,
-      totalDailyPayment: totalCurrentDailyPayment
+      totalDailyPayment: totalCurrentDailyPayment,
+      asOfDate,
     });
     
     // Mark current state as saved
-    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
     setLoadedCalculationName(name);
     clearDraft();
     
@@ -836,9 +848,10 @@ export default function Index() {
     positions,
     totalBalance,
     totalDailyPayment: totalCurrentDailyPayment,
+    asOfDate,
     hasUnsavedChanges: isDirty,
     onSaved: () => {
-      setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+      setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
       clearDraft();
     },
     updateCalculation,
@@ -995,6 +1008,36 @@ export default function Index() {
               <div className="text-lg font-bold">{fmt(totalCurrentDailyPayment)}</div>
             </div>
           </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-semibold uppercase tracking-wide">Positions as of</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 px-2 font-normal",
+                  !asOfDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                {asOfDate ? format(new Date(asOfDate + 'T00:00:00'), 'MMM d, yyyy') : 'Pick a date'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={asOfDate ? new Date(asOfDate + 'T00:00:00') : undefined}
+                onSelect={(d) => d && setAsOfDate(format(d, 'yyyy-MM-dd'))}
+                disabled={(date) => date > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          <span className="text-[11px]">— balances will be projected forward to today in the Deal Lab.</span>
         </div>
       </div>
 

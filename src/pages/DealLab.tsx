@@ -20,8 +20,11 @@ import {
   snapshot,
   stackTotals,
   runScenario,
+  projectStackToDate,
   LeverageBand,
 } from '@/lib/leverageMath';
+import { format } from 'date-fns';
+import { getBusinessDaysBetween } from '@/lib/dateUtils';
 import {
   Scenario,
   ScenarioStep,
@@ -125,7 +128,32 @@ export default function DealLabPage() {
     [selectedCalc]
   );
 
-  const totals = stackTotals(positions);
+  // As-of date stamped on the deal (fallback to created_at::date for legacy rows)
+  const asOfDate: string = useMemo(() => {
+    const stamped = (selectedCalc as unknown as { as_of_date?: string | null } | undefined)?.as_of_date;
+    if (stamped) return stamped;
+    const created = selectedCalc?.created_at;
+    return created ? String(created).slice(0, 10) : format(new Date(), 'yyyy-MM-dd');
+  }, [selectedCalc]);
+
+  const todayIso = format(new Date(), 'yyyy-MM-dd');
+
+  // Project the saved stack forward to today. All downstream lenses run against this.
+  const projectedPositions = useMemo(
+    () => projectStackToDate(positions, asOfDate, todayIso),
+    [positions, asOfDate, todayIso]
+  );
+
+  const businessDaysSinceAsOf = useMemo(() => {
+    const a = new Date(asOfDate + 'T00:00:00');
+    const t = new Date(todayIso + 'T00:00:00');
+    if (Number.isNaN(a.getTime()) || t <= a) return 0;
+    return getBusinessDaysBetween(a, t);
+  }, [asOfDate, todayIso]);
+
+  const totals = stackTotals(positions);              // stored
+  const projectedTotals = stackTotals(projectedPositions); // projected to today
+  const weeklyPositions = positions.filter(p => p.frequency === 'weekly');
 
 
   // ---------------- Scenario Builder ----------------
@@ -250,7 +278,7 @@ export default function DealLabPage() {
   };
 
   const scenarioRun = useMemo(
-    () => runScenario(positions, scenario, monthlyRevenue),
+    () => runScenario(projectedPositions, scenario, monthlyRevenue),
     [positions, scenario, monthlyRevenue]
   );
 
@@ -392,6 +420,7 @@ export default function DealLabPage() {
                     settings: selectedCalc.settings,
                     positions: selectedCalc.positions,
                     funded_at: (selectedCalc as unknown as { funded_at?: string | null }).funded_at || null,
+                    as_of_date: (selectedCalc as unknown as { as_of_date?: string | null }).as_of_date || null,
                   }));
                 }
                 navigate('/');
@@ -438,24 +467,46 @@ export default function DealLabPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Current Position</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Open Balance</div>
-                  <div className="text-xl font-bold">{fmt(totals.totalBalance)}</div>
+              <CardContent className="space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold">As of {format(new Date(asOfDate + 'T00:00:00'), 'MMM d, yyyy')}:</span>{' '}
+                  {fmt(totals.totalBalance)} balance / {fmt(totals.totalDaily)}/day
                 </div>
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Total Daily Debits</div>
-                  <div className="text-xl font-bold">{fmt(totals.totalDaily)}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Weekly {fmt(totals.totalDaily * 5)} / Monthly {fmt(totals.totalDaily * 22)}
+                {businessDaysSinceAsOf > 0 && (
+                  <>
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        Projected to today ({businessDaysSinceAsOf} business {businessDaysSinceAsOf === 1 ? 'day' : 'days'} later):
+                      </span>{' '}
+                      {fmt(projectedTotals.totalBalance)} / {fmt(projectedTotals.totalDaily)}/day
+                    </div>
+                    {weeklyPositions.length > 0 && (
+                      <div className="text-[11px] text-muted-foreground italic">
+                        {weeklyPositions.map(p => p.entity || `Position ${p.id}`).join(', ')}{' '}
+                        <span className="opacity-70">(weekly — not projected)</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-xs text-muted-foreground">Open Balance</div>
+                    <div className="text-xl font-bold">{fmt(projectedTotals.totalBalance)}</div>
                   </div>
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-xs text-muted-foreground">Total Daily Debits</div>
+                    <div className="text-xl font-bold">{fmt(projectedTotals.totalDaily)}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Weekly {fmt(projectedTotals.totalDaily * 5)} / Monthly {fmt(projectedTotals.totalDaily * 22)}
+                    </div>
+                  </div>
+                  <MetricsBlock
+                    title="Today"
+                    totalBalance={projectedTotals.totalBalance}
+                    totalDaily={projectedTotals.totalDaily}
+                    monthlyRevenue={monthlyRevenue}
+                  />
                 </div>
-                <MetricsBlock
-                  title="Today"
-                  totalBalance={totals.totalBalance}
-                  totalDaily={totals.totalDaily}
-                  monthlyRevenue={monthlyRevenue}
-                />
               </CardContent>
             </Card>
 

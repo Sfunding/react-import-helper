@@ -188,6 +188,7 @@ export type Database = {
       }
       saved_calculations: {
         Row: {
+          as_of_date: string | null
           created_at: string
           funded_at: string | null
           id: string
@@ -204,6 +205,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          as_of_date?: string | null
           created_at?: string
           funded_at?: string | null
           id?: string
@@ -220,6 +222,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          as_of_date?: string | null
           created_at?: string
           funded_at?: string | null
           id?: string

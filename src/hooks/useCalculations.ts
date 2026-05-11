@@ -41,6 +41,7 @@ export function useCalculations(filterUserId?: string | null) {
       positions: Position[];
       totalBalance: number;
       totalDailyPayment: number;
+      asOfDate?: string | null;
     }) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('Not authenticated');
@@ -56,8 +57,9 @@ export function useCalculations(filterUserId?: string | null) {
           settings: params.settings,
           positions: params.positions,
           total_balance: params.totalBalance,
-          total_daily_payment: params.totalDailyPayment
-        })
+          total_daily_payment: params.totalDailyPayment,
+          as_of_date: params.asOfDate ?? new Date().toISOString().slice(0, 10),
+        } as any)
         .select()
         .single();
 
@@ -109,19 +111,22 @@ export function useCalculations(filterUserId?: string | null) {
       positions: Position[];
       totalBalance: number;
       totalDailyPayment: number;
+      asOfDate?: string | null;
     }) => {
+      const updatePayload: Record<string, unknown> = {
+        name: params.name,
+        merchant_name: params.merchant.name,
+        merchant_business_type: params.merchant.businessType,
+        merchant_monthly_revenue: params.merchant.monthlyRevenue,
+        settings: params.settings,
+        positions: params.positions,
+        total_balance: params.totalBalance,
+        total_daily_payment: params.totalDailyPayment,
+      };
+      if (params.asOfDate !== undefined) updatePayload.as_of_date = params.asOfDate;
       const { data, error } = await supabase
         .from('saved_calculations')
-        .update({
-          name: params.name,
-          merchant_name: params.merchant.name,
-          merchant_business_type: params.merchant.businessType,
-          merchant_monthly_revenue: params.merchant.monthlyRevenue,
-          settings: params.settings,
-          positions: params.positions,
-          total_balance: params.totalBalance,
-          total_daily_payment: params.totalDailyPayment
-        })
+        .update(updatePayload as any)
         .eq('id', params.id)
         .select()
         .single();
@@ -158,8 +163,9 @@ export function useCalculations(filterUserId?: string | null) {
           settings: params.calculation.settings,
           positions: params.calculation.positions,
           total_balance: params.calculation.total_balance,
-          total_daily_payment: params.calculation.total_daily_payment
-        })
+          total_daily_payment: params.calculation.total_daily_payment,
+          as_of_date: new Date().toISOString().slice(0, 10),
+        } as any)
         .select()
         .single();
 

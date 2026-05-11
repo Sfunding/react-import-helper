@@ -38,6 +38,7 @@ export function useAutoSave(args: {
   positions: Position[];
   totalBalance: number;
   totalDailyPayment: number;
+  asOfDate?: string | null;
   hasUnsavedChanges: boolean;
   onSaved: () => void;
   updateCalculation: (params: {
@@ -48,6 +49,7 @@ export function useAutoSave(args: {
     positions: Position[];
     totalBalance: number;
     totalDailyPayment: number;
+    asOfDate?: string | null;
   }) => Promise<unknown>;
 }): {
   status: AutoSaveStatus;
@@ -63,6 +65,7 @@ export function useAutoSave(args: {
     positions,
     totalBalance,
     totalDailyPayment,
+    asOfDate,
     hasUnsavedChanges,
     onSaved,
     updateCalculation,
@@ -92,6 +95,7 @@ export function useAutoSave(args: {
           positions,
           totalBalance,
           totalDailyPayment,
+          asOfDate,
         });
         setStatus('saved');
         setLastSavedAt(Date.now());
@@ -111,7 +115,7 @@ export function useAutoSave(args: {
       if (timer.current) window.clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, loadedCalculationId, merchant, settings, positions, hasUnsavedChanges]);
+  }, [enabled, loadedCalculationId, merchant, settings, positions, asOfDate, hasUnsavedChanges]);
 
   return { status, lastSavedAt, retry: trigger };
 }
