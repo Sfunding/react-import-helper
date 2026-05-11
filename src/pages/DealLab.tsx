@@ -567,15 +567,17 @@ interface BuilderTabProps {
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
   onExport: () => void;
+  originalCalc: SavedCalculation | null;
 }
 
 function BuilderTab({
   scenario, setScenario, scenarioRun, monthlyRevenue,
   onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
-  onExport,
+  onExport, originalCalc,
 }: BuilderTabProps) {
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
+  const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const handleJumpToStep = useCallback((idx: number) => {
