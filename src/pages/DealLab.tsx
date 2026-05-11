@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { useCalculations } from '@/hooks/useCalculations';
@@ -35,6 +35,9 @@ import {
 } from '@/lib/scenarioTypes';
 import { StepCard } from '@/components/leverage/StepCard';
 import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
+import { ScenarioSummary } from '@/components/leverage/ScenarioSummary';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
@@ -524,7 +527,7 @@ export default function DealLabPage() {
                 onDelete={handleDeleteScenario}
               />
 
-              <ScenarioBuilderPanel
+              <BuilderTab
                 scenario={scenario}
                 setScenario={setScenario}
                 scenarioRun={scenarioRun}
@@ -546,16 +549,12 @@ export default function DealLabPage() {
 }
 
 
-// ---------------- Scenario Builder Panel ----------------
+// ---------------- Builder Tab ----------------
 
 import type { ScenarioRunResult } from '@/lib/scenarioTypes';
 type ScenarioRunResultLite = ScenarioRunResult;
 
-function ScenarioBuilderPanel({
-  scenario, setScenario, scenarioRun, monthlyRevenue,
-  onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
-  onExport,
-}: {
+interface BuilderTabProps {
   scenario: Scenario;
   setScenario: React.Dispatch<React.SetStateAction<Scenario>>;
   scenarioRun: ScenarioRunResultLite;
@@ -566,27 +565,42 @@ function ScenarioBuilderPanel({
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
   onExport: () => void;
-}) {
-  const fs = scenarioRun.finalState;
-  const stepMarkers = useMemo(() => {
-    return scenarioRun.checkpoints
-      .filter(c => c.stepIndex >= 0)
-      .map(c => {
-        const step = scenario.steps[c.stepIndex];
-        return {
-          week: c.weekOffset,
-          label: step ? `S${c.stepIndex + 1}` : '',
-          kind: step?.kind || 'wait',
-        };
+}
+
+function BuilderTab({
+  scenario, setScenario, scenarioRun, monthlyRevenue,
+  onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+  onExport,
+}: BuilderTabProps) {
+  const [showSteps, setShowSteps] = useState(false);
+  const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
+  const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const handleJumpToStep = useCallback((idx: number) => {
+    const step = scenario.steps[idx];
+    if (!step) return;
+    setShowSteps(true);
+    setFocusedStepId(step.id);
+    requestAnimationFrame(() => {
+      // give the editor a frame to mount
+      requestAnimationFrame(() => {
+        stepRefs.current[step.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
-  }, [scenario.steps, scenarioRun.checkpoints]);
+    });
+    window.setTimeout(() => setFocusedStepId(curr => (curr === step.id ? null : curr)), 1500);
+  }, [scenario.steps]);
 
   return (
     <div className="space-y-4">
+      {/* Top action bar — always visible */}
       <Card>
         <CardContent className="pt-4 flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px] text-sm text-muted-foreground">
             Edits auto-save to this deal. Rename the scenario from its tab above.
+          </div>
+          <div className="flex items-center gap-2 pr-2 border-r border-border">
+            <Switch id="show-steps" checked={showSteps} onCheckedChange={setShowSteps} />
+            <Label htmlFor="show-steps" className="text-sm cursor-pointer">Show steps</Label>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -616,41 +630,54 @@ function ScenarioBuilderPanel({
         </CardContent>
       </Card>
 
-      {/* Final state summary */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="rounded-md border border-border bg-card p-3">
-          <div className="text-[10px] text-muted-foreground uppercase">End Balance</div>
-          <div className="text-lg font-bold">{fmt(fs.totalBalance)}</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-3">
-          <div className="text-[10px] text-muted-foreground uppercase">End Daily</div>
-          <div className="text-lg font-bold">{fmt(fs.totalDaily)}</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-3">
-          <div className="text-[10px] text-muted-foreground uppercase">End Leverage</div>
-          <div className="text-lg font-bold">{fmtX(fs.balanceLeverage)}</div>
-          <div className="text-[10px] text-muted-foreground">{fmtPct(fs.paymentBurden)} burden</div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-3">
-          <div className="text-[10px] text-muted-foreground uppercase">Total Cash to Merchant</div>
-          <div className={`text-lg font-bold ${fs.cashToMerchantCumulative < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-            {fmt(fs.cashToMerchantCumulative)}
-          </div>
-        </div>
-        <div className="rounded-md border border-border bg-card p-3">
-          <div className="text-[10px] text-muted-foreground uppercase">Cumulative Profit</div>
-          <div className="text-lg font-bold">{fmt(fs.profitCumulative)}</div>
-          <div className="text-[10px] text-muted-foreground">Peak: {fmt(scenarioRun.peakCombinedExposure)}</div>
-        </div>
-      </div>
+      {/* Underwriter-friendly summary */}
+      <ScenarioSummary
+        scenario={scenario}
+        scenarioRun={scenarioRun}
+        monthlyRevenue={monthlyRevenue}
+        onJumpToStep={handleJumpToStep}
+      />
 
-      <ScenarioSparkline weekly={scenarioRun.weeklyExposure} stepMarkers={stepMarkers} />
+      {/* Step editor — behind the toggle */}
+      {showSteps && (
+        <ScenarioStepEditor
+          scenario={scenario}
+          scenarioRun={scenarioRun}
+          monthlyRevenue={monthlyRevenue}
+          stepRefs={stepRefs}
+          focusedStepId={focusedStepId}
+          onUpdateStep={onUpdateStep}
+          onMoveStep={onMoveStep}
+          onDuplicateStep={onDuplicateStep}
+          onDeleteStep={onDeleteStep}
+        />
+      )}
+    </div>
+  );
+}
 
-      {/* Step cards */}
+interface ScenarioStepEditorProps {
+  scenario: Scenario;
+  scenarioRun: ScenarioRunResultLite;
+  monthlyRevenue: number;
+  stepRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+  focusedStepId: string | null;
+  onUpdateStep: (idx: number, s: ScenarioStep) => void;
+  onMoveStep: (idx: number, dir: -1 | 1) => void;
+  onDuplicateStep: (idx: number) => void;
+  onDeleteStep: (idx: number) => void;
+}
+
+function ScenarioStepEditor({
+  scenario, scenarioRun, monthlyRevenue, stepRefs, focusedStepId,
+  onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+}: ScenarioStepEditorProps) {
+  return (
+    <div className="space-y-4">
       {scenario.steps.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Add steps above to build a multi-stage scenario.
+            Add steps from the bar above to build a multi-stage scenario.
             <br />
             Example: <b>Straight MCA</b> (4 wks, $1M, 1.35, 5%) -&gt; <b>Wait</b> 10 wks -&gt; <b>Reverse</b> on whatever remains.
           </CardContent>
@@ -658,11 +685,15 @@ function ScenarioBuilderPanel({
       )}
 
       {scenario.steps.map((step, idx) => {
-        // Active positions BEFORE this step = checkpoint at idx-1 (or start = checkpoints[0])
-        const beforeCp = scenarioRun.checkpoints[idx]; // start checkpoint is at index 0, step 0 sees that
+        const beforeCp = scenarioRun.checkpoints[idx];
         const note = scenarioRun.checkpoints[idx + 1]?.note;
+        const isFocused = focusedStepId === step.id;
         return (
-          <div key={step.id} className="space-y-2">
+          <div
+            key={step.id}
+            ref={el => { stepRefs.current[step.id] = el; }}
+            className={`space-y-2 rounded-lg transition-shadow ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+          >
             <StepCard
               step={step}
               index={idx}
@@ -674,7 +705,6 @@ function ScenarioBuilderPanel({
               onDuplicate={() => onDuplicateStep(idx)}
               onDelete={() => onDeleteStep(idx)}
             />
-            {/* After-step snapshot */}
             <AfterStepRow checkpoint={scenarioRun.checkpoints[idx + 1]} monthlyRevenue={monthlyRevenue} />
           </div>
         );
