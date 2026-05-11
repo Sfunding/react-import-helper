@@ -29,7 +29,7 @@ import {
   EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween, repricedBalance } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween, repricedBalance, isBeforeISODate, parseISODateLocal } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
@@ -303,10 +303,15 @@ export default function Index() {
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
   const positionsWithDays = positions.map(p => {
-    const effectiveBalance = getEffectiveBalance(p);
+    const notStartedYet = !!p.fundedDate && isBeforeISODate(asOfDate, p.fundedDate);
+    const rawEffective = getEffectiveBalance(p);
+    const effectiveBalance = notStartedYet ? 0 : rawEffective;
     return {
       ...p,
-      balance: effectiveBalance, // Use effective balance for calculations
+      // Force out of all "included" math while not started; preserve user's intent on the original field.
+      includeInReverse: notStartedYet ? false : p.includeInReverse,
+      notStartedYet,
+      balance: effectiveBalance,
       daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
     };
   });
@@ -573,9 +578,11 @@ export default function Index() {
     }));
 
   // Re-price all positions when the calculator's "as of" date changes.
+  // Positions whose fundedDate is after the new as-of date are "not started yet" — leave their stored balance untouched.
   const handleAsOfDateChange = (newDate: string) => {
     if (newDate === asOfDate) return;
     setPositions(prev => prev.map(p => {
+      if (p.fundedDate && isBeforeISODate(newDate, p.fundedDate)) return p;
       const newBal = repricedBalance(p, newDate);
       return { ...p, balance: newBal };
     }));
@@ -1499,22 +1506,24 @@ export default function Index() {
                   </thead>
                   <tbody>
                     {positions.map(p => {
+                      const notStartedYet = !!p.fundedDate && isBeforeISODate(asOfDate, p.fundedDate);
                       const effectiveBalance = p.balance;
                       const daysLeft = p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 
                         ? Math.ceil(effectiveBalance / p.dailyPayment) 
                         : 0;
-                      const isIncluded = p.includeInReverse !== false;
+                      const isIncluded = p.includeInReverse !== false && !notStartedYet;
                       const isOurs = p.isOurPosition;
                       const isUnknown = effectiveBalance === null;
-                      const isExcluded = !isIncluded && !isOurs;
+                      const isExcluded = (!isIncluded && !isOurs) || notStartedYet;
                       const isWeekly = (p.frequency || 'daily') === 'weekly';
                       
                       return (
                         <tr 
                           key={p.id} 
                           className={`border-b border-border hover:bg-muted/50 transition-colors 
-                            ${isOurs ? 'bg-primary/10 border-l-4 border-l-primary' : ''} 
-                            ${isExcluded ? 'opacity-50' : ''}`}
+                            ${isOurs && !notStartedYet ? 'bg-primary/10 border-l-4 border-l-primary' : ''} 
+                            ${notStartedYet ? 'opacity-40 bg-muted/30' : isExcluded ? 'opacity-50' : ''}`}
+                          title={notStartedYet && p.fundedDate ? `Scenario not started yet — funds ${formatBusinessDate(parseISODateLocal(p.fundedDate))}` : undefined}
                         >
                           {/* Stacked O / I checkboxes */}
                           <td className="py-3 px-2">
@@ -1523,14 +1532,15 @@ export default function Index() {
                                 <Checkbox
                                   checked={isOurs}
                                   onCheckedChange={(checked) => updatePosition(p.id, 'isOurPosition', !!checked)}
+                                  disabled={notStartedYet}
                                 />
                                 O
                               </label>
-                              <label className={`flex items-center gap-1 text-[10px] font-semibold cursor-pointer ${isOurs ? 'opacity-30' : 'text-muted-foreground'}`}>
+                              <label className={`flex items-center gap-1 text-[10px] font-semibold cursor-pointer ${isOurs || notStartedYet ? 'opacity-30' : 'text-muted-foreground'}`}>
                                 <Checkbox
-                                  checked={isIncluded}
+                                  checked={p.includeInReverse !== false}
                                   onCheckedChange={(checked) => updatePosition(p.id, 'includeInReverse', !!checked)}
-                                  disabled={isOurs}
+                                  disabled={isOurs || notStartedYet}
                                 />
                                 I
                               </label>
@@ -1545,6 +1555,11 @@ export default function Index() {
                               title={p.entity}
                               className={`w-full p-2 border border-input rounded-md bg-background ${isExcluded ? 'line-through text-muted-foreground' : ''}`}
                             />
+                            {notStartedYet && p.fundedDate && (
+                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/20 text-warning-foreground border border-warning/30 text-[10px] font-semibold">
+                                Not started · funds {formatBusinessDate(parseISODateLocal(p.fundedDate))}
+                              </div>
+                            )}
                           </td>
                           {/* Schedule - combined Freq + Pull Day */}
                           <td className="py-3 px-2 text-center">
