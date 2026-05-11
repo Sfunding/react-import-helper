@@ -385,3 +385,300 @@ export function simulateHybrid(
     combinedProfit,
   };
 }
+
+// -------------------- Scenario Builder engine --------------------
+
+import type { Scenario, ScenarioStep, ActivePosition, Checkpoint, ScenarioRunResult } from './scenarioTypes';
+
+function advanceDays(active: ActivePosition[], days: number): ActivePosition[] {
+  if (days <= 0) return active;
+  return active.map(p => {
+    const paid = p.dailyPayment * days;
+    const newBal = Math.max(0, p.balance - paid);
+    return { ...p, balance: newBal, dailyPayment: newBal > 0 ? p.dailyPayment : 0 };
+  });
+}
+
+function activeTotals(active: ActivePosition[]) {
+  let tb = 0, td = 0;
+  for (const p of active) {
+    if (p.balance > 0) { tb += p.balance; td += p.dailyPayment; }
+  }
+  return { totalBalance: tb, totalDaily: td };
+}
+
+function makeCheckpoint(
+  stepIndex: number,
+  stepLabel: string,
+  dayOffset: number,
+  active: ActivePosition[],
+  monthlyRevenue: number,
+  cashThisStep: number,
+  profitThisStep: number,
+  cashCum: number,
+  profitCum: number,
+  note?: string
+): Checkpoint {
+  const totals = activeTotals(active);
+  const snap = snapshot(totals.totalBalance, totals.totalDaily, monthlyRevenue);
+  return {
+    stepIndex,
+    stepLabel,
+    dayOffset,
+    weekOffset: dayOffset / BUSINESS_DAYS_PER_WEEK,
+    activePositions: active.filter(p => p.balance > 0),
+    totalBalance: totals.totalBalance,
+    totalDaily: totals.totalDaily,
+    balanceLeverage: snap.balanceLeverage,
+    paymentBurden: snap.paymentBurden,
+    cashToMerchantStep: cashThisStep,
+    profitStep: profitThisStep,
+    cashToMerchantCumulative: cashCum,
+    profitCumulative: profitCum,
+    note,
+  };
+}
+
+function stepLabel(step: ScenarioStep): string {
+  if (step.label) return step.label;
+  switch (step.kind) {
+    case 'straight': return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}`;
+    case 'wait': return `Wait ${step.weeks} wk`;
+    case 'add-position': return `Add: ${step.entity}`;
+    case 'reverse': return 'Reverse Consolidation';
+  }
+}
+
+export function runScenario(
+  positions: Position[],
+  scenario: Scenario,
+  monthlyRevenue: number
+): ScenarioRunResult {
+  // Seed active positions from the stack
+  let active: ActivePosition[] = positions
+    .filter(p => (p.balance ?? 0) > 0 && (p.dailyPayment ?? 0) > 0)
+    .map(p => ({
+      id: `orig-${p.id}`,
+      originalId: p.id,
+      entity: p.entity,
+      balance: p.balance ?? 0,
+      dailyPayment: p.dailyPayment ?? 0,
+      source: 'original' as const,
+    }));
+
+  let dayOffset = 0;
+  let cashCum = 0;
+  let profitCum = 0;
+
+  const checkpoints: Checkpoint[] = [];
+  checkpoints.push(
+    makeCheckpoint(-1, 'Today', 0, active, monthlyRevenue, 0, 0, 0, 0)
+  );
+
+  scenario.steps.forEach((step, idx) => {
+    let cashStep = 0;
+    let profitStep = 0;
+    let note: string | undefined;
+
+    if (step.kind === 'wait') {
+      const days = Math.max(0, Math.round(step.weeks * BUSINESS_DAYS_PER_WEEK));
+      active = advanceDays(active, days);
+      dayOffset += days;
+    } else if (step.kind === 'add-position') {
+      active = [
+        ...active,
+        {
+          id: `add-${step.id}`,
+          entity: step.entity || 'New Position',
+          balance: Math.max(0, step.balance),
+          dailyPayment: Math.max(0, step.dailyPayment),
+          source: 'outside-added',
+        },
+      ];
+    } else if (step.kind === 'straight') {
+      const payoffSet = new Set(step.payoffPositionIds);
+      const payoffsTotal = active
+        .filter(p => payoffSet.has(p.id))
+        .reduce((s, p) => s + p.balance, 0);
+      // Pay off
+      active = active.map(p =>
+        payoffSet.has(p.id) ? { ...p, balance: 0, dailyPayment: 0 } : p
+      );
+      const gross = step.grossFunding > 0 ? step.grossFunding : payoffsTotal;
+      const netAdvance = gross * (1 - step.feePercent);
+      const totalPayback = gross * step.factorRate;
+      const termDays = Math.max(1, Math.round(step.termWeeks * BUSINESS_DAYS_PER_WEEK));
+      const daily = totalPayback / termDays;
+      active = [
+        ...active,
+        {
+          id: `straight-${step.id}`,
+          entity: `Straight MCA (${step.termWeeks}w @ ${step.factorRate.toFixed(2)})`,
+          balance: totalPayback,
+          dailyPayment: daily,
+          source: 'straight-rtr',
+        },
+      ];
+      cashStep = netAdvance - payoffsTotal;
+      profitStep = totalPayback - gross;
+      note = `Payoffs ${payoffsTotal.toFixed(0)}, net ${netAdvance.toFixed(0)}, daily ${daily.toFixed(0)}`;
+    } else if (step.kind === 'reverse') {
+      const incSet = new Set(step.includedPositionIds);
+      const included = active.filter(p => incSet.has(p.id) && p.balance > 0);
+      const totalAdvance = included.reduce((s, p) => s + p.balance, 0);
+      const includedDaily = included.reduce((s, p) => s + p.dailyPayment, 0);
+      const totalFunding = step.feePercent < 1 ? totalAdvance / (1 - step.feePercent) : totalAdvance;
+      const totalPayback = totalFunding * step.factorRate;
+      const newDaily = includedDaily * (1 - step.dailyDecrease);
+
+      // Remove included from active
+      active = active.filter(p => !incSet.has(p.id));
+      // Append reverse RTR as synthetic position
+      if (totalPayback > 0) {
+        active.push({
+          id: `rev-${step.id}`,
+          entity: `Reverse RTR (${step.factorRate.toFixed(2)})`,
+          balance: totalPayback,
+          dailyPayment: newDaily,
+          source: 'reverse-rtr',
+        });
+      }
+      profitStep = totalPayback - totalFunding;
+      note = `Advance ${totalAdvance.toFixed(0)}, gross ${totalFunding.toFixed(0)}, daily ${newDaily.toFixed(0)}`;
+    }
+
+    cashCum += cashStep;
+    profitCum += profitStep;
+    checkpoints.push(
+      makeCheckpoint(idx, stepLabel(step), dayOffset, active, monthlyRevenue,
+        cashStep, profitStep, cashCum, profitCum, note)
+    );
+  });
+
+  // Weekly exposure: walk in lock-step with steps, project between step day-offsets
+  const totalWeeks = Math.max(4, Math.ceil((dayOffset || 0) / BUSINESS_DAYS_PER_WEEK) + 26);
+  const weeklyExposure: Array<{ week: number; combined: number }> = [];
+  // Replay timeline incrementally to compute weekly samples
+  let replayActive: ActivePosition[] = positions
+    .filter(p => (p.balance ?? 0) > 0 && (p.dailyPayment ?? 0) > 0)
+    .map(p => ({
+      id: `orig-${p.id}`, originalId: p.id, entity: p.entity,
+      balance: p.balance ?? 0, dailyPayment: p.dailyPayment ?? 0, source: 'original' as const,
+    }));
+  let replayDay = 0;
+  // Build sequential list of (atDay, fn) instant actions plus continuous decay.
+  // We'll process each business day; cap to keep cheap.
+  const stepActionsByDay = new Map<number, ScenarioStep[]>();
+  {
+    let curDay = 0;
+    for (const s of scenario.steps) {
+      if (s.kind === 'wait') {
+        // Wait happens AFTER instant actions queued for curDay
+        curDay += Math.max(0, Math.round(s.weeks * BUSINESS_DAYS_PER_WEEK));
+      } else {
+        const list = stepActionsByDay.get(curDay) ?? [];
+        list.push(s);
+        stepActionsByDay.set(curDay, list);
+      }
+    }
+  }
+
+  let peak = 0;
+  const sampleWeeks = totalWeeks;
+  for (let w = 0; w <= sampleWeeks; w++) {
+    const targetDay = w * BUSINESS_DAYS_PER_WEEK;
+    while (replayDay < targetDay) {
+      // Run instant actions queued at replayDay
+      const acts = stepActionsByDay.get(replayDay);
+      if (acts) {
+        for (const step of acts) {
+          if (step.kind === 'add-position') {
+            replayActive.push({
+              id: `add-${step.id}`, entity: step.entity, balance: Math.max(0, step.balance),
+              dailyPayment: Math.max(0, step.dailyPayment), source: 'outside-added',
+            });
+          } else if (step.kind === 'straight') {
+            const payoffSet = new Set(step.payoffPositionIds);
+            const payoffsTotal = replayActive.filter(p => payoffSet.has(p.id)).reduce((s, p) => s + p.balance, 0);
+            replayActive = replayActive.map(p =>
+              payoffSet.has(p.id) ? { ...p, balance: 0, dailyPayment: 0 } : p
+            );
+            const gross = step.grossFunding > 0 ? step.grossFunding : payoffsTotal;
+            const totalPayback = gross * step.factorRate;
+            const termDays = Math.max(1, Math.round(step.termWeeks * BUSINESS_DAYS_PER_WEEK));
+            replayActive.push({
+              id: `straight-${step.id}`, entity: 'Straight RTR',
+              balance: totalPayback, dailyPayment: totalPayback / termDays, source: 'straight-rtr',
+            });
+          } else if (step.kind === 'reverse') {
+            const incSet = new Set(step.includedPositionIds);
+            const included = replayActive.filter(p => incSet.has(p.id) && p.balance > 0);
+            const totalAdvance = included.reduce((s, p) => s + p.balance, 0);
+            const includedDaily = included.reduce((s, p) => s + p.dailyPayment, 0);
+            const totalFunding = step.feePercent < 1 ? totalAdvance / (1 - step.feePercent) : totalAdvance;
+            const totalPayback = totalFunding * step.factorRate;
+            const newDaily = includedDaily * (1 - step.dailyDecrease);
+            replayActive = replayActive.filter(p => !incSet.has(p.id));
+            if (totalPayback > 0) {
+              replayActive.push({
+                id: `rev-${step.id}`, entity: 'Reverse RTR',
+                balance: totalPayback, dailyPayment: newDaily, source: 'reverse-rtr',
+              });
+            }
+          }
+        }
+        stepActionsByDay.delete(replayDay);
+      }
+      // Advance one day
+      replayActive = advanceDays(replayActive, 1);
+      replayDay++;
+    }
+    // Run any actions exactly at targetDay before sampling
+    const acts = stepActionsByDay.get(replayDay);
+    if (acts) {
+      for (const step of acts) {
+        if (step.kind === 'add-position') {
+          replayActive.push({
+            id: `add-${step.id}`, entity: step.entity, balance: Math.max(0, step.balance),
+            dailyPayment: Math.max(0, step.dailyPayment), source: 'outside-added',
+          });
+        } else if (step.kind === 'straight') {
+          const payoffSet = new Set(step.payoffPositionIds);
+          const payoffsTotal = replayActive.filter(p => payoffSet.has(p.id)).reduce((s, p) => s + p.balance, 0);
+          replayActive = replayActive.map(p =>
+            payoffSet.has(p.id) ? { ...p, balance: 0, dailyPayment: 0 } : p
+          );
+          const gross = step.grossFunding > 0 ? step.grossFunding : payoffsTotal;
+          const totalPayback = gross * step.factorRate;
+          const termDays = Math.max(1, Math.round(step.termWeeks * BUSINESS_DAYS_PER_WEEK));
+          replayActive.push({
+            id: `straight-${step.id}`, entity: 'Straight RTR',
+            balance: totalPayback, dailyPayment: totalPayback / termDays, source: 'straight-rtr',
+          });
+        } else if (step.kind === 'reverse') {
+          const incSet = new Set(step.includedPositionIds);
+          const included = replayActive.filter(p => incSet.has(p.id) && p.balance > 0);
+          const totalAdvance = included.reduce((s, p) => s + p.balance, 0);
+          const includedDaily = included.reduce((s, p) => s + p.dailyPayment, 0);
+          const totalFunding = step.feePercent < 1 ? totalAdvance / (1 - step.feePercent) : totalAdvance;
+          const totalPayback = totalFunding * step.factorRate;
+          const newDaily = includedDaily * (1 - step.dailyDecrease);
+          replayActive = replayActive.filter(p => !incSet.has(p.id));
+          if (totalPayback > 0) {
+            replayActive.push({
+              id: `rev-${step.id}`, entity: 'Reverse RTR',
+              balance: totalPayback, dailyPayment: newDaily, source: 'reverse-rtr',
+            });
+          }
+        }
+      }
+      stepActionsByDay.delete(replayDay);
+    }
+    const t = activeTotals(replayActive);
+    weeklyExposure.push({ week: w, combined: t.totalBalance });
+    if (t.totalBalance > peak) peak = t.totalBalance;
+  }
+
+  const finalState = checkpoints[checkpoints.length - 1];
+  return { checkpoints, weeklyExposure, finalState, peakCombinedExposure: peak };
+}
