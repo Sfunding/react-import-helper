@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, TrendingUp, AlertCircle, MoreHorizontal } from 'lucide-react';
+import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, TrendingUp, AlertCircle, MoreHorizontal, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
 import { SaveCalculationDialog } from '@/components/SaveCalculationDialog';
