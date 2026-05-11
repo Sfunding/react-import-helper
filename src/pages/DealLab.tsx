@@ -620,12 +620,19 @@ function BuilderTab({
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
   const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
-  const [commitMode, setCommitMode] = useState<'step' | 'final'>('step');
-  const canCommitFinal = !!originalCalc && scenario.steps.length > 0 && scenarioRun.checkpoints.length > 1;
-  const openFinalCommit = () => {
-    if (!canCommitFinal) return;
-    setCommitMode('final');
-    setCommitStepIndex(scenario.steps.length - 1);
+  const [commitMode, setCommitMode] = useState<'step' | 'final' | 'straights'>('step');
+  const lastStraightIdx = (() => {
+    for (let i = scenario.steps.length - 1; i >= 0; i--) {
+      const k = scenario.steps[i].kind;
+      if (k === 'straight' || k === 'recurring-straight') return i;
+    }
+    return -1;
+  })();
+  const canCommitStraights = !!originalCalc && lastStraightIdx >= 0 && scenarioRun.checkpoints.length > lastStraightIdx + 1;
+  const openStraightsCommit = () => {
+    if (!canCommitStraights) return;
+    setCommitMode('straights');
+    setCommitStepIndex(lastStraightIdx);
   };
   const openStepCommit = (idx: number) => {
     setCommitMode('step');
