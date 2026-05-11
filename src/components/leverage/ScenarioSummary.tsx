@@ -6,7 +6,9 @@ import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
 import { LeverageBand, snapshot } from '@/lib/leverageMath';
 import { addBusinessDays } from '@/lib/dateUtils';
 import { format } from 'date-fns';
-import { ArrowRight, CalendarDays } from 'lucide-react';
+import { ArrowRight, CalendarDays, GitBranch } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
