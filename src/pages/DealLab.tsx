@@ -299,14 +299,11 @@ export default function DealLabPage() {
   } = useDealScenarios(selectedCalc?.id);
 
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
-  const [compareScenarioId, setCompareScenarioId] = useState<string | null>(null);
   const [lastSavedJson, setLastSavedJson] = useState<string>('');
   const [hasBootstrappedLegacy, setHasBootstrappedLegacy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   // When the deal loads, pick a scenario to display:
-  // 1) If we have rows, pick the pinned-or-first one.
-  // 2) If no rows but the legacy `recommended_scenario` exists, create one row from it (auto-migrate).
-  // 3) Otherwise, create a fresh "Untitled Scenario" row.
   React.useEffect(() => {
     if (!selectedCalc || scenariosLoading) return;
     if (activeScenarioId && scenarioRows.some(r => r.id === activeScenarioId)) return;
@@ -332,25 +329,46 @@ export default function DealLabPage() {
     })();
   }, [selectedCalc, scenariosLoading, scenarioRows, activeScenarioId, hasBootstrappedLegacy, createScenarioRow]);
 
-  // Switch active scenario → load its data
-  const handleSelectScenario = (id: string) => {
+  // Flush pending in-memory edits to the row before swapping away
+  const flushPendingSave = React.useCallback(async () => {
+    if (!activeScenarioId) return;
+    const json = JSON.stringify(scenario);
+    if (json === lastSavedJson) return;
+    setSaveStatus('saving');
+    const ok = await updateScenarioRow(activeScenarioId, { scenario, name: scenario.name });
+    if (ok) {
+      setLastSavedJson(json);
+      setSaveStatus('saved');
+    } else {
+      setSaveStatus('error');
+    }
+  }, [activeScenarioId, scenario, lastSavedJson, updateScenarioRow]);
+
+  // Switch active scenario → flush, then load
+  const handleSelectScenario = async (id: string) => {
+    if (id === activeScenarioId) return;
+    await flushPendingSave();
     const row = scenarioRows.find(r => r.id === id);
     if (!row) return;
     setActiveScenarioId(id);
     setScenario(row.scenario);
     setLastSavedJson(JSON.stringify(row.scenario));
+    setSaveStatus('idle');
   };
 
   const handleCreateScenario = async () => {
+    await flushPendingSave();
     const created = await createScenarioRow('New scenario', newScenario());
     if (created) {
       setActiveScenarioId(created.id);
       setScenario(created.scenario);
       setLastSavedJson(JSON.stringify(created.scenario));
+      setSaveStatus('idle');
     }
   };
 
   const handleDuplicateScenario = async (id: string) => {
+    await flushPendingSave();
     const src = scenarioRows.find(r => r.id === id);
     if (!src) return;
     const copy: Scenario = { ...src.scenario, id: Math.random().toString(36).slice(2, 10) };
@@ -359,11 +377,20 @@ export default function DealLabPage() {
       setActiveScenarioId(created.id);
       setScenario(created.scenario);
       setLastSavedJson(JSON.stringify(created.scenario));
+      setSaveStatus('idle');
     }
   };
 
+  // Inline rename → update both row name and scenario.name (single source of truth)
   const handleRenameScenario = async (id: string, name: string) => {
-    await updateScenarioRow(id, { name });
+    if (id === activeScenarioId) {
+      setScenario(s => ({ ...s, name }));
+    }
+    const nextScenario = id === activeScenarioId ? { ...scenario, name } : undefined;
+    const ok = await updateScenarioRow(id, nextScenario ? { name, scenario: nextScenario } : { name });
+    if (ok && id === activeScenarioId && nextScenario) {
+      setLastSavedJson(JSON.stringify(nextScenario));
+    }
   };
 
   const handleDeleteScenario = async (id: string) => {
@@ -376,6 +403,7 @@ export default function DealLabPage() {
         setActiveScenarioId(next.id);
         setScenario(next.scenario);
         setLastSavedJson(JSON.stringify(next.scenario));
+        setSaveStatus('idle');
       }
     }
   };
@@ -385,17 +413,25 @@ export default function DealLabPage() {
     [positions, scenario, monthlyRevenue]
   );
 
-  // Compare-mode: compute the second run
-  const compareRow = useMemo(
-    () => scenarioRows.find(r => r.id === compareScenarioId),
-    [scenarioRows, compareScenarioId]
-  );
-  const compareRun = useMemo(
-    () => compareRow ? runScenario(positions, compareRow.scenario, monthlyRevenue) : null,
-    [positions, compareRow, monthlyRevenue]
-  );
-
   const isDirty = activeScenarioId !== null && JSON.stringify(scenario) !== lastSavedJson;
+
+  // Debounced auto-save: whenever scenario changes for the active row, save ~800ms later
+  React.useEffect(() => {
+    if (!activeScenarioId) return;
+    const json = JSON.stringify(scenario);
+    if (json === lastSavedJson) return;
+    setSaveStatus('saving');
+    const handle = setTimeout(async () => {
+      const ok = await updateScenarioRow(activeScenarioId, { scenario, name: scenario.name });
+      if (ok) {
+        setLastSavedJson(json);
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('error');
+      }
+    }, 800);
+    return () => clearTimeout(handle);
+  }, [scenario, activeScenarioId, lastSavedJson, updateScenarioRow]);
 
   const updateStep = (idx: number, next: ScenarioStep) =>
     setScenario(s => ({ ...s, steps: s.steps.map((st, i) => (i === idx ? next : st)) }));
@@ -423,12 +459,15 @@ export default function DealLabPage() {
   const deleteStep = (idx: number) =>
     setScenario(s => ({ ...s, steps: s.steps.filter((_, i) => i !== idx) }));
 
-  const saveScenarioToDeal = async () => {
+  const retrySave = async () => {
     if (!activeScenarioId) return;
-    const ok = await updateScenarioRow(activeScenarioId, { scenario });
+    setSaveStatus('saving');
+    const ok = await updateScenarioRow(activeScenarioId, { scenario, name: scenario.name });
     if (ok) {
       setLastSavedJson(JSON.stringify(scenario));
-      toast({ title: 'Scenario saved', description: `${scenario.name || 'Scenario'} saved to deal.` });
+      setSaveStatus('saved');
+    } else {
+      setSaveStatus('error');
     }
   };
 
@@ -1115,49 +1154,28 @@ export default function DealLabPage() {
                   rows={scenarioRows}
                   activeId={activeScenarioId}
                   dirty={isDirty}
+                  saveStatus={saveStatus}
+                  onRetrySave={retrySave}
                   onSelect={handleSelectScenario}
                   onCreate={handleCreateScenario}
                   onRename={handleRenameScenario}
                   onDuplicate={handleDuplicateScenario}
                   onDelete={handleDeleteScenario}
-                  compareId={compareScenarioId}
-                  onSetCompare={setCompareScenarioId}
                 />
 
-                {compareScenarioId && compareRun && compareRow ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
-                        {scenarioRows.find(r => r.id === activeScenarioId)?.name || 'Active'}
-                      </div>
-                      <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
-                        {compareRow.name}
-                      </div>
-                      <ScenarioStory scenario={compareRow.scenario} checkpoints={compareRun.checkpoints} />
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <ScenarioBuilderPanel
-                      scenario={scenario}
-                      setScenario={setScenario}
-                      scenarioRun={scenarioRun}
-                      monthlyRevenue={monthlyRevenue}
-                      onAddStep={addStep}
-                      onUpdateStep={updateStep}
-                      onMoveStep={moveStep}
-                      onDuplicateStep={duplicateStep}
-                      onDeleteStep={deleteStep}
-                      onSave={saveScenarioToDeal}
-                      onExport={exportScenarioPDF}
-                      canSave={!!selectedCalc && !!activeScenarioId}
-                    />
-                    <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
-                  </>
-                )}
+                <ScenarioBuilderPanel
+                  scenario={scenario}
+                  setScenario={setScenario}
+                  scenarioRun={scenarioRun}
+                  monthlyRevenue={monthlyRevenue}
+                  onAddStep={addStep}
+                  onUpdateStep={updateStep}
+                  onMoveStep={moveStep}
+                  onDuplicateStep={duplicateStep}
+                  onDeleteStep={deleteStep}
+                  onExport={exportScenarioPDF}
+                />
+                <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
               </TabsContent>
             </Tabs>
           </>
@@ -1249,7 +1267,7 @@ type ScenarioRunResultLite = ScenarioRunResult;
 function ScenarioBuilderPanel({
   scenario, setScenario, scenarioRun, monthlyRevenue,
   onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
-  onSave, onExport, canSave,
+  onExport,
 }: {
   scenario: Scenario;
   setScenario: React.Dispatch<React.SetStateAction<Scenario>>;
@@ -1260,9 +1278,7 @@ function ScenarioBuilderPanel({
   onMoveStep: (idx: number, dir: -1 | 1) => void;
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
-  onSave: () => void;
   onExport: () => void;
-  canSave: boolean;
 }) {
   const fs = scenarioRun.finalState;
   const stepMarkers = useMemo(() => {
@@ -1282,12 +1298,8 @@ function ScenarioBuilderPanel({
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4 flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-xs">Scenario Name</Label>
-            <Input
-              value={scenario.name}
-              onChange={e => setScenario(s => ({ ...s, name: e.target.value }))}
-            />
+          <div className="flex-1 min-w-[200px] text-sm text-muted-foreground">
+            Edits auto-save to this deal. Rename the scenario from its tab above.
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1311,9 +1323,6 @@ function ScenarioBuilderPanel({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" onClick={onSave} disabled={!canSave}>
-            <Save className="w-4 h-4 mr-1.5" /> Save to Deal
-          </Button>
           <Button variant="outline" onClick={onExport}>
             <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
           </Button>
