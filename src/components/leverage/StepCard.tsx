@@ -251,7 +251,7 @@ function ReverseEditor({ step, active, onChange }: {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <div>
           <Label className="text-xs">Factor</Label>
           <Input type="number" step="0.01" value={step.factorRate}
@@ -269,6 +269,22 @@ function ReverseEditor({ step, active, onChange }: {
           <Input type="number" step="0.05" value={step.dailyDecrease}
             onChange={e => onChange({ ...step, dailyDecrease: parseFloat(e.target.value) || 0 })}
           />
+        </div>
+        <div>
+          <Label className="text-xs">Run at week (optional)</Label>
+          <Input
+            type="number"
+            step="1"
+            placeholder="immediate"
+            value={step.runAtWeek ?? ''}
+            onChange={e => {
+              const v = e.target.value;
+              onChange({ ...step, runAtWeek: v === '' ? undefined : Math.max(0, parseFloat(v) || 0) });
+            }}
+          />
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            Fast-forward all positions to this week, then run.
+          </div>
         </div>
       </div>
       <div>
