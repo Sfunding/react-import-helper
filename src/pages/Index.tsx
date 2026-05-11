@@ -95,7 +95,7 @@ export default function Index() {
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useCallback(() => {
-    const currentState = JSON.stringify({ merchant, settings, positions });
+    const currentState = JSON.stringify({ merchant, settings, positions, asOfDate });
     // If we have data (positions or merchant name or settings changed from default)
     const hasData = positions.length > 0 || 
                     merchant.name !== '' || 
@@ -109,7 +109,7 @@ export default function Index() {
     
     // Compare current state to last saved state
     return currentState !== lastSavedState;
-  }, [merchant, settings, positions, lastSavedState]);
+  }, [merchant, settings, positions, asOfDate, lastSavedState]);
 
   // Handle navigation with unsaved changes check
   const handleNavigation = useCallback((path: string) => {
