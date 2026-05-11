@@ -1039,7 +1039,6 @@ export default function Index() {
           </Popover>
           <span className="text-[11px]">— balances will be projected forward to today in the Deal Lab.</span>
         </div>
-        </div>
       </div>
 
       {/* Settings Section */}
