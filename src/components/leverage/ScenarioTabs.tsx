@@ -7,33 +7,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ChevronDown, Plus, Copy, Pencil, Trash2, ArrowLeftRight, X } from 'lucide-react';
+import { ChevronDown, Plus, Copy, Pencil, Trash2, Check, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DealScenarioRow } from '@/hooks/useDealScenarios';
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface ScenarioTabsProps {
   rows: DealScenarioRow[];
   activeId: string | null;
   dirty: boolean;
+  saveStatus: SaveStatus;
+  onRetrySave: () => void;
   onSelect: (id: string) => void;
   onCreate: () => void;
   onRename: (id: string, name: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
-  compareId: string | null;
-  onSetCompare: (id: string | null) => void;
 }
 
 export function ScenarioTabs({
-  rows, activeId, dirty, onSelect, onCreate, onRename, onDuplicate, onDelete,
-  compareId, onSetCompare,
+  rows, activeId, dirty, saveStatus, onRetrySave,
+  onSelect, onCreate, onRename, onDuplicate, onDelete,
 }: ScenarioTabsProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -49,7 +44,26 @@ export function ScenarioTabs({
     setRenamingId(null);
   };
 
-  const compareActive = compareId !== null;
+  let statusPill: React.ReactNode = null;
+  if (saveStatus === 'saving' || dirty) {
+    statusPill = (
+      <span className="inline-flex items-center gap-1 text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+      </span>
+    );
+  } else if (saveStatus === 'error') {
+    statusPill = (
+      <button onClick={onRetrySave} className="inline-flex items-center gap-1 text-destructive hover:underline">
+        <AlertCircle className="h-3.5 w-3.5" /> Save failed — Retry
+      </button>
+    );
+  } else if (saveStatus === 'saved') {
+    statusPill = (
+      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        <Check className="h-3.5 w-3.5" /> Saved
+      </span>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2 flex-wrap border-b border-border pb-2">
@@ -89,7 +103,6 @@ export function ScenarioTabs({
                 title={row.name}
               >
                 {row.name}
-                {isActive && dirty && <span className="ml-1.5 text-amber-300">●</span>}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -126,39 +139,7 @@ export function ScenarioTabs({
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
-        {compareActive ? (
-          <>
-            <Select value={compareId ?? ''} onValueChange={(v) => onSetCompare(v)}>
-              <SelectTrigger className="h-8 w-56">
-                <SelectValue placeholder="Compare against…" />
-              </SelectTrigger>
-              <SelectContent>
-                {rows.filter(r => r.id !== activeId).map(r => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="sm" className="h-8" onClick={() => onSetCompare(null)}>
-              <X className="w-3.5 h-3.5 mr-1" /> Exit compare
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            disabled={rows.length < 2}
-            onClick={() => {
-              const other = rows.find(r => r.id !== activeId);
-              if (other) onSetCompare(other.id);
-            }}
-            title={rows.length < 2 ? 'Create a second scenario to compare' : 'Compare two scenarios side-by-side'}
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5 mr-1" /> Compare
-          </Button>
-        )}
-      </div>
+      <div className="text-xs min-w-[110px] text-right">{statusPill}</div>
     </div>
   );
 }
