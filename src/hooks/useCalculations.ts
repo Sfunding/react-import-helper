@@ -186,6 +186,50 @@ export function useCalculations(filterUserId?: string | null) {
     }
   });
 
+  const commitScenarioMutation = useMutation({
+    mutationFn: async (params: {
+      parentId: string;
+      name: string;
+      merchant: { name: string; businessType: string; monthlyRevenue: number };
+      settings: Settings;
+      positions: Position[];
+      asOfDate: string;
+      totalBalance: number;
+      totalDailyPayment: number;
+    }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('saved_calculations')
+        .insert({
+          user_id: session.user.id,
+          name: params.name,
+          merchant_name: params.merchant.name,
+          merchant_business_type: params.merchant.businessType,
+          merchant_monthly_revenue: params.merchant.monthlyRevenue,
+          settings: params.settings,
+          positions: params.positions,
+          total_balance: params.totalBalance,
+          total_daily_payment: params.totalDailyPayment,
+          as_of_date: params.asOfDate,
+          parent_calculation_id: params.parentId,
+        } as any)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['saved-calculations'] });
+      logAuditEvent({ action: 'commit_scenario', resourceType: 'saved_calculation', resourceId: data.id, metadata: { name: data.name, parent_calculation_id: (data as any).parent_calculation_id } });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error committing scenario', description: error.message, variant: 'destructive' });
+    }
+  });
+
   const markAsFundedMutation = useMutation({
     mutationFn: async (params: { id: string; funded_at: string | null }) => {
       const { data, error } = await supabase
