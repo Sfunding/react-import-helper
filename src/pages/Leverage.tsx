@@ -1126,27 +1126,8 @@ function ExposureSparkline({
 
 // ---------------- Scenario Builder Panel ----------------
 
-interface ScenarioRunResultLite {
-  checkpoints: Array<{
-    stepIndex: number;
-    stepLabel: string;
-    weekOffset: number;
-    dayOffset: number;
-    activePositions: Array<{ id: string; entity: string; balance: number; dailyPayment: number; source: string }>;
-    totalBalance: number;
-    totalDaily: number;
-    balanceLeverage: number;
-    paymentBurden: number;
-    cashToMerchantStep: number;
-    profitStep: number;
-    cashToMerchantCumulative: number;
-    profitCumulative: number;
-    note?: string;
-  }>;
-  weeklyExposure: Array<{ week: number; combined: number }>;
-  finalState: ScenarioRunResultLite['checkpoints'][number];
-  peakCombinedExposure: number;
-}
+import type { ScenarioRunResult } from '@/lib/scenarioTypes';
+type ScenarioRunResultLite = ScenarioRunResult;
 
 function ScenarioBuilderPanel({
   scenario, setScenario, scenarioRun, monthlyRevenue,
