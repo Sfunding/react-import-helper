@@ -49,8 +49,9 @@ interface CommitScenarioDialogProps {
 }
 
 export function CommitScenarioDialog({
-  open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc,
+  open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc, mode = 'step',
 }: CommitScenarioDialogProps) {
+  const isFinal = mode === 'final';
   const navigate = useNavigate();
   const { toast } = useToast();
   const { commitScenario, isCommittingScenario } = useCalculations();
