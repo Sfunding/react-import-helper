@@ -443,9 +443,14 @@ function stepLabel(step: ScenarioStep): string {
   if (step.label) return step.label;
   switch (step.kind) {
     case 'straight': return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}`;
+    case 'recurring-straight':
+      return `${step.count} x Straight ($${Math.round(step.amountEach).toLocaleString()} every ${step.cadenceWeeks}w)`;
     case 'wait': return `Wait ${step.weeks} wk`;
     case 'add-position': return `Add: ${step.entity}`;
-    case 'reverse': return 'Reverse Consolidation';
+    case 'reverse':
+      return step.runAtWeek != null
+        ? `Reverse Consolidation @ wk ${step.runAtWeek}`
+        : 'Reverse Consolidation';
   }
 }
 
