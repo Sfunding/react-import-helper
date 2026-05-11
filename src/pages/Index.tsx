@@ -816,6 +816,34 @@ export default function Index() {
     { key: 'merchantOffer', label: "Merchant's Offer" },
   ];
 
+  // Debounced local-storage draft backup (always on while dirty)
+  useDraftBackup({
+    merchant,
+    settings,
+    positions,
+    loadedCalculationId,
+    loadedCalculationName,
+    hasUnsavedChanges: isDirty,
+  });
+
+  // Debounced cloud auto-save for loaded calcs
+  const autoSave = useAutoSave({
+    enabled: autoSaveEnabled,
+    loadedCalculationId,
+    loadedCalculationName,
+    merchant,
+    settings,
+    positions,
+    totalBalance,
+    totalDailyPayment: totalCurrentDailyPayment,
+    hasUnsavedChanges: isDirty,
+    onSaved: () => {
+      setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+      clearDraft();
+    },
+    updateCalculation,
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
