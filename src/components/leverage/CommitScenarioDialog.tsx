@@ -224,17 +224,23 @@ export function CommitScenarioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isFinal ? 'Commit final state to Calculator' : 'Commit snapshot to Calculator'}</DialogTitle>
+          <DialogTitle>
+            {isStraights ? 'Commit straights to Calculator'
+              : isFinal ? 'Commit final state to Calculator'
+              : 'Commit snapshot to Calculator'}
+          </DialogTitle>
           <DialogDescription>
-            {isFinal
-              ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
-              : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
+            {isStraights
+              ? <>Snapshot the <span className="font-semibold text-foreground">business day after the last straight fires</span>. All straights kept, reverses skipped — so you can structure a fresh reverse on honest balances.</>
+              : isFinal
+                ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
+                : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
             }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
-          {!isFinal && (
+          {!isFinal && !isStraights && (
             <div>
               <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
               <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
