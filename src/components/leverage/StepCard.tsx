@@ -256,8 +256,17 @@ function StraightEditor({ step, active, onChange }: {
       <div className="grid grid-cols-2 gap-2 text-xs border-t border-border pt-2">
         <div><span className="text-muted-foreground">Total Payback: </span><b>{fmt(totalPayback)}</b></div>
         <div><span className="text-muted-foreground">Net Advance: </span><b>{fmt(netAdvance)}</b></div>
-        <div><span className="text-muted-foreground">Daily: </span><b>{fmt(daily)}</b></div>
-        <div><span className="text-muted-foreground">Weekly: </span><b>{fmt(daily * 5)}</b></div>
+        {step.paymentCadence === 'weekly' ? (
+          <>
+            <div><span className="text-muted-foreground">Weekly: </span><b className="text-primary">{fmt(daily * 5)}</b></div>
+            <div><span className="text-muted-foreground">Daily equiv.: </span><b>{fmt(daily)}</b></div>
+          </>
+        ) : (
+          <>
+            <div><span className="text-muted-foreground">Daily: </span><b className="text-primary">{fmt(daily)}</b></div>
+            <div><span className="text-muted-foreground">Weekly equiv.: </span><b>{fmt(daily * 5)}</b></div>
+          </>
+        )}
         <div className="col-span-2">
           <span className="text-muted-foreground">Cash to merchant this step: </span>
           <b className={netAdvance - payoffsTotal < 0 ? 'text-rose-600' : 'text-emerald-700'}>
