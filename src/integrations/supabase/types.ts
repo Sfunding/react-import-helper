@@ -196,6 +196,7 @@ export type Database = {
           merchant_monthly_revenue: number | null
           merchant_name: string | null
           name: string
+          parent_calculation_id: string | null
           positions: Json
           recommended_scenario: Json | null
           settings: Json
@@ -213,6 +214,7 @@ export type Database = {
           merchant_monthly_revenue?: number | null
           merchant_name?: string | null
           name: string
+          parent_calculation_id?: string | null
           positions?: Json
           recommended_scenario?: Json | null
           settings?: Json
@@ -230,6 +232,7 @@ export type Database = {
           merchant_monthly_revenue?: number | null
           merchant_name?: string | null
           name?: string
+          parent_calculation_id?: string | null
           positions?: Json
           recommended_scenario?: Json | null
           settings?: Json
@@ -238,7 +241,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "saved_calculations_parent_calculation_id_fkey"
+            columns: ["parent_calculation_id"]
+            isOneToOne: false
+            referencedRelation: "saved_calculations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_permissions: {
         Row: {

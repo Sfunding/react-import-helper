@@ -5,7 +5,8 @@
  * constants: 22 business days/month, 5 business days/week.
  */
 import { Position } from '@/types/calculation';
-import { getBusinessDaysBetween } from '@/lib/dateUtils';
+import { getBusinessDaysBetween, addBusinessDays } from '@/lib/dateUtils';
+import { format } from 'date-fns';
 
 export const BUSINESS_DAYS_PER_MONTH = 22;
 export const BUSINESS_DAYS_PER_WEEK = 5;
@@ -818,4 +819,164 @@ export function runScenario(
 
   const finalState = checkpoints[checkpoints.length - 1];
   return { checkpoints, weeklyExposure, finalState, peakCombinedExposure: peak };
+}
+
+// -------------------- Scenario → Calculator snapshot --------------------
+
+/**
+ * Convert an `ActivePosition` checkpoint into concrete `Position[]` for the calculator.
+ * - `original` positions inherit identifying metadata from `originalPositions` and overwrite balance/dailyPayment from the checkpoint.
+ * - Scenario-sourced positions (`straight-rtr`, `outside-added`, `reverse-rtr`) get fresh metadata derived from the source step.
+ *
+ * For recurring straight programs (id `rstraight-{stepId}-{N}`), the engine emits a single checkpoint at the LAST fire,
+ * so the per-N fundedDate is derived as: `firstFireOffset + (N-1) * cadenceWeeks * 5`, where
+ * `firstFireOffset = checkpoints[idx+1].dayOffset - (count-1) * cadenceWeeks * 5`.
+ */
+export function checkpointToPositions(
+  checkpoint: import('./scenarioTypes').Checkpoint,
+  scenarioSteps: import('./scenarioTypes').ScenarioStep[],
+  originalPositions: Position[],
+  today: Date,
+  checkpoints: import('./scenarioTypes').Checkpoint[]
+): { positions: Position[]; asOfDate: string } {
+  const fundedDateFor = (offset: number) =>
+    format(addBusinessDays(today, Math.max(0, offset)), 'yyyy-MM-dd');
+
+  // Emit-checkpoint offset for a step (the checkpoint after the step runs).
+  const stepEmitOffset = (stepId: string): number => {
+    const idx = scenarioSteps.findIndex(s => s.id === stepId);
+    return checkpoints[idx + 1]?.dayOffset ?? checkpoint.dayOffset;
+  };
+
+  const findStep = (stepId: string) => {
+    const idx = scenarioSteps.findIndex(s => s.id === stepId);
+    return { idx, step: idx >= 0 ? scenarioSteps[idx] : undefined };
+  };
+
+  let nextId = Math.max(0, ...originalPositions.map(p => p.id)) + 1;
+
+  const out: Position[] = [];
+
+  for (const ap of checkpoint.activePositions) {
+    if (ap.balance <= 0) continue;
+
+    if (ap.source === 'original') {
+      const orig = originalPositions.find(p => p.id === ap.originalId);
+      if (!orig) continue;
+      out.push({
+        ...orig,
+        balance: ap.balance,
+        dailyPayment: ap.dailyPayment,
+      });
+      continue;
+    }
+
+    if (ap.source === 'outside-added') {
+      // id format: 'add-{stepId}'
+      const stepId = ap.id.startsWith('add-') ? ap.id.slice(4) : ap.id;
+      const { step } = findStep(stepId);
+      const runOn = (step as { runOn?: string } | undefined)?.runOn;
+      const fundedDate = runOn ?? fundedDateFor(stepEmitOffset(stepId));
+      out.push({
+        id: nextId++,
+        entity: (step && step.kind === 'add-position' ? step.entity : ap.entity) || ap.entity,
+        balance: ap.balance,
+        dailyPayment: ap.dailyPayment,
+        isOurPosition: false,
+        includeInReverse: true,
+        fundedDate,
+        amountFunded: null,
+        frequency: 'daily',
+      });
+      continue;
+    }
+
+    if (ap.source === 'reverse-rtr') {
+      // id format: 'rev-{stepId}'
+      const stepId = ap.id.startsWith('rev-') ? ap.id.slice(4) : ap.id;
+      const { step } = findStep(stepId);
+      const runOn = (step as { runOn?: string } | undefined)?.runOn;
+      const fundedDate = runOn ?? fundedDateFor(stepEmitOffset(stepId));
+      // amountFunded = totalFunding (gross of fees) reconstructed from active payback / factor
+      let amountFunded: number | null = null;
+      if (step && step.kind === 'reverse' && step.factorRate > 0) {
+        amountFunded = ap.balance / step.factorRate;
+      }
+      const funderName = step && step.kind === 'reverse' ? step.funderName : undefined;
+      out.push({
+        id: nextId++,
+        entity: funderName?.trim() || 'Reverse RTR',
+        balance: ap.balance,
+        dailyPayment: ap.dailyPayment,
+        isOurPosition: false,
+        includeInReverse: false,
+        fundedDate,
+        amountFunded,
+        frequency: 'daily',
+      });
+      continue;
+    }
+
+    if (ap.source === 'straight-rtr') {
+      // Single-fire: 'straight-{stepId}'
+      // Recurring: 'rstraight-{stepId}-{N}'
+      const isRecurring = ap.id.startsWith('rstraight-');
+      let stepId: string;
+      let recurringIdx = 0; // 1-indexed; 0 == not recurring
+      if (isRecurring) {
+        const rest = ap.id.slice('rstraight-'.length);
+        const lastDash = rest.lastIndexOf('-');
+        if (lastDash > 0) {
+          stepId = rest.slice(0, lastDash);
+          recurringIdx = parseInt(rest.slice(lastDash + 1), 10) || 1;
+        } else {
+          stepId = rest;
+          recurringIdx = 1;
+        }
+      } else {
+        stepId = ap.id.startsWith('straight-') ? ap.id.slice('straight-'.length) : ap.id;
+      }
+      const { idx: sIdx, step } = findStep(stepId);
+
+      let fundedDate: string;
+      let amountFunded: number | null = null;
+      let funderName: string | undefined;
+      let frequency: 'daily' | 'weekly' = 'daily';
+
+      if (step && step.kind === 'recurring-straight') {
+        const cadenceDays = Math.max(0, Math.round(step.cadenceWeeks * BUSINESS_DAYS_PER_WEEK));
+        const lastFire = checkpoints[sIdx + 1]?.dayOffset ?? checkpoint.dayOffset;
+        const firstFireOffset = lastFire - Math.max(0, step.count - 1) * cadenceDays;
+        const n = Math.max(1, recurringIdx);
+        const fundedOffset = firstFireOffset + (n - 1) * cadenceDays;
+        fundedDate = fundedDateFor(fundedOffset);
+        amountFunded = step.amountEach;
+        frequency = step.paymentCadence === 'weekly' ? 'weekly' : 'daily';
+      } else if (step && step.kind === 'straight') {
+        const runOn = step.runOn;
+        fundedDate = runOn ?? fundedDateFor(stepEmitOffset(stepId));
+        amountFunded = step.grossFunding;
+        funderName = step.funderName;
+        frequency = step.paymentCadence === 'weekly' ? 'weekly' : 'daily';
+      } else {
+        fundedDate = fundedDateFor(checkpoint.dayOffset);
+      }
+
+      out.push({
+        id: nextId++,
+        entity: funderName?.trim() || (step && step.kind === 'recurring-straight' ? `Straight #${recurringIdx}` : 'Straight RTR'),
+        balance: ap.balance,
+        dailyPayment: ap.dailyPayment,
+        isOurPosition: false,
+        includeInReverse: true,
+        fundedDate,
+        amountFunded,
+        frequency,
+      });
+      continue;
+    }
+  }
+
+  const asOfDate = fundedDateFor(checkpoint.dayOffset);
+  return { positions: out, asOfDate };
 }

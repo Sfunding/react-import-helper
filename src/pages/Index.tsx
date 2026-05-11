@@ -8,6 +8,7 @@ import { Day1SummaryCard } from '@/components/Day1SummaryCard';
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog';
 import { AdjustmentConfirmDialog, PendingChange } from '@/components/AdjustmentConfirmDialog';
 import { useCalculations } from '@/hooks/useCalculations';
+import { supabase } from '@/integrations/supabase/client';
 import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
@@ -70,6 +71,8 @@ export default function Index() {
   const [lastSavedCalculation, setLastSavedCalculation] = useState<SavedCalculation | null>(null);
   const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
   const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
+  const [parentCalculationId, setParentCalculationId] = useState<string | null>(null);
+  const [parentCalculationName, setParentCalculationName] = useState<string>('');
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
   const [paymentView, setPaymentView] = useState<'daily' | 'weekly' | 'both'>(() => {
     try {
@@ -226,7 +229,24 @@ export default function Index() {
           setLoadedCalculationId(data.id);
           setLoadedCalculationName(data.name || '');
         }
-        
+
+        // Hydrate parent breadcrumb (when this deal was committed from a scenario)
+        const parentId: string | null = data.parent_calculation_id ?? null;
+        const parentNameInline: string = data.parent_calculation_name ?? '';
+        setParentCalculationId(parentId);
+        setParentCalculationName(parentNameInline);
+        if (parentId && !parentNameInline) {
+          // Lazy fetch when not provided in the load payload
+          (async () => {
+            const { data: row } = await supabase
+              .from('saved_calculations')
+              .select('name')
+              .eq('id', parentId)
+              .maybeSingle();
+            if (row?.name) setParentCalculationName(row.name);
+          })();
+        }
+
         sessionStorage.removeItem('loadCalculation');
         // Mark as "saved" state since we just loaded it
         setLastSavedState(JSON.stringify({ 
@@ -634,6 +654,8 @@ export default function Index() {
     setActiveTab('positions');
     setLoadedCalculationId(null);
     setLoadedCalculationName('');
+    setParentCalculationId(null);
+    setParentCalculationName('');
     setLastSavedState('');
     clearDraft();
   };
@@ -870,9 +892,26 @@ export default function Index() {
           />
         )}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <h1 className="text-primary text-2xl md:text-3xl font-bold">
-            Reverse Consolidation Calculator
-          </h1>
+          <div className="flex flex-col gap-1">
+            {parentCalculationId && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('loadCalculation', JSON.stringify({ id: parentCalculationId }));
+                  // Hard reload to re-trigger the load flow with the parent id
+                  navigate('/');
+                  window.location.reload();
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start"
+                title="Open the parent deal"
+              >
+                ↩ Derived from <span className="underline">{parentCalculationName || 'parent deal'}</span>
+              </button>
+            )}
+            <h1 className="text-primary text-2xl md:text-3xl font-bold">
+              Reverse Consolidation Calculator
+            </h1>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <AutoSaveIndicator
               enabled={autoSaveEnabled}

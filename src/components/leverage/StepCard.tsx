@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers, CalendarIcon } from 'lucide-react';
+import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers, CalendarIcon, GitBranch } from 'lucide-react';
 import { ScenarioStep, ActivePosition } from '@/lib/scenarioTypes';
 import { PaymentCadence } from '@/lib/leverageMath';
 import { cn } from '@/lib/utils';
@@ -89,11 +89,12 @@ interface StepCardProps {
   onMove: (dir: -1 | 1) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onCommit?: () => void;
 }
 
 export function StepCard({
   step, index, total, activeBeforeStep, checkpointNote,
-  onChange, onMove, onDuplicate, onDelete,
+  onChange, onMove, onDuplicate, onDelete, onCommit,
 }: StepCardProps) {
   const meta = KIND_META[step.kind];
 
@@ -121,6 +122,11 @@ export function StepCard({
             <Button size="icon" variant="ghost" onClick={onDuplicate}>
               <Copy className="w-4 h-4" />
             </Button>
+            {onCommit && (
+              <Button size="icon" variant="ghost" onClick={onCommit} title="Commit to Calculator">
+                <GitBranch className="w-4 h-4 text-primary" />
+              </Button>
+            )}
             <Button size="icon" variant="ghost" onClick={onDelete}>
               <Trash2 className="w-4 h-4 text-rose-600" />
             </Button>

@@ -1,0 +1,2 @@
+ALTER TABLE saved_calculations ADD COLUMN parent_calculation_id uuid REFERENCES saved_calculations(id) ON DELETE SET NULL;
+CREATE INDEX idx_saved_calculations_parent ON saved_calculations(parent_calculation_id);

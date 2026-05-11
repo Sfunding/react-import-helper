@@ -6,7 +6,9 @@ import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
 import { LeverageBand, snapshot } from '@/lib/leverageMath';
 import { addBusinessDays } from '@/lib/dateUtils';
 import { format } from 'date-fns';
-import { ArrowRight, CalendarDays } from 'lucide-react';
+import { ArrowRight, CalendarDays, GitBranch } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
@@ -74,9 +76,10 @@ interface ScenarioSummaryProps {
   scenarioRun: ScenarioRunResult;
   monthlyRevenue: number;
   onJumpToStep: (idx: number) => void;
+  onCommitStep?: (idx: number) => void;
 }
 
-export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpToStep }: ScenarioSummaryProps) {
+export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpToStep, onCommitStep }: ScenarioSummaryProps) {
   const start = scenarioRun.checkpoints[0];
   const end = scenarioRun.finalState;
   const hasSteps = scenario.steps.length > 0;
@@ -141,11 +144,11 @@ export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpT
                 const dateLabel = format(stepDate, 'MMM d, yyyy');
                 const action = after.stepLabel || step.kind;
                 return (
-                  <li key={step.id}>
+                  <li key={step.id} className="flex items-stretch gap-2">
                     <button
                       type="button"
                       onClick={() => onJumpToStep(idx)}
-                      className="w-full text-left rounded-md border border-border bg-card hover:bg-accent hover:border-primary/40 transition-colors p-3 group"
+                      className="flex-1 text-left rounded-md border border-border bg-card hover:bg-accent hover:border-primary/40 transition-colors p-3 group"
                     >
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 text-sm min-w-0">
@@ -170,6 +173,24 @@ export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpT
                         </div>
                       </div>
                     </button>
+                    {onCommitStep && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-auto w-9 shrink-0"
+                              onClick={(e) => { e.stopPropagation(); onCommitStep(idx); }}
+                              aria-label="Commit to Calculator"
+                            >
+                              <GitBranch className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Commit to Calculator</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </li>
                 );
               })}

@@ -36,6 +36,7 @@ import {
 import { StepCard } from '@/components/leverage/StepCard';
 import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
 import { ScenarioSummary } from '@/components/leverage/ScenarioSummary';
+import { CommitScenarioDialog } from '@/components/leverage/CommitScenarioDialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
@@ -538,6 +539,7 @@ export default function DealLabPage() {
                 onDuplicateStep={duplicateStep}
                 onDeleteStep={deleteStep}
                 onExport={exportScenarioPDF}
+                originalCalc={selectedCalc ?? null}
               />
               <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
             </div>
@@ -565,15 +567,17 @@ interface BuilderTabProps {
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
   onExport: () => void;
+  originalCalc: SavedCalculation | null;
 }
 
 function BuilderTab({
   scenario, setScenario, scenarioRun, monthlyRevenue,
   onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
-  onExport,
+  onExport, originalCalc,
 }: BuilderTabProps) {
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
+  const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const handleJumpToStep = useCallback((idx: number) => {
@@ -636,6 +640,7 @@ function BuilderTab({
         scenarioRun={scenarioRun}
         monthlyRevenue={monthlyRevenue}
         onJumpToStep={handleJumpToStep}
+        onCommitStep={originalCalc ? setCommitStepIndex : undefined}
       />
 
       {/* Step editor — behind the toggle */}
@@ -650,8 +655,18 @@ function BuilderTab({
           onMoveStep={onMoveStep}
           onDuplicateStep={onDuplicateStep}
           onDeleteStep={onDeleteStep}
+          onCommitStep={originalCalc ? setCommitStepIndex : undefined}
         />
       )}
+
+      <CommitScenarioDialog
+        open={commitStepIndex != null}
+        onOpenChange={(o) => { if (!o) setCommitStepIndex(null); }}
+        scenario={scenario}
+        scenarioRun={scenarioRun}
+        stepIndex={commitStepIndex}
+        originalCalc={originalCalc}
+      />
     </div>
   );
 }
@@ -666,11 +681,12 @@ interface ScenarioStepEditorProps {
   onMoveStep: (idx: number, dir: -1 | 1) => void;
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
+  onCommitStep?: (idx: number) => void;
 }
 
 function ScenarioStepEditor({
   scenario, scenarioRun, monthlyRevenue, stepRefs, focusedStepId,
-  onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+  onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep, onCommitStep,
 }: ScenarioStepEditorProps) {
   return (
     <div className="space-y-4">
@@ -704,6 +720,7 @@ function ScenarioStepEditor({
               onMove={dir => onMoveStep(idx, dir)}
               onDuplicate={() => onDuplicateStep(idx)}
               onDelete={() => onDeleteStep(idx)}
+              onCommit={onCommitStep ? () => onCommitStep(idx) : undefined}
             />
             <AfterStepRow checkpoint={scenarioRun.checkpoints[idx + 1]} monthlyRevenue={monthlyRevenue} />
           </div>
