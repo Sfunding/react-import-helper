@@ -569,14 +569,26 @@ export default function DealLabPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to {selectedCalc?.merchant_name || 'calculator'}
+            </Link>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <TrendingDown className="w-6 h-6 text-primary" />
-              Leverage Analyzer
+              Deal Lab
+              {selectedCalc?.merchant_name && (
+                <span className="text-base font-normal text-muted-foreground">
+                  · {selectedCalc.merchant_name}
+                </span>
+              )}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Compare ways to bring this merchant's leverage down.
+              Understand the ins and outs of this deal — straight, reverse, or a mix on your timeline.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -590,52 +602,18 @@ export default function DealLabPage() {
           </div>
         </div>
 
-        {/* Source picker */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Load a saved deal</Label>
-                <Select value={selectedId} onValueChange={setSelectedId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={isLoading ? 'Loading…' : 'Pick a saved calculation'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {calculations.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} {c.merchant_name ? `— ${c.merchant_name}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Monthly Revenue (override)</Label>
-                <Input
-                  inputMode="decimal"
-                  type="number"
-                  value={manualRevenue || ''}
-                  onChange={e => setManualRevenue(parseFloat(e.target.value) || 0)}
-                  placeholder={
-                    selectedCalc?.merchant_monthly_revenue
-                      ? fmt(selectedCalc.merchant_monthly_revenue)
-                      : 'Enter monthly revenue'
-                  }
-                  disabled={!!selectedCalc?.merchant_monthly_revenue && selectedCalc.merchant_monthly_revenue > 0}
-                />
-              </div>
-            </div>
+        {isLoading && !selectedCalc && (
+          <Card><CardContent className="pt-6 text-sm text-muted-foreground">Loading deal…</CardContent></Card>
+        )}
 
-            {noData && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <div>
-                  Pick a saved deal with positions and a monthly revenue to start analyzing leverage.
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {!isLoading && selectedCalc && noData && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              This deal needs at least one position with a balance and a monthly revenue set on the merchant to use the Deal Lab.
+            </div>
+          </div>
+        )}
 
         {!noData && (
           <>
