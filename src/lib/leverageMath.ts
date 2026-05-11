@@ -107,6 +107,39 @@ export function projectStack(positions: Position[], businessDays: number): Stack
   return { totalBalance, totalDaily };
 }
 
+/**
+ * Project the stack from `asOfDate` to `viewDate` using business-day decay.
+ * Returns a new array of positions; balances/dailies are decayed for daily
+ * positions and left untouched for weekly positions (v1 — TODO weekly projection).
+ * Positions with null balance (unknown) are passed through unchanged.
+ */
+export function projectStackToDate(
+  positions: Position[],
+  asOfDate: string,
+  viewDate: string
+): Position[] {
+  if (!asOfDate || !viewDate) return positions.map(p => ({ ...p }));
+  const asOf = new Date(asOfDate + 'T00:00:00');
+  const view = new Date(viewDate + 'T00:00:00');
+  if (Number.isNaN(asOf.getTime()) || Number.isNaN(view.getTime()) || view <= asOf) {
+    return positions.map(p => ({ ...p }));
+  }
+  const businessDays = getBusinessDaysBetween(asOf, view);
+  if (businessDays <= 0) return positions.map(p => ({ ...p }));
+  return positions.map(p => {
+    if (p.frequency === 'weekly') return { ...p }; // TODO weekly projection
+    if (p.balance == null) return { ...p };
+    const daily = p.dailyPayment ?? 0;
+    if (daily <= 0 || p.balance <= 0) return { ...p };
+    const newBalance = Math.max(0, p.balance - daily * businessDays);
+    return {
+      ...p,
+      balance: newBalance,
+      dailyPayment: newBalance > 0 ? daily : 0,
+    };
+  });
+}
+
 // -------------------- Scenario: Straight MCA --------------------
 
 export type PaymentCadence = 'daily' | 'weekly';
