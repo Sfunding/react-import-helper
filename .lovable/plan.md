@@ -1,66 +1,81 @@
-# Scenario Builder — Multi-Step Deal Timeline
 
-Today the Leverage page has three fixed scenarios (Reverse / Straight / Hybrid). The user wants to compose a timeline: e.g. "give a 4‑week straight, wait, add a new outside position, then run a reverse on whatever the stack looks like at that point." This plan adds that.
+# Recurring Straight Program → Projected Reverse
 
-## What the user sees
+## What you'll be able to do
 
-A new tab on `/leverage` called **Scenario Builder** alongside the existing cards.
+On the Leverage page → **Scenario Builder** tab, add a single new step type that captures the exact workflow you described:
 
-Top of the panel: the live stack snapshot (balances, daily debits, leverage, burden) — this is **Step 0**, "Today".
+**Step: "Recurring Straight Program"**
+- Number of straights (e.g. **7**)
+- Cadence between them (e.g. **every 1 week**)
+- Amount per straight (e.g. **$1,000,000**)
+- Factor rate, fee %, term (weeks)
+- Daily vs weekly cadence
+- (No payoffs — these are **pure cash infusions**, per your call. Each adds a new straight-RTR position alongside everything else.)
 
-Below it, an ordered list of **steps** the user adds. Each step is a card. Available step types:
+Then add a single **Reverse** step with a **"Run reverse at week N"** input. The engine fast-forwards all originals + all 7 straight-RTRs to week N, then runs the reverse.
 
-1. **Straight MCA** — same input set as the existing Straight card (advance, factor, fee, term weeks, cadence, payoff selection). Day 1 of this step is "now" relative to the previous step's end.
-2. **Wait** — N weeks of no action; just lets balances pay down.
-3. **Add outside position** — hypothetical new debt the merchant takes on mid‑timeline (balance, daily, funder name).
-4. **Reverse** — runs on the projected state at this point. Has a checkbox **"Also pay off the open Straight MCA from step X"** (per the user's choice — toggle per scenario). Inputs: factor, fee, daily decrease, and a checkbox list of positions present at that moment (existing survivors + any added outside positions + optionally the running straight RTR as a synthetic position).
+The Reverse step gets a checkbox list of what's still alive at week N — originals + each of the 7 straight RTRs that hasn't paid out — so you can **toggle which to consolidate** (your "include/exclude straights" answer).
 
-At the bottom: **State at end of timeline** — total balance, daily debits, leverage, burden, peak exposure, total cash to merchant across all steps, total profit. And a **timeline sparkline** showing combined exposure week-by-week with vertical markers at each step.
+## What the output looks like
 
-Actions on each step: drag to reorder, duplicate, delete, collapse. A "Save scenario" button writes the whole timeline into `saved_calculations.recommended_scenario` (column already exists). A "Load scenario" picker reads it back. PDF export adds a Scenario Builder section.
+Right under the program step, an inline **infusion ladder** table shows each of the 7 straights:
+- Week fired, RTR added, daily debit added, balance remaining at week N
 
-## How the math works
+A new **"State at Week N (pre-reverse)"** panel shows:
+- Projected total balance across all surviving positions
+- Projected total daily / weekly debit (this is the scary number — 7 straights stacked = big weekly debit)
+- Per-position table with balance + daily as of week N
 
-A single forward simulator walks the timeline day by day, keeping per-position state `{ balance, daily, source }` where `source` is `original | straight-rtr | outside-added | reverse-rtr`.
+Then the **Reverse step output** shows the new reverse against that projected stack:
+- Total funding (gross), payback, new daily, new term
+- Cash to merchant after paying off selected positions
+- Final leverage / burden / peak exposure across the entire timeline
 
-For each step the engine:
+The existing sparkline picks up every infusion as a bump and the reverse as the drop.
 
-- **Straight**: marks the selected payoff positions to zero on day 1, credits payoffsTotal toward "cash deployed", spawns a new synthetic `straight-rtr` position with balance = total payback and daily = total payback / (weeks × 5). Advances the clock by 0 days (the straight starts immediately and runs in parallel).
-- **Wait**: advances the clock by `weeks × 5` business days, decrementing each active position's balance by `daily × days` (cap at 0; zero daily once balance hits 0).
-- **Add outside position**: appends a new active position. No clock advance.
-- **Reverse**: snapshots active positions, runs `simulateReverseSnapshot` on the user-selected subset (including the straight-rtr if the toggle is on). Replaces those positions with a new `reverse-rtr` synthetic position; the rest stay running. No clock advance unless the user adds a Wait after it.
+## Technical details
 
-After each step the engine emits a checkpoint: `{ stepIndex, dayOffset, weekOffset, activePositions, totalBalance, totalDaily, leverage, burden, cashToMerchant, profit }`. The bottom panel reads the last checkpoint; the sparkline reads all of them.
+**New step kind** in `scenarioTypes.ts`:
+```
+RecurringStraightStep = {
+  kind: 'recurring-straight',
+  count, cadenceWeeks, amountEach,
+  factorRate, feePercent, termWeeks, paymentCadence
+}
+```
 
-## State, persistence, types
+**Engine change** in `leverageMath.ts` → `runScenario`:
+- When a `recurring-straight` step is hit, the simulator loops `count` times:
+  - At sub-step `i`: advance clock `cadenceWeeks * 5` business days (so balances decay between infusions), then spawn a new `straight-rtr` ActivePosition with id `straight-<stepId>-<i>`, balance = `amount * factor`, daily = `(amount * factor) / (termWeeks * 5)`, entity = `Straight #i`.
+  - Emits one micro-checkpoint per infusion so the sparkline and ladder render every week.
+- The clock ends at `count * cadenceWeeks` weeks after the step starts.
 
-`Scenario = { id, name, steps: ScenarioStep[] }` where `ScenarioStep` is a discriminated union (`straight | wait | add-position | reverse`). Lives in component state via `useState` while editing; on Save we write `{ scenario, checkpoints }` into `saved_calculations.recommended_scenario` (jsonb, no migration needed). Each step has a stable `id` (uuid) so reorder/duplicate are clean.
+**Reverse step gets a `runAtWeek?: number` field.** If set, the engine inserts an implicit wait so the reverse runs at that absolute week offset. The reverse's included-positions list auto-includes all surviving positions at that moment (user can uncheck any).
+
+**StepCard.tsx**: new `RecurringStraightEditor` with the inputs above, plus a read-only mini-table of the 7 infusion rows (week, RTR, daily). The existing `ReverseEditor` gets a "Run at week" input.
+
+**Persistence**: still `recommended_scenario` jsonb on `saved_calculations` — no migration. The new step kind is just additional discriminant.
 
 ## Files touched
 
 | File | Change |
 |---|---|
-| `src/lib/leverageMath.ts` | Add `runScenario(positions, scenario)` that returns `{ checkpoints, finalState, weeklyExposure }`. Reuses existing `simulateStraightMCA`, `simulateReverseSnapshot`, `projectPosition`. Adds the active-position state machine described above. |
-| `src/lib/scenarioTypes.ts` (new) | `Scenario`, `ScenarioStep` (discriminated union), `Checkpoint`, helpers (`makeStep`, `reorder`). |
-| `src/pages/Leverage.tsx` | New `<Tabs>` with "Compare" (current 3 cards) and "Scenario Builder". Builder UI: step list, add-step menu, per-step editors, final-state panel, sparkline, Save/Load/PDF buttons. |
-| `src/components/leverage/StepCard.tsx` (new) | Renders one step with the right editor based on `step.kind`. |
-| `src/components/leverage/ScenarioSparkline.tsx` (new) | SVG line chart of `weeklyExposure` with step markers. Inline, no chart library. |
-| `.lovable/plan.md` | Replace the current plan with the scenario-builder plan. |
-
-No DB migration — `recommended_scenario jsonb` already exists.
-
-## Defaults so the example "just works"
-
-Clicking **+ Add step → Straight** pre-fills factor 1.35, fee 5%, term 4 weeks, cadence weekly, advance prefilled to sum of selected payoffs. Then **+ Add step → Reverse** pre-fills with all positions still active at that moment selected, factor 1.49, fee 9%, 30% daily decrease, and "Pay off the open Straight MCA" checked.
+| `src/lib/scenarioTypes.ts` | Add `RecurringStraightStep`, extend `ScenarioStep` union, add `runAtWeek?` to `ReverseStep`, update `makeStep('recurring-straight')` defaults (count=7, cadence=1, amount=1_000_000, factor=1.35, fee=0.05, term=15). |
+| `src/lib/leverageMath.ts` | Extend `runScenario` to handle `recurring-straight` (loop + advance + spawn) and `reverse.runAtWeek` (implicit wait). |
+| `src/components/leverage/StepCard.tsx` | New `RecurringStraightEditor` + infusion ladder table. Update `ReverseEditor` with "Run at week N" field and surface surviving-position list at that week. |
+| `src/pages/Leverage.tsx` | Add menu item **"+ Add step → Recurring Straight Program"**. Display the new pre-reverse projected state panel. |
+| `.lovable/plan.md` | Replace with this plan. |
 
 ## Out of scope
 
-- Real tranched multi-draw straights (still one upfront advance per Straight step — user can add multiple Straight steps spaced by Wait steps to approximate).
-- Editing the actual reverse engine on the main calculator page.
-- A library of preset scenarios — saving/loading per-deal only for now.
-- Sensitivity sliders / Monte Carlo. This is deterministic projection only.
+- Straights that pay off existing positions (we agreed: pure infusions only).
+- Different factor/fee/term per infusion within the program — all 7 share the same terms. (Workaround: add multiple recurring-straight steps.)
+- Optimization ("what week minimizes peak exposure?") — pure deterministic projection.
 
 ## After implementation
 
-- Smoke-test the user's example: stack of N positions → Straight 4 weeks @ 1.35/5% paying off top 2 → Wait 0 → Reverse including straight-rtr. Confirm checkpoints show projected balances correctly and final leverage/burden numbers tie out by hand on a small case.
-- Confirm Save → reload roundtrips the scenario.
+Smoke test your exact example: stack of N positions → Recurring Straight (7 × $1M, weekly, 1.35, 5%, 15-week term) → Reverse at week 10. Confirm:
+- 7 straight-RTRs appear in the projected-state table.
+- Balances at week 10 = each RTR's balance after `(10 - fireWeek) * 5` business days of decay (until paid off).
+- Reverse totals match hand calc against that projected stack.
