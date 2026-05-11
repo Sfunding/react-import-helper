@@ -1,0 +1,2 @@
+ALTER TABLE public.saved_calculations ADD COLUMN IF NOT EXISTS as_of_date date DEFAULT ((now() AT TIME ZONE 'utc')::date);
+UPDATE public.saved_calculations SET as_of_date = updated_at::date WHERE as_of_date IS NULL;
