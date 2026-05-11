@@ -24,6 +24,7 @@ import {
   LeverageBand,
 } from '@/lib/leverageMath';
 import { format } from 'date-fns';
+import { getBusinessDaysBetween } from '@/lib/dateUtils';
 import {
   Scenario,
   ScenarioStep,
