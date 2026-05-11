@@ -677,26 +677,38 @@ export default function LeveragePage() {
 
                   <RadioGroup
                     value={hybridTriggerKind}
-                    onValueChange={(v: 'days' | 'positions-fall-off') => setHybridTriggerKind(v)}
+                    onValueChange={(v: TriggerKind) => setHybridTriggerKind(v)}
                     className="space-y-2"
                   >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="week" id="trig-week" />
+                      <Label htmlFor="trig-week" className="text-xs">Fixed week</Label>
+                    </div>
                     <div className="flex items-center gap-2">
                       <RadioGroupItem value="positions-fall-off" id="trig-pos" />
                       <Label htmlFor="trig-pos" className="text-xs">After selected positions fall off</Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <RadioGroupItem value="days" id="trig-days" />
-                      <Label htmlFor="trig-days" className="text-xs">After N business days</Label>
+                      <RadioGroupItem value="straight-exposure-below" id="trig-sxb" />
+                      <Label htmlFor="trig-sxb" className="text-xs">When straight-MCA RTR drops below $X</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="combined-exposure-below" id="trig-cxb" />
+                      <Label htmlFor="trig-cxb" className="text-xs">When combined exposure drops below $X</Label>
                     </div>
                   </RadioGroup>
 
-                  {hybridTriggerKind === 'days' ? (
-                    <Input
-                      type="number"
-                      value={hybridTriggerDays}
-                      onChange={e => setHybridTriggerDays(parseInt(e.target.value) || 0)}
-                    />
-                  ) : (
+                  {hybridTriggerKind === 'week' && (
+                    <div>
+                      <Label className="text-xs">Week #</Label>
+                      <Input
+                        type="number"
+                        value={hybridTriggerWeek}
+                        onChange={e => setHybridTriggerWeek(parseInt(e.target.value) || 0)}
+                      />
+                    </div>
+                  )}
+                  {hybridTriggerKind === 'positions-fall-off' && (
                     <div className="space-y-1 max-h-32 overflow-y-auto border border-border rounded-md p-2">
                       {positions
                         .filter(p => !straightPayoffs.has(p.id))
@@ -714,14 +726,37 @@ export default function LeveragePage() {
                         ))}
                     </div>
                   )}
+                  {hybridTriggerKind === 'straight-exposure-below' && (
+                    <div>
+                      <Label className="text-xs">Threshold ($)</Label>
+                      <Input
+                        type="number"
+                        value={hybridStraightThreshold}
+                        onChange={e => setHybridStraightThreshold(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  )}
+                  {hybridTriggerKind === 'combined-exposure-below' && (
+                    <div>
+                      <Label className="text-xs">Threshold ($)</Label>
+                      <Input
+                        type="number"
+                        value={hybridCombinedThreshold}
+                        onChange={e => setHybridCombinedThreshold(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  )}
+
+                  {!hybridResult.triggerReached && (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Threshold not reached within 30 weeks — showing week 30.
+                    </div>
+                  )}
 
                   <div className="text-sm space-y-1 border-t border-border pt-2">
                     <Row label="Phase 1 Cash" value={fmt(hybridResult.straight.cashToMerchant)} />
-                    <Row label="Trigger Day" value={`Day ${hybridResult.triggerDay}`} />
-                    <Row
-                      label="Straight RTR @ trigger"
-                      value={fmt(hybridResult.straightBalanceAtTrigger)}
-                    />
+                    <Row label="Trigger" value={`Week ${hybridResult.triggerWeek.toFixed(1)} (day ${hybridResult.triggerDay})`} />
+                    <Row label="Straight RTR @ trigger" value={fmt(hybridResult.straightBalanceAtTrigger)} />
                     <Row
                       label="Stack remaining"
                       value={fmt(
@@ -731,12 +766,29 @@ export default function LeveragePage() {
                         )
                       )}
                     />
+                    <Row
+                      label="Combined exposure"
+                      value={fmt(
+                        hybridResult.straightBalanceAtTrigger +
+                          hybridResult.remainingPositionsAtTrigger.reduce(
+                            (s, p) => s + (p.projectedBalance || 0),
+                            0
+                          )
+                      )}
+                      bold
+                    />
                     <Row label="Reverse Payback" value={fmt(hybridResult.reverseAtTrigger.totalPayback)} />
                     <Row label="Combined Profit" value={fmt(hybridResult.combinedProfit)} bold />
                   </div>
 
+                  {/* Exposure sparkline */}
+                  <ExposureSparkline
+                    timeline={exposureTimeline}
+                    triggerWeek={hybridResult.triggerWeek}
+                  />
+
                   <MetricsBlock
-                    title={`At Trigger (Day ${hybridResult.triggerDay})`}
+                    title={`At Trigger (Week ${hybridResult.triggerWeek.toFixed(1)})`}
                     totalBalance={
                       hybridResult.straightBalanceAtTrigger + hybridResult.reverseAtTrigger.totalPayback
                     }
