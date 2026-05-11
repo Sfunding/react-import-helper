@@ -392,6 +392,7 @@ export default function DealLabPage() {
                     settings: selectedCalc.settings,
                     positions: selectedCalc.positions,
                     funded_at: (selectedCalc as unknown as { funded_at?: string | null }).funded_at || null,
+                    as_of_date: (selectedCalc as unknown as { as_of_date?: string | null }).as_of_date || null,
                   }));
                 }
                 navigate('/');
