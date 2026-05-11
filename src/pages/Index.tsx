@@ -658,7 +658,8 @@ export default function Index() {
       settings,
       positions,
       totalBalance,
-      totalDailyPayment: totalCurrentDailyPayment
+      totalDailyPayment: totalCurrentDailyPayment,
+      asOfDate,
     });
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
@@ -733,7 +734,8 @@ export default function Index() {
       settings,
       positions,
       totalBalance,
-      totalDailyPayment: totalCurrentDailyPayment
+      totalDailyPayment: totalCurrentDailyPayment,
+      asOfDate,
     });
     
     // Mark current state as saved
