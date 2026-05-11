@@ -454,7 +454,7 @@ export default function DealLabPage() {
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('Leverage Analysis — Scenario Comparison', 40, 50);
+    doc.text('Deal Lab — Scenario Comparison', 40, 50);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(
