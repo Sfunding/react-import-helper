@@ -334,7 +334,7 @@ export default function LeveragePage() {
           winner === 'straight' ? 'YES' : '',
         ],
         [
-          `Straight Now → Reverse @ day ${hybridResult.triggerDay}`,
+          `Straight Now -> Reverse @ wk ${hybridResult.triggerWeek.toFixed(1)}`,
           fmt(hybridResult.totalCashToMerchant),
           fmt(hybridResult.straightDailyAtTrigger + hybridResult.reverseAtTrigger.newDailyPayment),
           fmtX(hybridAfter.balanceLeverage),
@@ -342,6 +342,62 @@ export default function LeveragePage() {
           fmt(hybridResult.combinedProfit),
           winner === 'hybrid' ? 'YES' : '',
         ],
+      ],
+      styles: { fontSize: 9, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    // Straight MCA Deal Terms
+    const afterMain = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Straight MCA Deal Terms', 40, afterMain);
+    autoTable(doc, {
+      startY: afterMain + 8,
+      head: [['Field', 'Value']],
+      body: [
+        ['Advance Amount', fmt(straightResult.payoffsTotal > 0 ? computedStraightGross : computedStraightGross)],
+        ['Factor Rate', straightFactor.toFixed(3)],
+        ['Origination Fee', fmtPct(straightFeePct)],
+        ['Term', `${straightResult.termWeeks} weeks (${straightResult.termDays} business days)`],
+        ['Payment Cadence', straightCadence],
+        ['Daily Payment', fmt(straightResult.newDailyPayment)],
+        ['Weekly Payment', fmt(straightResult.newWeeklyPayment)],
+        ['Total Payback', fmt(straightResult.totalPayback)],
+        ['Net Advance', fmt(straightResult.netAdvance)],
+        ['Cash to Merchant', fmt(straightResult.cashToMerchant)],
+        ['Profit (est)', fmt(straightResult.profit)],
+      ],
+      styles: { fontSize: 9, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    // Hybrid Trigger
+    const afterStraight = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Hybrid Trigger', 40, afterStraight);
+    const triggerLabel =
+      trigger.kind === 'week' ? `Fixed week ${trigger.week}` :
+      trigger.kind === 'positions-fall-off' ? 'After selected positions fall off' :
+      trigger.kind === 'straight-exposure-below' ? `Straight RTR below ${fmt(trigger.threshold)}` :
+      trigger.kind === 'combined-exposure-below' ? `Combined exposure below ${fmt(trigger.threshold)}` :
+      'Custom';
+    const combinedAtTrigger =
+      hybridResult.straightBalanceAtTrigger +
+      hybridResult.remainingPositionsAtTrigger.reduce((s, p) => s + (p.projectedBalance || 0), 0);
+    autoTable(doc, {
+      startY: afterStraight + 8,
+      head: [['Field', 'Value']],
+      body: [
+        ['Trigger Type', triggerLabel],
+        ['Resolved Week', hybridResult.triggerWeek.toFixed(1)],
+        ['Resolved Business Day', String(hybridResult.triggerDay)],
+        ['Threshold Reached', hybridResult.triggerReached ? 'Yes' : 'No (capped at week 30)'],
+        ['Straight RTR @ trigger', fmt(hybridResult.straightBalanceAtTrigger)],
+        ['Combined Exposure @ trigger', fmt(combinedAtTrigger)],
+        ['Reverse Payback', fmt(hybridResult.reverseAtTrigger.totalPayback)],
+        ['Combined Profit', fmt(hybridResult.combinedProfit)],
       ],
       styles: { fontSize: 9, font: 'helvetica' },
       headStyles: { fillColor: [11, 29, 58] },
