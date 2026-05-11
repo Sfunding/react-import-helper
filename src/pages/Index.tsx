@@ -848,11 +848,26 @@ export default function Index() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        {draftBannerDraft && (
+          <DraftRestoreBanner
+            savedAt={draftBannerDraft.savedAt}
+            calcName={draftBannerDraft.loadedCalculationName || undefined}
+            onRestore={handleRestoreDraft}
+            onDiscard={handleDiscardDraft}
+          />
+        )}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <h1 className="text-primary text-2xl md:text-3xl font-bold">
             Reverse Consolidation Calculator
           </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <AutoSaveIndicator
+              enabled={autoSaveEnabled}
+              onToggle={handleToggleAutoSave}
+              status={autoSave.status}
+              hasLoadedCalc={!!loadedCalculationId}
+              onRetry={autoSave.retry}
+            />
             <Button variant="outline" onClick={handleNewCalculation}>
               <FilePlus className="w-4 h-4 mr-2" />
               New
@@ -879,6 +894,7 @@ export default function Index() {
             </Button>
           </div>
         </div>
+
 
         <SaveCalculationDialog
           open={saveDialogOpen}
