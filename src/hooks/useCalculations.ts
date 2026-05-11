@@ -264,6 +264,8 @@ export function useCalculations(filterUserId?: string | null) {
     deleteCalculation: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,
     markAsFunded: markAsFundedMutation.mutateAsync,
-    isMarkingFunded: markAsFundedMutation.isPending
+    isMarkingFunded: markAsFundedMutation.isPending,
+    commitScenario: commitScenarioMutation.mutateAsync,
+    isCommittingScenario: commitScenarioMutation.isPending,
   };
 }
