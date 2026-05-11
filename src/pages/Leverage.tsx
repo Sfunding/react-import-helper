@@ -566,14 +566,14 @@ export default function LeveragePage() {
                         onChange={e => setStraightFeePct(parseFloat(e.target.value) || 0)} />
                     </div>
                     <div>
-                      <Label className="text-xs">Term (mo)</Label>
-                      <Input type="number" value={straightTermMonths}
-                        onChange={e => setStraightTermMonths(parseInt(e.target.value) || 1)} />
+                      <Label className="text-xs">Term (weeks)</Label>
+                      <Input type="number" value={straightTermWeeks}
+                        onChange={e => setStraightTermWeeks(parseInt(e.target.value) || 1)} />
                     </div>
                   </div>
 
                   <div>
-                    <Label className="text-xs">Gross Funding ($)</Label>
+                    <Label className="text-xs">Advance Amount ($)</Label>
                     <Input
                       type="number"
                       value={straightGross ?? Math.round(computedStraightGross)}
@@ -582,8 +582,26 @@ export default function LeveragePage() {
                       }
                     />
                     <div className="text-[10px] text-muted-foreground">
-                      Auto-sized to payoffs + 20% buffer when blank
+                      Defaults to sum of selected payoffs. Single-draw advance.
                     </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Payment Cadence</Label>
+                    <RadioGroup
+                      value={straightCadence}
+                      onValueChange={(v: PaymentCadence) => setStraightCadence(v)}
+                      className="flex gap-4 mt-1"
+                    >
+                      <div className="flex items-center gap-1">
+                        <RadioGroupItem value="daily" id="cad-d" />
+                        <Label htmlFor="cad-d" className="text-xs">Daily</Label>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <RadioGroupItem value="weekly" id="cad-w" />
+                        <Label htmlFor="cad-w" className="text-xs">Weekly</Label>
+                      </div>
+                    </RadioGroup>
                   </div>
 
                   <div>
@@ -605,13 +623,23 @@ export default function LeveragePage() {
                   <div className="text-sm space-y-1 border-t border-border pt-2">
                     <Row label="Payoffs" value={fmt(straightResult.payoffsTotal)} />
                     <Row label="Net Advance" value={fmt(straightResult.netAdvance)} />
+                    <Row label="Total Payback" value={fmt(straightResult.totalPayback)} />
                     <Row
                       label="Cash to Merchant"
                       value={fmt(straightResult.cashToMerchant)}
                       bold
                       negative={straightResult.cashToMerchant < 0}
                     />
-                    <Row label="New MCA Daily" value={fmt(straightResult.newDailyPayment)} />
+                    {straightCadence === 'weekly' ? (
+                      <Row label="Weekly Payment" value={fmt(straightResult.newWeeklyPayment)} bold />
+                    ) : (
+                      <Row label="Daily Payment" value={fmt(straightResult.newDailyPayment)} bold />
+                    )}
+                    <Row
+                      label={straightCadence === 'weekly' ? 'Daily equiv.' : 'Weekly equiv.'}
+                      value={fmt(straightCadence === 'weekly' ? straightResult.newDailyPayment : straightResult.newWeeklyPayment)}
+                    />
+                    <Row label="Pays off in" value={`${straightResult.termWeeks} wk (${straightResult.termDays} biz days)`} />
                     <Row label="Profit (est)" value={fmt(straightResult.profit)} bold />
                   </div>
 
