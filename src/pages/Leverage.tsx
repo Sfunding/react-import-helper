@@ -149,23 +149,21 @@ export default function LeveragePage() {
   }, [reverseResult, positions, reverseIncluded, monthlyRevenue]);
 
   // ---------------- Scenario 2: Straight MCA ----------------
-  const [straightFactor, setStraightFactor] = useState(1.49);
-  const [straightFeePct, setStraightFeePct] = useState(0.09);
-  const [straightTermMonths, setStraightTermMonths] = useState(6);
+  const [straightFactor, setStraightFactor] = useState(1.35);
+  const [straightFeePct, setStraightFeePct] = useState(0.05);
+  const [straightTermWeeks, setStraightTermWeeks] = useState(15);
+  const [straightCadence, setStraightCadence] = useState<PaymentCadence>('weekly');
   const [straightPayoffs, setStraightPayoffs] = useState<Set<number>>(new Set());
   const [straightGross, setStraightGross] = useState<number | null>(null);
 
-  // Default gross funding = payoffs + 20% cash buffer, when user hasn't overridden
+  // Default gross funding = payoffs (no buffer), when user hasn't overridden
   const computedStraightGross = useMemo(() => {
     if (straightGross !== null) return straightGross;
     const payoffs = positions
       .filter(p => straightPayoffs.has(p.id))
       .reduce((s, p) => s + (p.balance ?? 0), 0);
-    // Need grossFunding such that netAdvance = gross*(1-fee) covers payoffs and gives 20% buffer
-    if (payoffs <= 0) return 0;
-    const targetNet = payoffs * 1.2;
-    return targetNet / (1 - straightFeePct);
-  }, [straightGross, positions, straightPayoffs, straightFeePct]);
+    return payoffs;
+  }, [straightGross, positions, straightPayoffs]);
 
   const straightResult = useMemo(
     () =>
@@ -173,10 +171,11 @@ export default function LeveragePage() {
         grossFunding: computedStraightGross,
         factorRate: straightFactor,
         feePercent: straightFeePct,
-        termMonths: straightTermMonths,
+        termWeeks: straightTermWeeks,
         payoffPositionIds: Array.from(straightPayoffs),
+        paymentCadence: straightCadence,
       }),
-    [positions, computedStraightGross, straightFactor, straightFeePct, straightTermMonths, straightPayoffs]
+    [positions, computedStraightGross, straightFactor, straightFeePct, straightTermWeeks, straightPayoffs, straightCadence]
   );
 
   const straightAfter = snapshot(
@@ -186,14 +185,21 @@ export default function LeveragePage() {
   );
 
   // ---------------- Scenario 3: Hybrid ----------------
-  const [hybridTriggerKind, setHybridTriggerKind] = useState<'days' | 'positions-fall-off'>('positions-fall-off');
-  const [hybridTriggerDays, setHybridTriggerDays] = useState(60);
+  type TriggerKind = 'week' | 'positions-fall-off' | 'straight-exposure-below' | 'combined-exposure-below';
+  const [hybridTriggerKind, setHybridTriggerKind] = useState<TriggerKind>('week');
+  const [hybridTriggerWeek, setHybridTriggerWeek] = useState(10);
   const [hybridTriggerIds, setHybridTriggerIds] = useState<Set<number>>(new Set());
+  const [hybridStraightThreshold, setHybridStraightThreshold] = useState(500000);
+  const [hybridCombinedThreshold, setHybridCombinedThreshold] = useState(750000);
 
-  const trigger: HybridTrigger =
-    hybridTriggerKind === 'days'
-      ? { kind: 'days', businessDays: hybridTriggerDays }
-      : { kind: 'positions-fall-off', positionIds: Array.from(hybridTriggerIds) };
+  const trigger: HybridTrigger = useMemo(() => {
+    switch (hybridTriggerKind) {
+      case 'week': return { kind: 'week', week: hybridTriggerWeek };
+      case 'positions-fall-off': return { kind: 'positions-fall-off', positionIds: Array.from(hybridTriggerIds) };
+      case 'straight-exposure-below': return { kind: 'straight-exposure-below', threshold: hybridStraightThreshold };
+      case 'combined-exposure-below': return { kind: 'combined-exposure-below', threshold: hybridCombinedThreshold };
+    }
+  }, [hybridTriggerKind, hybridTriggerWeek, hybridTriggerIds, hybridStraightThreshold, hybridCombinedThreshold]);
 
   const hybridResult = useMemo(
     () =>
@@ -202,8 +208,9 @@ export default function LeveragePage() {
           grossFunding: computedStraightGross,
           factorRate: straightFactor,
           feePercent: straightFeePct,
-          termMonths: straightTermMonths,
+          termWeeks: straightTermWeeks,
           payoffPositionIds: Array.from(straightPayoffs),
+          paymentCadence: straightCadence,
         },
         reverse: {
           factorRate: reverseFactor,
@@ -212,8 +219,13 @@ export default function LeveragePage() {
         },
         trigger,
       }),
-    [positions, computedStraightGross, straightFactor, straightFeePct, straightTermMonths, straightPayoffs,
+    [positions, computedStraightGross, straightFactor, straightFeePct, straightTermWeeks, straightPayoffs, straightCadence,
      reverseFactor, reverseFeePct, reverseDiscount, trigger]
+  );
+
+  const exposureTimeline = useMemo(
+    () => buildExposureTimeline(positions, straightResult, Array.from(straightPayoffs), 26),
+    [positions, straightResult, straightPayoffs]
   );
 
   // After-hybrid snapshot at trigger day: straight RTR + reverse RTR
