@@ -1,75 +1,66 @@
-## Goal
+# Scenario Builder — Multi-Step Deal Timeline
 
-Make the Leverage Analyzer a real deal-architecture tool. Today the Straight MCA card only takes a gross-funding number, factor, fee, and term in months. The user wants to model deals the way they actually pitch them: a defined check size on a weekly cadence at a specific factor and fee for a specific number of weeks, and then a Hybrid trigger that can fire on a specific week — chosen either because positions fall off, because the straight deal has paid down enough to lower exposure, or because peak exposure crosses a threshold.
+Today the Leverage page has three fixed scenarios (Reverse / Straight / Hybrid). The user wants to compose a timeline: e.g. "give a 4‑week straight, wait, add a new outside position, then run a reverse on whatever the stack looks like at that point." This plan adds that.
 
-## What's changing on the Straight MCA card
+## What the user sees
 
-Switch the inputs from "gross funding + months" to a full deal sheet:
+A new tab on `/leverage` called **Scenario Builder** alongside the existing cards.
 
-- **Advance amount (gross funding)** — explicit dollar field, defaults to the sum of selected payoffs (no implicit 20% buffer)
-- **Factor rate** — default 1.35 (was 1.49)
-- **Origination fee %** — default 5% (was 9%)
-- **Term in weeks** — default 15 (was 6 months). Daily payment = total payback ÷ (term weeks × 5 business days)
-- **Payment cadence** — radio: `Daily` or `Weekly`. Weekly shows a "Weekly payment" line; daily shows the daily-clip line. Both are always computed under the hood for the leverage math.
-- **Positions to pay off on day 1** — unchanged checkbox list
+Top of the panel: the live stack snapshot (balances, daily debits, leverage, burden) — this is **Step 0**, "Today".
 
-A small read-only summary panel shows: payoffs total, net advance, cash to merchant, total payback, daily payment, weekly payment, profit, day the straight MCA itself pays off (term weeks × 5).
+Below it, an ordered list of **steps** the user adds. Each step is a card. Available step types:
 
-## What's changing on the Hybrid card (Straight now → Reverse later)
+1. **Straight MCA** — same input set as the existing Straight card (advance, factor, fee, term weeks, cadence, payoff selection). Day 1 of this step is "now" relative to the previous step's end.
+2. **Wait** — N weeks of no action; just lets balances pay down.
+3. **Add outside position** — hypothetical new debt the merchant takes on mid‑timeline (balance, daily, funder name).
+4. **Reverse** — runs on the projected state at this point. Has a checkbox **"Also pay off the open Straight MCA from step X"** (per the user's choice — toggle per scenario). Inputs: factor, fee, daily decrease, and a checkbox list of positions present at that moment (existing survivors + any added outside positions + optionally the running straight RTR as a synthetic position).
 
-The Hybrid card already reuses the Straight MCA inputs, so it inherits everything above (factor, fee, weeks, cadence). What we're adding:
+At the bottom: **State at end of timeline** — total balance, daily debits, leverage, burden, peak exposure, total cash to merchant across all steps, total profit. And a **timeline sparkline** showing combined exposure week-by-week with vertical markers at each step.
 
-- **Trigger in weeks**, not business days. New radio:
-  - `Fixed week` — number input, e.g. `Week 10`. Internally converts to `week × 5` business days.
-  - `After positions fall off` — existing behavior, now also displays the answer as a week number.
-  - `When straight-MCA exposure drops below $X` — new mode. We already track straight-MCA RTR per day; we find the first business day where the straight RTR is ≤ the user-entered dollar threshold and convert that to a week.
-  - `When combined exposure drops below $X` — new mode. Same idea but the threshold is checked against straight RTR + projected remaining-stack balance at that day.
+Actions on each step: drag to reorder, duplicate, delete, collapse. A "Save scenario" button writes the whole timeline into `saved_calculations.recommended_scenario` (column already exists). A "Load scenario" picker reads it back. PDF export adds a Scenario Builder section.
 
-- **Trigger-day readout** is rewritten in week language: "Reverse fires on **week 10** (business day 50). At that point: straight RTR $X, remaining stack balance $Y, combined exposure $Z." This is what the user described — being able to see the moment exposure has dropped enough that they're comfortable layering the reverse.
+## How the math works
 
-- **Exposure timeline mini-chart** under the Hybrid card: a simple sparkline (no new chart library, just an inline SVG) showing weekly exposure for the first ~26 weeks, with a vertical marker on the trigger week. Hover-free; just visual context.
+A single forward simulator walks the timeline day by day, keeping per-position state `{ balance, daily, source }` where `source` is `original | straight-rtr | outside-added | reverse-rtr`.
 
-## Math additions in `src/lib/leverageMath.ts`
+For each step the engine:
 
-- Replace `termMonths` with `termWeeks` on `StraightMCAInputs`. Term days = `termWeeks × 5`. Weekly payment = `dailyPayment × 5` (matches the 5-biz-day/week constant already in the file).
-- Add `paymentCadence: 'daily' | 'weekly'` to `StraightMCAInputs` (informational; doesn't change math, just controls what we surface).
-- Add a `projectStraightMCABalance(result, businessDay)` helper that returns the straight-MCA RTR balance on a given day, capped at zero.
-- Extend `HybridTrigger` with two new variants:
-  - `{ kind: 'straight-exposure-below'; threshold: number }`
-  - `{ kind: 'combined-exposure-below'; threshold: number }`
-- Update `computeTriggerDay` to walk day-by-day (cap at, say, 30 weeks = 150 days) and resolve the first day where the condition holds. If never reached inside the window, return the cap and surface a small "threshold not reached within 30 weeks" hint in the UI.
-- Add `buildExposureTimeline(positions, straightResult, weeks)` returning `[{ week, straightRTR, remainingStackBalance, combined }, …]` so the UI sparkline and Hybrid card share one source of truth.
+- **Straight**: marks the selected payoff positions to zero on day 1, credits payoffsTotal toward "cash deployed", spawns a new synthetic `straight-rtr` position with balance = total payback and daily = total payback / (weeks × 5). Advances the clock by 0 days (the straight starts immediately and runs in parallel).
+- **Wait**: advances the clock by `weeks × 5` business days, decrementing each active position's balance by `daily × days` (cap at 0; zero daily once balance hits 0).
+- **Add outside position**: appends a new active position. No clock advance.
+- **Reverse**: snapshots active positions, runs `simulateReverseSnapshot` on the user-selected subset (including the straight-rtr if the toggle is on). Replaces those positions with a new `reverse-rtr` synthetic position; the rest stay running. No clock advance unless the user adds a Wait after it.
 
-## PDF export
+After each step the engine emits a checkpoint: `{ stepIndex, dayOffset, weekOffset, activePositions, totalBalance, totalDaily, leverage, burden, cashToMerchant, profit }`. The bottom panel reads the last checkpoint; the sparkline reads all of them.
 
-Update `exportPDF()` in `Leverage.tsx`:
+## State, persistence, types
 
-- Header row already shows scenario, cash, new daily debits, leverage, burden, profit, recommended. Add a second small table titled **"Straight MCA Deal Terms"** with rows: advance, factor, fee, term (weeks), daily, weekly, total payback, profit.
-- Add a **"Hybrid Trigger"** line: trigger type, the resolved week, straight RTR at trigger, combined exposure at trigger.
-
-Standard Helvetica only, no unicode (per project rule).
+`Scenario = { id, name, steps: ScenarioStep[] }` where `ScenarioStep` is a discriminated union (`straight | wait | add-position | reverse`). Lives in component state via `useState` while editing; on Save we write `{ scenario, checkpoints }` into `saved_calculations.recommended_scenario` (jsonb, no migration needed). Each step has a stable `id` (uuid) so reorder/duplicate are clean.
 
 ## Files touched
 
 | File | Change |
 |---|---|
-| `src/lib/leverageMath.ts` | Switch to `termWeeks`, add cadence, add two new trigger kinds, add `projectStraightMCABalance` and `buildExposureTimeline`. |
-| `src/pages/Leverage.tsx` | New Straight MCA input layout (weeks + cadence + explicit advance). New Hybrid trigger UI with fixed-week and two exposure-threshold modes. Inline SVG sparkline. Updated PDF. |
-| `.lovable/plan.md` | Mark the new tasks. |
+| `src/lib/leverageMath.ts` | Add `runScenario(positions, scenario)` that returns `{ checkpoints, finalState, weeklyExposure }`. Reuses existing `simulateStraightMCA`, `simulateReverseSnapshot`, `projectPosition`. Adds the active-position state machine described above. |
+| `src/lib/scenarioTypes.ts` (new) | `Scenario`, `ScenarioStep` (discriminated union), `Checkpoint`, helpers (`makeStep`, `reorder`). |
+| `src/pages/Leverage.tsx` | New `<Tabs>` with "Compare" (current 3 cards) and "Scenario Builder". Builder UI: step list, add-step menu, per-step editors, final-state panel, sparkline, Save/Load/PDF buttons. |
+| `src/components/leverage/StepCard.tsx` (new) | Renders one step with the right editor based on `step.kind`. |
+| `src/components/leverage/ScenarioSparkline.tsx` (new) | SVG line chart of `weeklyExposure` with step markers. Inline, no chart library. |
+| `.lovable/plan.md` | Replace the current plan with the scenario-builder plan. |
 
-## Defaults that match the user's example
+No DB migration — `recommended_scenario jsonb` already exists.
 
-- Advance: prefilled to the merchant's selected payoffs (no 20% buffer). User can type `1,000,000` directly.
-- Factor: 1.35
-- Fee: 5%
-- Term: 15 weeks
-- Cadence: Weekly
-- Hybrid trigger: `Fixed week`, week 10
+## Defaults so the example "just works"
 
-So with one click on "Pay off top X positions" the user can land on exactly the deal they described and then drag the trigger week around to see where the reverse becomes safe.
+Clicking **+ Add step → Straight** pre-fills factor 1.35, fee 5%, term 4 weeks, cadence weekly, advance prefilled to sum of selected payoffs. Then **+ Add step → Reverse** pre-fills with all positions still active at that moment selected, factor 1.49, fee 9%, 30% daily decrease, and "Pay off the open Straight MCA" checked.
 
 ## Out of scope
 
-- Tranched / multi-draw straight MCAs (e.g. literally cutting $1M per week for 4 weeks). Today the straight MCA is one upfront advance. If the user wants real weekly tranching, that's a follow-up — call it out in the UI as "single-draw" and we can extend later.
-- Changing the reverse engine, the saved-deal schema, or the recommendation logic beyond feeding it the new numbers.
-- Persisting Straight/Hybrid input drafts across reloads.
+- Real tranched multi-draw straights (still one upfront advance per Straight step — user can add multiple Straight steps spaced by Wait steps to approximate).
+- Editing the actual reverse engine on the main calculator page.
+- A library of preset scenarios — saving/loading per-deal only for now.
+- Sensitivity sliders / Monte Carlo. This is deterministic projection only.
+
+## After implementation
+
+- Smoke-test the user's example: stack of N positions → Straight 4 weeks @ 1.35/5% paying off top 2 → Wait 0 → Reverse including straight-rtr. Confirm checkpoints show projected balances correctly and final leverage/burden numbers tie out by hand on a small case.
+- Confirm Save → reload roundtrips the scenario.

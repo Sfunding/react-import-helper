@@ -15,6 +15,13 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Position, SavedCalculation } from '@/types/calculation';
 import {
   snapshot,
@@ -23,12 +30,25 @@ import {
   simulateReverseSnapshot,
   simulateHybrid,
   buildExposureTimeline,
+  runScenario,
   HybridTrigger,
   LeverageBand,
   PaymentCadence,
   BUSINESS_DAYS_PER_WEEK,
 } from '@/lib/leverageMath';
-import { Download, TrendingDown, AlertTriangle } from 'lucide-react';
+import {
+  Scenario,
+  ScenarioStep,
+  StepKind,
+  makeStep,
+  newScenario,
+  reorderSteps,
+} from '@/lib/scenarioTypes';
+import { StepCard } from '@/components/leverage/StepCard';
+import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
+import { Download, TrendingDown, AlertTriangle, Plus, Save, FileDown, Layers, Zap, Clock, PlusCircle, Repeat } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -89,9 +109,14 @@ type ScenarioKind = 'reverse' | 'straight' | 'hybrid';
 
 export default function LeveragePage() {
   const { calculations, isLoading, updateCalculation } = useCalculations();
+  const { toast } = useToast();
 
   const [selectedId, setSelectedId] = useState<string>('');
   const [chosenScenario, setChosenScenario] = useState<ScenarioKind | null>(null);
+  const [activeTab, setActiveTab] = useState<'compare' | 'builder'>('compare');
+
+  // Scenario Builder state
+  const [scenario, setScenario] = useState<Scenario>(() => newScenario());
 
   const selectedCalc: SavedCalculation | undefined = useMemo(
     () => calculations.find(c => c.id === selectedId),
@@ -250,6 +275,130 @@ export default function LeveragePage() {
   }, [reverseAfter, straightAfter, hybridAfter, straightResult, hybridResult]);
 
   const winner: ScenarioKind = chosenScenario ?? recommendation;
+
+  // ---------------- Scenario Builder ----------------
+  const scenarioRun = useMemo(
+    () => runScenario(positions, scenario, monthlyRevenue),
+    [positions, scenario, monthlyRevenue]
+  );
+
+  // Reset scenario when deal changes; try to load saved scenario from row
+  React.useEffect(() => {
+    if (!selectedCalc) {
+      setScenario(newScenario());
+      return;
+    }
+    const saved = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
+      .recommended_scenario;
+    if (saved?.scenario && Array.isArray(saved.scenario.steps)) {
+      setScenario(saved.scenario);
+    } else {
+      setScenario(newScenario());
+    }
+  }, [selectedCalc]);
+
+  const updateStep = (idx: number, next: ScenarioStep) =>
+    setScenario(s => ({ ...s, steps: s.steps.map((st, i) => (i === idx ? next : st)) }));
+
+  const addStep = (kind: StepKind) => {
+    const newStep = makeStep(kind);
+    // For reverse: pre-select all active positions at that point
+    if (newStep.kind === 'reverse') {
+      const activeBefore = scenarioRun.checkpoints[scenarioRun.checkpoints.length - 1]?.activePositions ?? [];
+      newStep.includedPositionIds = activeBefore.map(p => p.id);
+    }
+    setScenario(s => ({ ...s, steps: [...s.steps, newStep] }));
+  };
+
+  const moveStep = (idx: number, dir: -1 | 1) =>
+    setScenario(s => ({ ...s, steps: reorderSteps(s.steps, idx, Math.max(0, Math.min(s.steps.length - 1, idx + dir))) }));
+
+  const duplicateStep = (idx: number) =>
+    setScenario(s => {
+      const dup = { ...s.steps[idx], id: Math.random().toString(36).slice(2, 10) } as ScenarioStep;
+      const next = s.steps.slice();
+      next.splice(idx + 1, 0, dup);
+      return { ...s, steps: next };
+    });
+
+  const deleteStep = (idx: number) =>
+    setScenario(s => ({ ...s, steps: s.steps.filter((_, i) => i !== idx) }));
+
+  const saveScenarioToDeal = async () => {
+    if (!selectedCalc) return;
+    const payload = {
+      scenario,
+      checkpoints: scenarioRun.checkpoints,
+      savedAt: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('saved_calculations')
+      // recommended_scenario is jsonb; cast through unknown to bypass strict typing
+      .update({ recommended_scenario: payload } as unknown as Record<string, unknown>)
+      .eq('id', selectedCalc.id);
+    if (error) {
+      toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Scenario saved', description: `${scenario.name} saved to deal.` });
+    }
+  };
+
+  const exportScenarioPDF = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Scenario Builder — Timeline', 40, 50);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      `Merchant: ${selectedCalc?.merchant_name || '-'}   Monthly Revenue: ${fmt(monthlyRevenue)}`,
+      40, 68
+    );
+    doc.text(`Scenario: ${scenario.name}`, 40, 82);
+
+    autoTable(doc, {
+      startY: 100,
+      head: [['#', 'Step', 'Week', 'Total Bal', 'Daily', 'Leverage', 'Burden', 'Cash (step)', 'Profit (step)']],
+      body: scenarioRun.checkpoints.map(c => [
+        c.stepIndex < 0 ? 'Start' : String(c.stepIndex + 1),
+        c.stepLabel,
+        c.weekOffset.toFixed(1),
+        fmt(c.totalBalance),
+        fmt(c.totalDaily),
+        fmtX(c.balanceLeverage),
+        fmtPct(c.paymentBurden),
+        fmt(c.cashToMerchantStep),
+        fmt(c.profitStep),
+      ]),
+      styles: { fontSize: 8, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    const afterTbl = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Final State', 40, afterTbl);
+    const fs = scenarioRun.finalState;
+    autoTable(doc, {
+      startY: afterTbl + 6,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Balance', fmt(fs.totalBalance)],
+        ['Total Daily Debits', fmt(fs.totalDaily)],
+        ['Balance Leverage', fmtX(fs.balanceLeverage)],
+        ['Payment Burden', fmtPct(fs.paymentBurden)],
+        ['Cumulative Cash to Merchant', fmt(fs.cashToMerchantCumulative)],
+        ['Cumulative Profit (est)', fmt(fs.profitCumulative)],
+        ['Peak Combined Exposure', fmt(scenarioRun.peakCombinedExposure)],
+        ['Timeline Length', `${fs.weekOffset.toFixed(1)} weeks (${fs.dayOffset} biz days)`],
+      ],
+      styles: { fontSize: 9, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    doc.save(`scenario_${(selectedCalc?.merchant_name || 'deal').replace(/[^a-z0-9]/gi, '_')}.pdf`);
+  };
+
 
   const togglePayoff = (id: number) => {
     setStraightPayoffs(prev => {
@@ -524,8 +673,19 @@ export default function LeveragePage() {
               )}
             </div>
 
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'compare' | 'builder')}>
+              <TabsList className="grid grid-cols-2 w-full max-w-md">
+                <TabsTrigger value="compare">Compare Scenarios</TabsTrigger>
+                <TabsTrigger value="builder">
+                  <Layers className="w-3.5 h-3.5 mr-1.5" />
+                  Scenario Builder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="compare" className="mt-4">
             {/* Three scenarios */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
               {/* --- Reverse --- */}
               <Card className={winner === 'reverse' ? 'ring-2 ring-primary' : ''}>
                 <CardHeader className="pb-3">
@@ -864,6 +1024,25 @@ export default function LeveragePage() {
                 </CardContent>
               </Card>
             </div>
+              </TabsContent>
+
+              <TabsContent value="builder" className="mt-4 space-y-4">
+                <ScenarioBuilderPanel
+                  scenario={scenario}
+                  setScenario={setScenario}
+                  scenarioRun={scenarioRun}
+                  monthlyRevenue={monthlyRevenue}
+                  onAddStep={addStep}
+                  onUpdateStep={updateStep}
+                  onMoveStep={moveStep}
+                  onDuplicateStep={duplicateStep}
+                  onDeleteStep={deleteStep}
+                  onSave={saveScenarioToDeal}
+                  onExport={exportScenarioPDF}
+                  canSave={!!selectedCalc}
+                />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
@@ -941,6 +1120,192 @@ function ExposureSparkline({
           wk {triggerWeek.toFixed(1)}
         </text>
       </svg>
+    </div>
+  );
+}
+
+// ---------------- Scenario Builder Panel ----------------
+
+import type { ScenarioRunResult } from '@/lib/scenarioTypes';
+type ScenarioRunResultLite = ScenarioRunResult;
+
+function ScenarioBuilderPanel({
+  scenario, setScenario, scenarioRun, monthlyRevenue,
+  onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+  onSave, onExport, canSave,
+}: {
+  scenario: Scenario;
+  setScenario: React.Dispatch<React.SetStateAction<Scenario>>;
+  scenarioRun: ScenarioRunResultLite;
+  monthlyRevenue: number;
+  onAddStep: (k: StepKind) => void;
+  onUpdateStep: (idx: number, s: ScenarioStep) => void;
+  onMoveStep: (idx: number, dir: -1 | 1) => void;
+  onDuplicateStep: (idx: number) => void;
+  onDeleteStep: (idx: number) => void;
+  onSave: () => void;
+  onExport: () => void;
+  canSave: boolean;
+}) {
+  const fs = scenarioRun.finalState;
+  const stepMarkers = useMemo(() => {
+    return scenarioRun.checkpoints
+      .filter(c => c.stepIndex >= 0)
+      .map(c => {
+        const step = scenario.steps[c.stepIndex];
+        return {
+          week: c.weekOffset,
+          label: step ? `S${c.stepIndex + 1}` : '',
+          kind: step?.kind || 'wait',
+        };
+      });
+  }, [scenario.steps, scenarioRun.checkpoints]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <Label className="text-xs">Scenario Name</Label>
+            <Input
+              value={scenario.name}
+              onChange={e => setScenario(s => ({ ...s, name: e.target.value }))}
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add Step
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => onAddStep('straight')}>
+                <Zap className="w-4 h-4 mr-2 text-amber-600" /> Straight MCA
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('wait')}>
+                <Clock className="w-4 h-4 mr-2 text-slate-600" /> Wait (let positions pay down)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('add-position')}>
+                <PlusCircle className="w-4 h-4 mr-2 text-rose-600" /> Add Outside Position
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('reverse')}>
+                <Repeat className="w-4 h-4 mr-2 text-emerald-600" /> Reverse Consolidation
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" onClick={onSave} disabled={!canSave}>
+            <Save className="w-4 h-4 mr-1.5" /> Save to Deal
+          </Button>
+          <Button variant="outline" onClick={onExport}>
+            <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Final state summary */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Balance</div>
+          <div className="text-lg font-bold">{fmt(fs.totalBalance)}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Daily</div>
+          <div className="text-lg font-bold">{fmt(fs.totalDaily)}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Leverage</div>
+          <div className="text-lg font-bold">{fmtX(fs.balanceLeverage)}</div>
+          <div className="text-[10px] text-muted-foreground">{fmtPct(fs.paymentBurden)} burden</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">Total Cash to Merchant</div>
+          <div className={`text-lg font-bold ${fs.cashToMerchantCumulative < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+            {fmt(fs.cashToMerchantCumulative)}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">Cumulative Profit</div>
+          <div className="text-lg font-bold">{fmt(fs.profitCumulative)}</div>
+          <div className="text-[10px] text-muted-foreground">Peak: {fmt(scenarioRun.peakCombinedExposure)}</div>
+        </div>
+      </div>
+
+      <ScenarioSparkline weekly={scenarioRun.weeklyExposure} stepMarkers={stepMarkers} />
+
+      {/* Step cards */}
+      {scenario.steps.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Add steps above to build a multi-stage scenario.
+            <br />
+            Example: <b>Straight MCA</b> (4 wks, $1M, 1.35, 5%) -&gt; <b>Wait</b> 10 wks -&gt; <b>Reverse</b> on whatever remains.
+          </CardContent>
+        </Card>
+      )}
+
+      {scenario.steps.map((step, idx) => {
+        // Active positions BEFORE this step = checkpoint at idx-1 (or start = checkpoints[0])
+        const beforeCp = scenarioRun.checkpoints[idx]; // start checkpoint is at index 0, step 0 sees that
+        const note = scenarioRun.checkpoints[idx + 1]?.note;
+        return (
+          <div key={step.id} className="space-y-2">
+            <StepCard
+              step={step}
+              index={idx}
+              total={scenario.steps.length}
+              activeBeforeStep={beforeCp?.activePositions ?? []}
+              checkpointNote={note}
+              onChange={next => onUpdateStep(idx, next)}
+              onMove={dir => onMoveStep(idx, dir)}
+              onDuplicate={() => onDuplicateStep(idx)}
+              onDelete={() => onDeleteStep(idx)}
+            />
+            {/* After-step snapshot */}
+            <AfterStepRow checkpoint={scenarioRun.checkpoints[idx + 1]} monthlyRevenue={monthlyRevenue} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AfterStepRow({
+  checkpoint, monthlyRevenue,
+}: {
+  checkpoint?: ScenarioRunResultLite['checkpoints'][number];
+  monthlyRevenue: number;
+}) {
+  if (!checkpoint) return null;
+  const lev: LeverageBand =
+    checkpoint.balanceLeverage < 0.5 ? 'green' : checkpoint.balanceLeverage < 1.0 ? 'amber' : 'red';
+  const bur: LeverageBand =
+    checkpoint.paymentBurden < 0.15 ? 'green' : checkpoint.paymentBurden < 0.30 ? 'amber' : 'red';
+  const cls = (b: LeverageBand) =>
+    b === 'green' ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    : b === 'amber' ? 'bg-amber-100 text-amber-800 border-amber-300'
+    : 'bg-rose-100 text-rose-800 border-rose-300';
+  return (
+    <div className="ml-2 pl-4 border-l-2 border-dashed border-muted-foreground/30 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+      <div>
+        <span className="text-muted-foreground">After step · wk {checkpoint.weekOffset.toFixed(1)}</span>
+      </div>
+      <div>
+        <span className="text-muted-foreground">Bal: </span>
+        <b>{fmt(checkpoint.totalBalance)}</b>
+      </div>
+      <div>
+        <span className="text-muted-foreground">Daily: </span>
+        <b>{fmt(checkpoint.totalDaily)}</b>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground">Lev:</span>
+        <Badge variant="outline" className={cls(lev)}>{fmtX(checkpoint.balanceLeverage)}</Badge>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground">Burd:</span>
+        <Badge variant="outline" className={cls(bur)}>{fmtPct(checkpoint.paymentBurden)}</Badge>
+      </div>
     </div>
   );
 }
