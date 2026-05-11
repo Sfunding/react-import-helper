@@ -505,7 +505,7 @@ function RecurringStraightEditor({ step, onChange }: {
       <div className="rounded-md border border-amber-200 bg-amber-50/50 p-2">
         <div className="text-[11px] font-semibold text-amber-900 mb-1">Infusion Ladder</div>
         <div className="grid grid-cols-4 gap-x-2 text-[10px] font-semibold text-muted-foreground border-b border-amber-200 pb-1 mb-1">
-          <div>#</div><div>Wk Fired</div><div>RTR Added</div><div>Daily Added</div>
+          <div>#</div><div>Wk Fired</div><div>RTR Added</div><div>{step.paymentCadence === 'weekly' ? 'Weekly Added' : 'Daily Added'}</div>
         </div>
         <div className="max-h-40 overflow-y-auto">
           {ladder.map(r => (
@@ -513,7 +513,7 @@ function RecurringStraightEditor({ step, onChange }: {
               <div>#{r.idx}</div>
               <div>wk {r.weekFired}</div>
               <div>{fmt(paybackEach)}</div>
-              <div>+{fmt(dailyEach)}/d</div>
+              <div>+{fmt(step.paymentCadence === 'weekly' ? dailyEach * 5 : dailyEach)}/{step.paymentCadence === 'weekly' ? 'wk' : 'd'}</div>
             </div>
           ))}
           {ladder.length === 0 && <div className="text-[11px] text-muted-foreground">No infusions.</div>}
@@ -525,8 +525,17 @@ function RecurringStraightEditor({ step, onChange }: {
         <div><span className="text-muted-foreground">Total Net to Merchant: </span><b className="text-emerald-700">{fmt(totalNet)}</b></div>
         <div><span className="text-muted-foreground">Total Payback (all RTRs): </span><b>{fmt(totalPayback)}</b></div>
         <div><span className="text-muted-foreground">Program Length: </span><b>{programWeeks} wks</b></div>
-        <div><span className="text-muted-foreground">Daily Added per Straight: </span><b>{fmt(dailyEach)}</b></div>
-        <div><span className="text-muted-foreground">Peak Daily Stack (all open): </span><b className="text-rose-600">{fmt(dailyEach * count)}</b></div>
+        {step.paymentCadence === 'weekly' ? (
+          <>
+            <div><span className="text-muted-foreground">Weekly Added per Straight: </span><b className="text-primary">{fmt(dailyEach * 5)}</b></div>
+            <div><span className="text-muted-foreground">Peak Weekly Stack (all open): </span><b className="text-rose-600">{fmt(dailyEach * 5 * count)}</b></div>
+          </>
+        ) : (
+          <>
+            <div><span className="text-muted-foreground">Daily Added per Straight: </span><b className="text-primary">{fmt(dailyEach)}</b></div>
+            <div><span className="text-muted-foreground">Peak Daily Stack (all open): </span><b className="text-rose-600">{fmt(dailyEach * count)}</b></div>
+          </>
+        )}
       </div>
     </div>
   );
