@@ -654,6 +654,8 @@ export default function Index() {
     setActiveTab('positions');
     setLoadedCalculationId(null);
     setLoadedCalculationName('');
+    setParentCalculationId(null);
+    setParentCalculationName('');
     setLastSavedState('');
     clearDraft();
   };
@@ -890,9 +892,26 @@ export default function Index() {
           />
         )}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <h1 className="text-primary text-2xl md:text-3xl font-bold">
-            Reverse Consolidation Calculator
-          </h1>
+          <div className="flex flex-col gap-1">
+            {parentCalculationId && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('loadCalculation', JSON.stringify({ id: parentCalculationId }));
+                  // Hard reload to re-trigger the load flow with the parent id
+                  navigate('/');
+                  window.location.reload();
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start"
+                title="Open the parent deal"
+              >
+                ↩ Derived from <span className="underline">{parentCalculationName || 'parent deal'}</span>
+              </button>
+            )}
+            <h1 className="text-primary text-2xl md:text-3xl font-bold">
+              Reverse Consolidation Calculator
+            </h1>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <AutoSaveIndicator
               enabled={autoSaveEnabled}
