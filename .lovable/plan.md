@@ -1,103 +1,31 @@
+## Goal
+When a step in the Deal Lab Scenario Builder has its **Cadence** set to **Weekly**, surface weekly payment figures as the primary numbers (with daily as the secondary "equiv."), instead of always showing daily as the headline.
 
-## Multi-scenario Deal Lab + named steps + plain-English summary
+Today the cadence radio exists on Straight and Recurring-Straight steps but the math summary inside each card still leads with `Daily: $X` and only mentions weekly as a derived line. Reverse steps also always say "New Daily". The narrative + before/after table in the Story panel always say "Daily debits".
 
-Today every deal has exactly one scenario stored in `saved_calculations.recommended_scenario`. We're upgrading the Deal Lab so you can build, save, and switch between many named scenarios on the same deal, label every step and funder, and read a clear "if you do this, then this happens" story.
+## Scope (UI only — no math changes)
 
-### 1. Multiple scenarios per deal
+### 1. `StepCard.tsx` — per-step editors
+- **StraightEditor footer grid**: when `step.paymentCadence === 'weekly'`, lead with **Weekly: `daily*5`** (bold), and show **Daily equiv.: `daily`** as the secondary row. Default (daily) stays as today.
+- **RecurringStraightEditor footer**: same swap — "Weekly Added per Straight" / "Peak Weekly Stack" lead when cadence is weekly; daily becomes the secondary "equiv." line. Update Infusion Ladder column header from `Daily Added` → `Weekly Added` and value `+$X/wk` when weekly.
+- **ReverseEditor footer**: reverse steps don't carry their own cadence field, but they inherit the merchant's current rhythm. Add a small "Show as" toggle (Daily / Weekly) defaulting to Daily, and when Weekly is picked: show **New Weekly: `newDaily*5`** as the lead with Daily as equiv. (Term display in business days stays.) — *alternative:* skip the toggle on reverse and leave as-is. Default plan: add the toggle for parity.
 
-**New table `deal_scenarios`** (one row per scenario):
+### 2. `ScenarioStory.tsx` — narrative + before/after table
+- Each step has access to its `paymentCadence` (straight/recurring-straight) or inherits 'daily' otherwise. For the **per-step row** in the before/after table:
+  - If that step is weekly, the `Daily debits` row becomes `Weekly debits` and values are `totalDaily * 5`.
+  - Other rows (Balance, Leverage, Burden) unchanged.
+- For the **header baseline** and **final state** sentences (which describe the overall stack, not one step): keep showing daily as primary, but switch to weekly-primary if **the last action step** in the scenario was weekly. Otherwise daily.
 
-```text
-id              uuid pk
-calculation_id  uuid  → saved_calculations.id (indexed)
-user_id         uuid  (owner, for RLS)
-name            text  ('Bridge then reverse', 'Aggressive payoff', ...)
-scenario        jsonb (the full Scenario object: steps, runOn dates, labels)
-is_pinned       boolean default false   (sticky tab, default scenario)
-sort_order      int default 0           (tab order)
-created_at, updated_at timestamps
-```
+### 3. `scenarioNarrative.ts`
+- Straight step sentence: if `paymentCadence === 'weekly'`, phrase as `…weekly payment of $X` (= daily*5) instead of `daily debits of $X`.
+- Reverse step sentence: append `(≈ $Y weekly)` when relevant, but keep "daily debits" as the canonical phrasing since reverse cadence isn't tracked per-step.
+- Recurring-straight: same as straight — swap to weekly phrasing when cadence is weekly.
 
-RLS: same shape as `saved_calculations` — owner sees own, admins see all, shared-edit users can read/write through the existing `deal_shares` link on the parent calculation.
+### 4. Out of scope
+- No changes to `leverageMath.ts` — `totalDaily`, schedule math, sparkline, PDF exports, checkpoint storage all stay daily-denominated internally. This is purely a display-layer toggle driven by each step's `paymentCadence` field.
+- The summary "End Daily" tile and PDF tables stay as-is (those are cross-scenario aggregates where daily is the lowest common denominator). Can revisit in a follow-up if desired.
 
-**Migration path:** existing `saved_calculations.recommended_scenario` stays as-is and is treated as a "legacy fallback" — on Lab load, if no rows exist in `deal_scenarios` for this deal but `recommended_scenario` has data, we surface it as a single scenario named "Saved scenario" and offer to migrate it on first save.
-
-### 2. Switcher UI — tabs + side-by-side compare
-
-Above the Scenario Builder section:
-
-```text
-[ Bridge then reverse ▾ ] [ Aggressive payoff ] [ + New ]    [ ⇆ Compare ]
-                              Rename · Duplicate · Delete
-```
-
-- **Tab strip** of all saved scenarios for this deal. Click to switch. Long names truncate, the right-click / chevron opens rename / duplicate / delete / pin.
-- **+ New** prompts for a name and creates a blank scenario.
-- **⇆ Compare** flips the layout to two columns: pick a second scenario from a dropdown; the builder is hidden and you see two read-only summary panels (final state metrics + step-by-step narrative) next to each other. One click to swap which is "left" / "right". Exit Compare to return to single-edit mode.
-- A small **● Unsaved** dot appears on the active tab while you have local edits; **Save scenario** persists the row. Auto-save toggle reuses the existing hook for the active scenario.
-
-### 3. Named steps + named funders
-
-- **Step nickname:** the step card title becomes editable inline. Click `Step 1 · Straight MCA` → cursor lands in a text input that holds `step.label`. On blur, save. Empty clears back to the auto label. This already exists in the data model (`ScenarioStep.label`) — just no UI today.
-- **Funder name per step:** straight and reverse steps gain a `funderName?: string` field rendered as a small `Funder` input next to the date picker. The active position list, the auto-label, the checkpoint label, and the summary narrative all use this name (falls back to "Straight MCA"/"Reverse RTR").
-- `AddPositionStep.entity` is already a name input — we just relabel it "Funder name" for consistency.
-
-### 4. Step-by-step plain-English summary
-
-A new **Story** panel below the builder (and the primary view inside Compare mode):
-
-For each checkpoint, render:
-
-```text
-─────────────────────────────────────────────────────────────
-Step 1 · "Bridge funding"  ·  Fri, Nov 14, 2026  ·  Day 14
-Straight MCA $200,000 with Velocity Capital
-You pay off 2 positions ($95k total). Net cash to merchant: $93,000.
-
-| Metric              | Before    | After     |
-|---------------------|-----------|-----------|
-| Total balance       | $312,400  | $477,400  |
-| Daily debits        | $4,820    | $6,150    |
-| Balance leverage    | 0.78x     | 1.19x     |
-| Payment burden      | 24.1%     | 30.7%     |
-─────────────────────────────────────────────────────────────
-Step 2 · "Wait for cleanup"  ·  Fri, Dec 12, 2026  ·  Day 34
-...
-```
-
-Each block is one sentence describing the action (templated per step kind, plugging in the funder name, dollar amounts, date, and any payoffs/added positions), plus a compact 4-row before/after table sourced from the existing `Checkpoint` data — so no new math, just new rendering.
-
-A header at the top of the Story sets the baseline:
-
-```text
-Today (Mon, Nov 10, 2026): balance $312,400 · daily $4,820 · 0.78x · 24% burden.
-```
-
-A footer summarizes the final state and cumulative cash + profit.
-
-### Files to touch
-
-```text
-NEW  supabase migration                       — deal_scenarios table + RLS
-NEW  src/hooks/useDealScenarios.ts            — fetch / create / update / delete / reorder
-NEW  src/components/leverage/ScenarioTabs.tsx — tab strip + rename/duplicate/delete + Compare toggle
-NEW  src/components/leverage/ScenarioStory.tsx— renders the narrative + before/after tables
-NEW  src/lib/scenarioNarrative.ts             — pure helpers: buildStorySentences(scenario, checkpoints)
-
-EDIT src/lib/scenarioTypes.ts                 — add `funderName?: string` to straight + reverse step types
-EDIT src/components/leverage/StepCard.tsx     — inline-editable step label, funderName input
-EDIT src/lib/leverageMath.ts                  — stepLabel uses funderName/label; checkpoint note enriched
-EDIT src/pages/DealLab.tsx                    — scenarios state list, tabs, Compare mode,
-                                                 Story panel, swap save/load to deal_scenarios,
-                                                 legacy `recommended_scenario` migration on first save
-```
-
-### Data backfill / compatibility
-- Old saved scenario blob keeps loading (read-only, surfaced as one tab).
-- First save in the new system migrates that blob into a `deal_scenarios` row and clears the legacy field (optional second migration later — not blocking).
-- PDF export emits the Story for the currently-active scenario.
-
-### Out of scope
-- Cross-deal scenario templates (copy a scenario from deal A to deal B).
-- Auto-recommendation across multiple custom scenarios (the existing reverse/straight/hybrid recommender stays untouched).
-- Real-time multiplayer editing.
+## Acceptance
+- Set a Straight step's Cadence to Weekly → its card's footer leads with the weekly number, and the Story row for that step says `Weekly debits` with `daily*5`.
+- Flip back to Daily → original behavior.
+- No regressions to math, schedule, sparkline, or PDF output.

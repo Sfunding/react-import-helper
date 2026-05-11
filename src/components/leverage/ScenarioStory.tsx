@@ -36,6 +36,7 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
   const entries = buildStory(scenario, checkpoints);
   const baseline = checkpoints[0];
   const final = checkpoints[checkpoints.length - 1];
+  const lastCadence: 'daily' | 'weekly' = entries.length > 0 ? entries[entries.length - 1].displayCadence : 'daily';
 
   if (!baseline) return null;
 
@@ -52,8 +53,19 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
           <div className="font-semibold mb-1">Today · {todayLabel()}</div>
           <div className="text-muted-foreground">
             The merchant currently owes <b className="text-foreground">{fmtMoney(baseline.totalBalance)}</b> across
-            their stack and pays <b className="text-foreground">{fmtMoney(baseline.totalDaily)}</b> daily
-            (~{fmtMoney(baseline.totalDaily * 5)} weekly). Balance leverage{' '}
+            their stack and pays{' '}
+            {lastCadence === 'weekly' ? (
+              <>
+                <b className="text-foreground">{fmtMoney(baseline.totalDaily * 5)}</b> weekly
+                (~{fmtMoney(baseline.totalDaily)} daily).
+              </>
+            ) : (
+              <>
+                <b className="text-foreground">{fmtMoney(baseline.totalDaily)}</b> daily
+                (~{fmtMoney(baseline.totalDaily * 5)} weekly).
+              </>
+            )}{' '}
+            Balance leverage{' '}
             <b className="text-foreground">{fmtX(baseline.balanceLeverage)}</b>, payment burden{' '}
             <b className="text-foreground">{fmtPct(baseline.paymentBurden)}</b>.
           </div>
@@ -90,9 +102,9 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
                   changeBetter={e.after.totalBalance < e.before.totalBalance}
                 />
                 <MetricRow
-                  label="Daily debits"
-                  before={fmtMoney(e.before.totalDaily)}
-                  after={fmtMoney(e.after.totalDaily)}
+                  label={e.displayCadence === 'weekly' ? 'Weekly debits' : 'Daily debits'}
+                  before={fmtMoney(e.displayCadence === 'weekly' ? e.before.totalDaily * 5 : e.before.totalDaily)}
+                  after={fmtMoney(e.displayCadence === 'weekly' ? e.after.totalDaily * 5 : e.after.totalDaily)}
                   changeBetter={e.after.totalDaily < e.before.totalDaily}
                 />
                 <MetricRow
@@ -117,8 +129,9 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
             <div className="font-semibold text-emerald-900">Final state</div>
             <div className="text-emerald-900/80">
               After {entries.length} step{entries.length === 1 ? '' : 's'} ({final.weekOffset.toFixed(1)} weeks), the
-              merchant's balance settles at <b>{fmtMoney(final.totalBalance)}</b> with daily debits of{' '}
-              <b>{fmtMoney(final.totalDaily)}</b>. Total cash delivered: <b>{fmtMoney(final.cashToMerchantCumulative)}</b>.
+              merchant's balance settles at <b>{fmtMoney(final.totalBalance)}</b> with{' '}
+              {lastCadence === 'weekly' ? 'weekly' : 'daily'} debits of{' '}
+              <b>{fmtMoney(lastCadence === 'weekly' ? final.totalDaily * 5 : final.totalDaily)}</b>. Total cash delivered: <b>{fmtMoney(final.cashToMerchantCumulative)}</b>.
               Gross profit booked: <b>{fmtMoney(final.profitCumulative)}</b>.
             </div>
           </div>
