@@ -888,6 +888,15 @@ export default function Index() {
               <FileText className="w-4 h-4 mr-2" />
               PDF
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => loadedCalculationId && navigate(`/deal/${loadedCalculationId}/lab`)}
+              disabled={!loadedCalculationId}
+              title={loadedCalculationId ? 'Open Deal Lab for this deal' : 'Save this deal first to open the Deal Lab'}
+            >
+              <FlaskConical className="w-4 h-4 mr-2" />
+              Deal Lab
+            </Button>
             <Button onClick={() => setSaveDialogOpen(true)}>
               <Save className="w-4 h-4 mr-2" />
               Save
