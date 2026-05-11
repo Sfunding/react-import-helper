@@ -637,6 +637,11 @@ export function runScenario(
   {
     let curDay = 0;
     for (const s of scenario.steps) {
+      // Honor absolute runOn date: fast-forward curDay to that target (only forwards)
+      if (s.kind !== 'wait') {
+        const td = dayOffsetFromIso((s as { runOn?: string }).runOn);
+        if (td != null && td > curDay) curDay = td;
+      }
       if (s.kind === 'wait') {
         curDay += Math.max(0, Math.round(s.weeks * BUSINESS_DAYS_PER_WEEK));
       } else if (s.kind === 'recurring-straight') {
