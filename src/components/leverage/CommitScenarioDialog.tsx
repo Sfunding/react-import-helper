@@ -124,7 +124,8 @@ export function CommitScenarioDialog({
 
   const buildSettings = (): Settings => {
     const orig = originalCalc.settings ?? DEFAULT_SETTINGS;
-    const reverseOverrides: Partial<Settings> = isReverse && step.kind === 'reverse'
+    const applyReverse = isReverse && !isStraights && step.kind === 'reverse';
+    const reverseOverrides: Partial<Settings> = applyReverse && step.kind === 'reverse'
       ? { rate: step.factorRate, feePercent: step.feePercent, dailyPaymentDecrease: step.dailyDecrease }
       : {};
 
@@ -149,13 +150,27 @@ export function CommitScenarioDialog({
 
   const handleCommit = async () => {
     if (!checkpoint) return;
-    const { positions, asOfDate } = checkpointToPositions(
-      checkpoint,
+
+    // In 'straights' mode, filter out any reverse-RTR active positions so the
+    // child deal contains only the parent's positions + scenario straights.
+    const sourceCheckpoint = isStraights
+      ? { ...checkpoint, activePositions: checkpoint.activePositions.filter(ap => ap.source !== 'reverse-rtr') }
+      : checkpoint;
+
+    const today = new Date();
+    const { positions, asOfDate: defaultAsOf } = checkpointToPositions(
+      sourceCheckpoint,
       scenario.steps,
       originalCalc.positions ?? [],
-      new Date(),
+      today,
       scenarioRun.checkpoints,
     );
+
+    // In 'straights' mode, snap as-of to the business day AFTER the last straight fires.
+    const asOfDate = isStraights
+      ? format(addBusinessDays(today, Math.max(0, checkpoint.dayOffset + 1)), 'yyyy-MM-dd')
+      : defaultAsOf;
+
     if (positions.length === 0) {
       toast({
         title: 'Nothing to commit',
