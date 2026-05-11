@@ -90,9 +90,9 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
                   changeBetter={e.after.totalBalance < e.before.totalBalance}
                 />
                 <MetricRow
-                  label="Daily debits"
-                  before={fmtMoney(e.before.totalDaily)}
-                  after={fmtMoney(e.after.totalDaily)}
+                  label={e.displayCadence === 'weekly' ? 'Weekly debits' : 'Daily debits'}
+                  before={fmtMoney(e.displayCadence === 'weekly' ? e.before.totalDaily * 5 : e.before.totalDaily)}
+                  after={fmtMoney(e.displayCadence === 'weekly' ? e.after.totalDaily * 5 : e.after.totalDaily)}
                   changeBetter={e.after.totalDaily < e.before.totalDaily}
                 />
                 <MetricRow
