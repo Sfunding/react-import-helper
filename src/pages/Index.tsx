@@ -56,6 +56,7 @@ export default function Index() {
   const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [asOfDate, setAsOfDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [activeTab, setActiveTab] = useState<TabType>('positions');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
