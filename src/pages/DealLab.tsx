@@ -193,6 +193,11 @@ export default function DealLabPage() {
     }
     if (hasBootstrappedLegacy) return;
     setHasBootstrappedLegacy(true);
+    // For child deals committed from a scenario, do not silently auto-create
+    // an empty "Untitled Scenario" — wait for the parent-scenario clone (in
+    // commitScenarioMutation) to land, or let the user create one explicitly.
+    const isDerived = !!(selectedCalc as unknown as { parent_calculation_id?: string | null }).parent_calculation_id;
+    if (isDerived) return;
     const legacy = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
       .recommended_scenario;
     const seed = (legacy?.scenario && Array.isArray(legacy.scenario.steps)) ? legacy.scenario : newScenario();
