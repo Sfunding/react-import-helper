@@ -681,6 +681,11 @@ function BuilderTab({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {originalCalc && (
+            <Button variant="outline" onClick={openFinalCommit} disabled={!canCommitFinal} title="Snapshot the merchant's state after every step has fired into a new calculator deal">
+              <GitBranch className="w-4 h-4 mr-1.5" /> Commit final state
+            </Button>
+          )}
           <Button variant="outline" onClick={onExport}>
             <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
           </Button>
