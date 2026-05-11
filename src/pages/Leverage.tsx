@@ -673,8 +673,19 @@ export default function LeveragePage() {
               )}
             </div>
 
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'compare' | 'builder')}>
+              <TabsList className="grid grid-cols-2 w-full max-w-md">
+                <TabsTrigger value="compare">Compare Scenarios</TabsTrigger>
+                <TabsTrigger value="builder">
+                  <Layers className="w-3.5 h-3.5 mr-1.5" />
+                  Scenario Builder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="compare" className="mt-4">
             {/* Three scenarios */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
               {/* --- Reverse --- */}
               <Card className={winner === 'reverse' ? 'ring-2 ring-primary' : ''}>
                 <CardHeader className="pb-3">
