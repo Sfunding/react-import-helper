@@ -53,8 +53,19 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
           <div className="font-semibold mb-1">Today · {todayLabel()}</div>
           <div className="text-muted-foreground">
             The merchant currently owes <b className="text-foreground">{fmtMoney(baseline.totalBalance)}</b> across
-            their stack and pays <b className="text-foreground">{fmtMoney(baseline.totalDaily)}</b> daily
-            (~{fmtMoney(baseline.totalDaily * 5)} weekly). Balance leverage{' '}
+            their stack and pays{' '}
+            {lastCadence === 'weekly' ? (
+              <>
+                <b className="text-foreground">{fmtMoney(baseline.totalDaily * 5)}</b> weekly
+                (~{fmtMoney(baseline.totalDaily)} daily).
+              </>
+            ) : (
+              <>
+                <b className="text-foreground">{fmtMoney(baseline.totalDaily)}</b> daily
+                (~{fmtMoney(baseline.totalDaily * 5)} weekly).
+              </>
+            )}{' '}
+            Balance leverage{' '}
             <b className="text-foreground">{fmtX(baseline.balanceLeverage)}</b>, payment burden{' '}
             <b className="text-foreground">{fmtPct(baseline.paymentBurden)}</b>.
           </div>
