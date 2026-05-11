@@ -681,11 +681,12 @@ interface ScenarioStepEditorProps {
   onMoveStep: (idx: number, dir: -1 | 1) => void;
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
+  onCommitStep?: (idx: number) => void;
 }
 
 function ScenarioStepEditor({
   scenario, scenarioRun, monthlyRevenue, stepRefs, focusedStepId,
-  onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+  onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep, onCommitStep,
 }: ScenarioStepEditorProps) {
   return (
     <div className="space-y-4">
@@ -719,6 +720,7 @@ function ScenarioStepEditor({
               onMove={dir => onMoveStep(idx, dir)}
               onDuplicate={() => onDuplicateStep(idx)}
               onDelete={() => onDeleteStep(idx)}
+              onCommit={onCommitStep ? () => onCommitStep(idx) : undefined}
             />
             <AfterStepRow checkpoint={scenarioRun.checkpoints[idx + 1]} monthlyRevenue={monthlyRevenue} />
           </div>
