@@ -122,6 +122,11 @@ export function StepCard({
             <Button size="icon" variant="ghost" onClick={onDuplicate}>
               <Copy className="w-4 h-4" />
             </Button>
+            {onCommit && (
+              <Button size="icon" variant="ghost" onClick={onCommit} title="Commit to Calculator">
+                <GitBranch className="w-4 h-4 text-primary" />
+              </Button>
+            )}
             <Button size="icon" variant="ghost" onClick={onDelete}>
               <Trash2 className="w-4 h-4 text-rose-600" />
             </Button>
