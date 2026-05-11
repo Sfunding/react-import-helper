@@ -101,7 +101,8 @@ export default function SavedCalculations() {
       },
       settings: calc.settings,
       positions: calc.positions,
-      funded_at: (calc as any).funded_at || null
+      funded_at: (calc as any).funded_at || null,
+      as_of_date: (calc as any).as_of_date || null,
     }));
     navigate('/');
   };
