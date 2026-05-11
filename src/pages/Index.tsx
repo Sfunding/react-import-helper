@@ -547,12 +547,37 @@ export default function Index() {
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true, fundedDate: null, amountFunded: null, frequency: 'daily', weeklyPullDay: null }]);
+    setPositions([...positions, {
+      id: newId, entity: '', balance: null, dailyPayment: 0,
+      isOurPosition: false, includeInReverse: true,
+      fundedDate: null, amountFunded: null, frequency: 'daily', weeklyPullDay: null,
+      balanceAsOfDate: asOfDate, balanceAnchor: null,
+    }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
-  const updatePosition = (id: number, field: keyof Position, value: string | number | boolean) => 
-    setPositions(positions.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updatePosition = (id: number, field: keyof Position, value: string | number | boolean | null) =>
+    setPositions(positions.map(p => {
+      if (p.id !== id) return p;
+      const next: Position = { ...p, [field]: value } as Position;
+      // Stamp a manual anchor whenever the user directly edits the balance to a known number.
+      if (field === 'balance' && typeof value === 'number') {
+        next.balanceAsOfDate = asOfDate;
+        next.balanceAnchor = 'manual';
+      }
+      return next;
+    }));
+
+  // Re-price all positions when the calculator's "as of" date changes.
+  const handleAsOfDateChange = (newDate: string) => {
+    if (newDate === asOfDate) return;
+    setPositions(prev => prev.map(p => {
+      const newBal = repricedBalance(p, newDate);
+      return { ...p, balance: newBal };
+    }));
+    setAsOfDate(newDate);
+  };
+
 
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v || 0);
   const fmtPct = (v: number) => `${(v || 0).toFixed(2)}%`;
