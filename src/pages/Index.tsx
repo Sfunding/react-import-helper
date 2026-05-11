@@ -32,6 +32,10 @@ import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
+import { DraftRestoreBanner } from '@/components/DraftRestoreBanner';
+import { AutoSaveIndicator } from '@/components/AutoSaveIndicator';
+import { useDraftBackup, useBeforeUnloadGuard, useDraftOnMount, clearDraft, DraftPayload } from '@/hooks/useDraftBackup';
+import { useAutoSave, readAutoSaveEnabled, writeAutoSaveEnabled } from '@/hooks/useAutoSave';
 import { format } from 'date-fns';
 
 import { cn } from '@/lib/utils';
