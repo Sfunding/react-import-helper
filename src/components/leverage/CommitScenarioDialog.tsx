@@ -46,13 +46,14 @@ interface CommitScenarioDialogProps {
   scenarioRun: ScenarioRunResult;
   stepIndex: number | null;
   originalCalc: SavedCalculation | null | undefined;
-  mode?: 'step' | 'final';
+  mode?: 'step' | 'final' | 'straights';
 }
 
 export function CommitScenarioDialog({
   open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc, mode = 'step',
 }: CommitScenarioDialogProps) {
   const isFinal = mode === 'final';
+  const isStraights = mode === 'straights';
   const navigate = useNavigate();
   const { toast } = useToast();
   const { commitScenario, isCommittingScenario } = useCalculations();
