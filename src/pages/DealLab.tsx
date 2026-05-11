@@ -560,7 +560,7 @@ export default function DealLabPage() {
       headStyles: { fillColor: [11, 29, 58] },
     });
 
-    doc.save(`leverage_${(selectedCalc?.merchant_name || 'analysis').replace(/[^a-z0-9]/gi, '_')}.pdf`);
+    doc.save(`deal_lab_${(selectedCalc?.merchant_name || 'analysis').replace(/[^a-z0-9]/gi, '_')}.pdf`);
   };
 
   const noData = positions.length === 0 || monthlyRevenue <= 0;
