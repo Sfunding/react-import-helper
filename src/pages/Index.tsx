@@ -29,7 +29,7 @@ import {
   EarlyPayTier,
   SavedCalculation
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween, repricedBalance } from '@/lib/dateUtils';
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
@@ -194,35 +194,39 @@ export default function Index() {
         if (data.merchant) setMerchant(data.merchant);
         if (data.settings) setSettings(data.settings);
         
-        // If deal is funded, auto-adjust position balances
-        let loadedPositions = data.positions || [];
-        if (data.funded_at && loadedPositions.length > 0) {
-          const fundedDate = new Date(data.funded_at);
-          const today = new Date();
-          const businessDaysElapsed = getBusinessDaysBetween(fundedDate, today);
-          
-          if (businessDaysElapsed > 0) {
-            loadedPositions = loadedPositions.map((p: Position) => {
-              if (p.balance !== null && p.balance > 0 && p.dailyPayment > 0) {
-                const totalPaid = businessDaysElapsed * p.dailyPayment;
-                const adjustedBalance = Math.max(0, p.balance - totalPaid);
-                return { ...p, balance: Math.round(adjustedBalance * 100) / 100 };
-              }
-              return p;
-            });
-            toast({
-              title: 'Balances adjusted',
-              description: `Position balances updated for ${businessDaysElapsed} business days since funding on ${format(fundedDate, 'MMM d, yyyy')}.`,
-            });
-          }
-        }
-        
-        if (loadedPositions) setPositions(loadedPositions);
-        
-        // Hydrate as-of date: prefer explicit field, fallback to created_at::date or today
+        // Determine the effective as-of date the saved data was true on.
         const loadedAsOf: string = data.as_of_date
+          || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
           || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-        setAsOfDate(loadedAsOf);
+
+        // Hydrate anchors so future as-of-date changes reprice correctly.
+        let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
+          // Funded anchor is implicit — fundedDate + amountFunded handle it.
+          if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+            return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
+          }
+          // Otherwise stamp a manual anchor on the as-of date the data was true on.
+          if (!p.balanceAsOfDate) {
+            return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
+          }
+          return p;
+        });
+
+        // Project forward to today if the saved as-of date is in the past.
+        const todayISO = format(new Date(), 'yyyy-MM-dd');
+        if (loadedAsOf !== todayISO && loadedPositions.length > 0) {
+          loadedPositions = loadedPositions.map(p => ({ ...p, balance: repricedBalance(p, todayISO) }));
+          toast({
+            title: 'Balances projected to today',
+            description: `Repriced from ${format(new Date(loadedAsOf + 'T00:00:00'), 'MMM d, yyyy')}. Use the "Positions as of" date to move it.`,
+          });
+        }
+        const effectiveAsOf = todayISO;
+
+        if (loadedPositions) setPositions(loadedPositions);
+
+        setAsOfDate(effectiveAsOf);
+
 
         // Track the loaded calculation ID and name for updates
         if (data.id) {
@@ -253,7 +257,7 @@ export default function Index() {
           merchant: data.merchant || DEFAULT_MERCHANT, 
           settings: data.settings || DEFAULT_SETTINGS, 
           positions: loadedPositions || [],
-          asOfDate: loadedAsOf,
+          asOfDate: effectiveAsOf,
         }));
         toast({
           title: 'Calculation loaded',
@@ -547,12 +551,37 @@ export default function Index() {
 
   const addPosition = () => {
     const newId = positions.length > 0 ? Math.max(...positions.map(p => p.id)) + 1 : 1;
-    setPositions([...positions, { id: newId, entity: '', balance: null, dailyPayment: 0, isOurPosition: false, includeInReverse: true, fundedDate: null, amountFunded: null, frequency: 'daily', weeklyPullDay: null }]);
+    setPositions([...positions, {
+      id: newId, entity: '', balance: null, dailyPayment: 0,
+      isOurPosition: false, includeInReverse: true,
+      fundedDate: null, amountFunded: null, frequency: 'daily', weeklyPullDay: null,
+      balanceAsOfDate: asOfDate, balanceAnchor: null,
+    }]);
   };
 
   const deletePosition = (id: number) => setPositions(positions.filter(p => p.id !== id));
-  const updatePosition = (id: number, field: keyof Position, value: string | number | boolean) => 
-    setPositions(positions.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updatePosition = (id: number, field: keyof Position, value: string | number | boolean | null) =>
+    setPositions(positions.map(p => {
+      if (p.id !== id) return p;
+      const next: Position = { ...p, [field]: value } as Position;
+      // Stamp a manual anchor whenever the user directly edits the balance to a known number.
+      if (field === 'balance' && typeof value === 'number') {
+        next.balanceAsOfDate = asOfDate;
+        next.balanceAnchor = 'manual';
+      }
+      return next;
+    }));
+
+  // Re-price all positions when the calculator's "as of" date changes.
+  const handleAsOfDateChange = (newDate: string) => {
+    if (newDate === asOfDate) return;
+    setPositions(prev => prev.map(p => {
+      const newBal = repricedBalance(p, newDate);
+      return { ...p, balance: newBal };
+    }));
+    setAsOfDate(newDate);
+  };
+
 
   const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v || 0);
   const fmtPct = (v: number) => `${(v || 0).toFixed(2)}%`;
@@ -1071,14 +1100,13 @@ export default function Index() {
               <Calendar
                 mode="single"
                 selected={asOfDate ? new Date(asOfDate + 'T00:00:00') : undefined}
-                onSelect={(d) => d && setAsOfDate(format(d, 'yyyy-MM-dd'))}
-                disabled={(date) => date > new Date()}
+                onSelect={(d) => d && handleAsOfDateChange(format(d, 'yyyy-MM-dd'))}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
             </PopoverContent>
           </Popover>
-          <span className="text-[11px]">— balances will be projected forward to today in the Deal Lab.</span>
+          <span className="text-[11px]">— move this date to reprice balances. Funded positions reprice from their funding date; manually-entered balances reprice from when you entered them.</span>
         </div>
       </div>
 
