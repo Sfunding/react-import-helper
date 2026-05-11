@@ -698,7 +698,7 @@ function BuilderTab({
         scenarioRun={scenarioRun}
         monthlyRevenue={monthlyRevenue}
         onJumpToStep={handleJumpToStep}
-        onCommitStep={originalCalc ? setCommitStepIndex : undefined}
+        onCommitStep={originalCalc ? openStepCommit : undefined}
       />
 
       {/* Step editor — behind the toggle */}
@@ -713,7 +713,7 @@ function BuilderTab({
           onMoveStep={onMoveStep}
           onDuplicateStep={onDuplicateStep}
           onDeleteStep={onDeleteStep}
-          onCommitStep={originalCalc ? setCommitStepIndex : undefined}
+          onCommitStep={originalCalc ? openStepCommit : undefined}
         />
       )}
 
@@ -724,6 +724,7 @@ function BuilderTab({
         scenarioRun={scenarioRun}
         stepIndex={commitStepIndex}
         originalCalc={originalCalc}
+        mode={commitMode}
       />
     </div>
   );
