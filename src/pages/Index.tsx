@@ -625,6 +625,7 @@ export default function Index() {
     setLoadedCalculationId(null);
     setLoadedCalculationName('');
     setLastSavedState('');
+    clearDraft();
   };
 
   // Create export data from current state (for exporting without saving)
