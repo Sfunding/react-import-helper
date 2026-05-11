@@ -661,7 +661,7 @@ export default function Index() {
       totalDailyPayment: totalCurrentDailyPayment
     });
     // Mark current state as saved
-    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
     clearDraft();
     
     // Clear loaded ID since this is now a new calculation
@@ -737,7 +737,7 @@ export default function Index() {
     });
     
     // Mark current state as saved
-    setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
     setLoadedCalculationName(name);
     clearDraft();
     
@@ -845,7 +845,7 @@ export default function Index() {
     totalDailyPayment: totalCurrentDailyPayment,
     hasUnsavedChanges: isDirty,
     onSaved: () => {
-      setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+      setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
       clearDraft();
     },
     updateCalculation,
