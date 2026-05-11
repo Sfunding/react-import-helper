@@ -122,6 +122,25 @@ export default function DealLabPage() {
     }
   }, [isLoading, selectedId, selectedCalc, navigate, toast]);
 
+  // Parent deal (for "Derived from …" banner on committed child deals)
+  const parentCalculationId: string | null =
+    (selectedCalc as unknown as { parent_calculation_id?: string | null } | undefined)
+      ?.parent_calculation_id ?? null;
+  const [parentCalculationName, setParentCalculationName] = useState<string>('');
+  useEffect(() => {
+    if (!parentCalculationId) { setParentCalculationName(''); return; }
+    const cached = calculations.find(c => c.id === parentCalculationId);
+    if (cached?.name) { setParentCalculationName(cached.name); return; }
+    (async () => {
+      const { data: row } = await supabase
+        .from('saved_calculations')
+        .select('name')
+        .eq('id', parentCalculationId)
+        .maybeSingle();
+      if (row?.name) setParentCalculationName(row.name);
+    })();
+  }, [parentCalculationId, calculations]);
+
   // Revenue is always sourced from the loaded deal
   const monthlyRevenue = selectedCalc?.merchant_monthly_revenue ?? 0;
 
