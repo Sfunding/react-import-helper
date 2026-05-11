@@ -97,12 +97,15 @@ export function projectStack(positions: Position[], businessDays: number): Stack
 
 // -------------------- Scenario: Straight MCA --------------------
 
+export type PaymentCadence = 'daily' | 'weekly';
+
 export interface StraightMCAInputs {
   grossFunding: number;     // total advance (gross of fees)
-  factorRate: number;       // e.g. 1.49
-  feePercent: number;       // 0.09 = 9%
-  termMonths: number;       // amortization length in months (22 biz days each)
+  factorRate: number;       // e.g. 1.35
+  feePercent: number;       // 0.05 = 5%
+  termWeeks: number;        // amortization length in weeks (5 biz days each)
   payoffPositionIds: number[]; // ids of positions paid off on day 1
+  paymentCadence?: PaymentCadence; // informational; default 'daily'
 }
 
 export interface StraightMCAResult {
@@ -111,7 +114,10 @@ export interface StraightMCAResult {
   cashToMerchant: number;
   totalPayback: number;
   termDays: number;
+  termWeeks: number;
   newDailyPayment: number;
+  newWeeklyPayment: number;
+  paymentCadence: PaymentCadence;
   remainingStackBalance: number;   // unselected positions, before the new MCA
   remainingStackDaily: number;
   newTotalBalance: number;         // remaining stack + new MCA payback
@@ -131,8 +137,10 @@ export function simulateStraightMCA(
   const netAdvance = inputs.grossFunding * (1 - inputs.feePercent);
   const cashToMerchant = netAdvance - payoffsTotal;
   const totalPayback = inputs.grossFunding * inputs.factorRate;
-  const termDays = Math.max(1, Math.round(inputs.termMonths * BUSINESS_DAYS_PER_MONTH));
+  const termWeeks = Math.max(1, inputs.termWeeks || 1);
+  const termDays = Math.max(1, Math.round(termWeeks * BUSINESS_DAYS_PER_WEEK));
   const newDailyPayment = totalPayback / termDays;
+  const newWeeklyPayment = newDailyPayment * BUSINESS_DAYS_PER_WEEK;
 
   const rem = stackTotals(remaining);
 
@@ -142,13 +150,56 @@ export function simulateStraightMCA(
     cashToMerchant,
     totalPayback,
     termDays,
+    termWeeks,
     newDailyPayment,
+    newWeeklyPayment,
+    paymentCadence: inputs.paymentCadence ?? 'daily',
     remainingStackBalance: rem.totalBalance,
     remainingStackDaily: rem.totalDaily,
     newTotalBalance: rem.totalBalance + totalPayback,
     newTotalDailyDebits: rem.totalDaily + newDailyPayment,
     profit: totalPayback - inputs.grossFunding,
   };
+}
+
+/** Straight-MCA RTR balance on a given business day (cap at 0). */
+export function projectStraightMCABalance(
+  result: StraightMCAResult,
+  businessDay: number
+): number {
+  const paid = Math.min(result.totalPayback, result.newDailyPayment * Math.max(0, businessDay));
+  return Math.max(0, result.totalPayback - paid);
+}
+
+/** Week-by-week exposure for the hybrid timeline chart. */
+export interface ExposurePoint {
+  week: number;
+  straightRTR: number;
+  remainingStackBalance: number;
+  combined: number;
+}
+
+export function buildExposureTimeline(
+  positions: Position[],
+  straightResult: StraightMCAResult,
+  payoffPositionIds: number[],
+  weeks: number
+): ExposurePoint[] {
+  const paidOff = new Set(payoffPositionIds);
+  const surviving = positions.filter(p => !paidOff.has(p.id));
+  const out: ExposurePoint[] = [];
+  for (let w = 0; w <= weeks; w++) {
+    const day = w * BUSINESS_DAYS_PER_WEEK;
+    const straightRTR = projectStraightMCABalance(straightResult, day);
+    const stack = projectStack(surviving, day);
+    out.push({
+      week: w,
+      straightRTR,
+      remainingStackBalance: stack.totalBalance,
+      combined: straightRTR + stack.totalBalance,
+    });
+  }
+  return out;
 }
 
 // -------------------- Scenario: Reverse (snapshot only) --------------------
