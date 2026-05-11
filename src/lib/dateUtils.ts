@@ -71,6 +71,65 @@ export function getBusinessDaysBetween(startDate: Date, endDate: Date): number {
 }
 
 /**
+ * Signed business-day delta from `from` to `to`. Negative when `to` < `from`.
+ */
+export function businessDaysBetweenSigned(from: Date, to: Date): number {
+  if (from.getTime() === to.getTime()) return 0;
+  if (to < from) return -getBusinessDaysBetween(to, from);
+  return getBusinessDaysBetween(from, to);
+}
+
+/**
+ * Parse an ISO-like yyyy-MM-dd string into a local Date at midnight.
+ */
+export function parseISODateLocal(iso: string): Date {
+  return new Date(iso + 'T00:00:00');
+}
+
+type RepriceablePosition = {
+  balance: number | null;
+  dailyPayment: number;
+  fundedDate?: string | null;
+  amountFunded?: number | null;
+  balanceAsOfDate?: string | null;
+  balanceAnchor?: 'funded' | 'manual' | null;
+  frequency?: 'daily' | 'weekly';
+};
+
+/**
+ * Re-prices a position's balance to a new as-of date based on its anchor.
+ * - Funded anchor (fundedDate + amountFunded): cap = amountFunded, anchor date = fundedDate
+ * - Manual anchor (balanceAsOfDate + balance): cap = anchor balance, anchor date = balanceAsOfDate
+ * Returns the new balance (rounded to cents), or the original balance if no anchor.
+ * For weekly positions, uses 5 daily-payment equivalents per week of elapsed business days.
+ */
+export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): number | null {
+  if (p.balance === null) return null;
+
+  let anchorDate: string | null = null;
+  let anchorBal: number | null = null;
+
+  if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+    anchorDate = p.fundedDate;
+    anchorBal = p.amountFunded;
+  } else if (p.balanceAsOfDate && p.balance != null) {
+    anchorDate = p.balanceAsOfDate;
+    anchorBal = p.balance;
+  } else {
+    return p.balance;
+  }
+
+  const from = parseISODateLocal(anchorDate);
+  const to = parseISODateLocal(asOfDateISO);
+  const days = businessDaysBetweenSigned(from, to);
+  // Weekly positions still pay business-day equivalents (dailyPayment IS the daily-equivalent in this app's model)
+  const paid = days * (p.dailyPayment || 0);
+  const raw = anchorBal - paid;
+  const capped = Math.min(anchorBal, Math.max(0, raw));
+  return Math.round(capped * 100) / 100;
+}
+
+/**
  * Calculates remaining balance based on funded amount, daily payment, and business days elapsed
  */
 export function calculateRemainingBalance(
