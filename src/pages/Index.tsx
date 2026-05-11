@@ -578,9 +578,11 @@ export default function Index() {
     }));
 
   // Re-price all positions when the calculator's "as of" date changes.
+  // Positions whose fundedDate is after the new as-of date are "not started yet" — leave their stored balance untouched.
   const handleAsOfDateChange = (newDate: string) => {
     if (newDate === asOfDate) return;
     setPositions(prev => prev.map(p => {
+      if (p.fundedDate && isBeforeISODate(newDate, p.fundedDate)) return p;
       const newBal = repricedBalance(p, newDate);
       return { ...p, balance: newBal };
     }));
