@@ -57,7 +57,7 @@ export function useDealScenarios(calculationId: string | undefined) {
         calculation_id: calculationId,
         user_id: user.id,
         name,
-        scenario: scenario as unknown as Record<string, unknown>,
+        scenario: scenario as unknown as never,
         sort_order: nextOrder,
       }])
       .select('*')
