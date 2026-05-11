@@ -539,6 +539,7 @@ export default function DealLabPage() {
                 onDuplicateStep={duplicateStep}
                 onDeleteStep={deleteStep}
                 onExport={exportScenarioPDF}
+                originalCalc={selectedCalc ?? null}
               />
               <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
             </div>
