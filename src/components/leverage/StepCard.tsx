@@ -120,6 +120,10 @@ export function StepCard({
           </Button>
         </div>
 
+        {step.kind !== 'wait' && (
+          <StepDatePicker step={step} onChange={onChange} />
+        )}
+
         {step.kind === 'straight' && (
           <StraightEditor
             step={step}
