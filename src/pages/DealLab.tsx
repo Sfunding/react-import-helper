@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { useCalculations } from '@/hooks/useCalculations';
 import { ArrowLeft } from 'lucide-react';
+import { useDealScenarios } from '@/hooks/useDealScenarios';
+import { ScenarioTabs } from '@/components/leverage/ScenarioTabs';
+import { ScenarioStory } from '@/components/leverage/ScenarioStory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -285,10 +288,6 @@ export default function DealLabPage() {
   const winner: ScenarioKind = chosenScenario ?? recommendation;
 
   // ---------------- Scenario Builder ----------------
-  const scenarioRun = useMemo(
-    () => runScenario(positions, scenario, monthlyRevenue),
-    [positions, scenario, monthlyRevenue]
-  );
 
   // ---------------- Multi-scenario plumbing ----------------
   const {
