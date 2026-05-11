@@ -28,6 +28,10 @@ export type Position = {
   amountFunded: number | null;  // Original funded amount for auto-balance calculation
   frequency?: 'daily' | 'weekly';  // defaults to 'daily'
   weeklyPullDay?: string | null;  // e.g. 'Monday', only relevant when frequency is 'weekly'
+  // Re-pricing anchor: the date on which `balance` is true.
+  // When the calculator's as-of date changes, balance is re-priced from this anchor.
+  balanceAsOfDate?: string | null;
+  balanceAnchor?: 'funded' | 'manual' | null;
 };
 
 export type SavedCalculation = {
