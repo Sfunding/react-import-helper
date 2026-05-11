@@ -41,6 +41,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -121,6 +122,25 @@ export default function DealLabPage() {
     }
   }, [isLoading, selectedId, selectedCalc, navigate, toast]);
 
+  // Parent deal (for "Derived from …" banner on committed child deals)
+  const parentCalculationId: string | null =
+    (selectedCalc as unknown as { parent_calculation_id?: string | null } | undefined)
+      ?.parent_calculation_id ?? null;
+  const [parentCalculationName, setParentCalculationName] = useState<string>('');
+  useEffect(() => {
+    if (!parentCalculationId) { setParentCalculationName(''); return; }
+    const cached = calculations.find(c => c.id === parentCalculationId);
+    if (cached?.name) { setParentCalculationName(cached.name); return; }
+    (async () => {
+      const { data: row } = await supabase
+        .from('saved_calculations')
+        .select('name')
+        .eq('id', parentCalculationId)
+        .maybeSingle();
+      if (row?.name) setParentCalculationName(row.name);
+    })();
+  }, [parentCalculationId, calculations]);
+
   // Revenue is always sourced from the loaded deal
   const monthlyRevenue = selectedCalc?.merchant_monthly_revenue ?? 0;
 
@@ -193,6 +213,11 @@ export default function DealLabPage() {
     }
     if (hasBootstrappedLegacy) return;
     setHasBootstrappedLegacy(true);
+    // For child deals committed from a scenario, do not silently auto-create
+    // an empty "Untitled Scenario" — wait for the parent-scenario clone (in
+    // commitScenarioMutation) to land, or let the user create one explicitly.
+    const isDerived = !!(selectedCalc as unknown as { parent_calculation_id?: string | null }).parent_calculation_id;
+    if (isDerived) return;
     const legacy = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
       .recommended_scenario;
     const seed = (legacy?.scenario && Array.isArray(legacy.scenario.steps)) ? legacy.scenario : newScenario();
@@ -411,6 +436,19 @@ export default function DealLabPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {parentCalculationId && (
+          <button
+            type="button"
+            onClick={() => navigate(`/deal/${parentCalculationId}/lab`)}
+            className="w-full flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-sm text-primary text-left transition"
+            title="Open the parent deal's Lab"
+          >
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Derived from</span>
+            <span className="truncate">{parentCalculationName || 'parent deal'}</span>
+            <span className="ml-auto text-xs underline shrink-0">Open parent</span>
+          </button>
+        )}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <button
