@@ -8,6 +8,7 @@ import { Day1SummaryCard } from '@/components/Day1SummaryCard';
 import { UnsavedChangesDialog } from '@/components/UnsavedChangesDialog';
 import { AdjustmentConfirmDialog, PendingChange } from '@/components/AdjustmentConfirmDialog';
 import { useCalculations } from '@/hooks/useCalculations';
+import { supabase } from '@/integrations/supabase/client';
 import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
