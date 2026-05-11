@@ -268,7 +268,10 @@ export function simulateReverseSnapshot(
 
 export type HybridTrigger =
   | { kind: 'days'; businessDays: number }
-  | { kind: 'positions-fall-off'; positionIds: number[] };
+  | { kind: 'week'; week: number }
+  | { kind: 'positions-fall-off'; positionIds: number[] }
+  | { kind: 'straight-exposure-below'; threshold: number }
+  | { kind: 'combined-exposure-below'; threshold: number };
 
 export interface HybridInputs {
   straight: StraightMCAInputs;
@@ -279,31 +282,49 @@ export interface HybridInputs {
 export interface HybridResult {
   straight: StraightMCAResult;
   triggerDay: number;
-  /** straight-MCA RTR balance still outstanding at trigger day */
+  triggerWeek: number;
+  triggerReached: boolean;
   straightBalanceAtTrigger: number;
-  /** straight-MCA daily payment, still active at trigger day (or 0 if paid off) */
   straightDailyAtTrigger: number;
-  /** projected non-paid-off positions at trigger day */
   remainingPositionsAtTrigger: Array<Position & { projectedBalance: number; projectedDaily: number }>;
-  /** what a reverse on the remaining stack looks like at the trigger */
   reverseAtTrigger: ReverseSnapshotResult;
-  /** total cash to merchant across both phases */
   totalCashToMerchant: number;
-  /** combined profit estimate */
   combinedProfit: number;
 }
 
-function computeTriggerDay(positions: Position[], trigger: HybridTrigger): number {
-  if (trigger.kind === 'days') return Math.max(0, Math.round(trigger.businessDays));
-  const idSet = new Set(trigger.positionIds);
-  const days = positions
-    .filter(p => idSet.has(p.id))
-    .map(p => {
-      const d = p.dailyPayment ?? 0;
-      const b = p.balance ?? 0;
-      return d > 0 && b > 0 ? Math.ceil(b / d) : 0;
-    });
-  return days.length ? Math.max(...days) : 0;
+const HYBRID_TRIGGER_CAP_DAYS = 30 * BUSINESS_DAYS_PER_WEEK; // 150 business days
+
+function computeTriggerDay(
+  positions: Position[],
+  straight: StraightMCAResult,
+  payoffIds: number[],
+  trigger: HybridTrigger
+): { day: number; reached: boolean } {
+  if (trigger.kind === 'days') return { day: Math.max(0, Math.round(trigger.businessDays)), reached: true };
+  if (trigger.kind === 'week') return { day: Math.max(0, Math.round(trigger.week * BUSINESS_DAYS_PER_WEEK)), reached: true };
+  if (trigger.kind === 'positions-fall-off') {
+    const idSet = new Set(trigger.positionIds);
+    const days = positions
+      .filter(p => idSet.has(p.id))
+      .map(p => {
+        const d = p.dailyPayment ?? 0;
+        const b = p.balance ?? 0;
+        return d > 0 && b > 0 ? Math.ceil(b / d) : 0;
+      });
+    return { day: days.length ? Math.max(...days) : 0, reached: true };
+  }
+  const paidOff = new Set(payoffIds);
+  const surviving = positions.filter(p => !paidOff.has(p.id));
+  for (let d = 0; d <= HYBRID_TRIGGER_CAP_DAYS; d++) {
+    const straightRTR = projectStraightMCABalance(straight, d);
+    if (trigger.kind === 'straight-exposure-below') {
+      if (straightRTR <= trigger.threshold) return { day: d, reached: true };
+    } else {
+      const stack = projectStack(surviving, d);
+      if (straightRTR + stack.totalBalance <= trigger.threshold) return { day: d, reached: true };
+    }
+  }
+  return { day: HYBRID_TRIGGER_CAP_DAYS, reached: false };
 }
 
 export function simulateHybrid(
@@ -312,11 +333,16 @@ export function simulateHybrid(
 ): HybridResult {
   const straight = simulateStraightMCA(positions, inputs.straight);
 
-  // Positions not paid off on day 1
   const paidOffIds = new Set(inputs.straight.payoffPositionIds);
   const survivingPositions = positions.filter(p => !paidOffIds.has(p.id));
 
-  const triggerDay = computeTriggerDay(positions, inputs.trigger);
+  const { day: triggerDay, reached: triggerReached } = computeTriggerDay(
+    positions,
+    straight,
+    inputs.straight.payoffPositionIds,
+    inputs.trigger
+  );
+  const triggerWeek = triggerDay / BUSINESS_DAYS_PER_WEEK;
 
   // Project surviving positions to trigger day
   const remainingPositionsAtTrigger = survivingPositions
