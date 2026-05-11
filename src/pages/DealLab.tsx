@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { useCalculations } from '@/hooks/useCalculations';
 import { ArrowLeft } from 'lucide-react';
@@ -8,19 +8,7 @@ import { ScenarioTabs } from '@/components/leverage/ScenarioTabs';
 import { ScenarioStory } from '@/components/leverage/ScenarioStory';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,15 +19,8 @@ import { Position, SavedCalculation } from '@/types/calculation';
 import {
   snapshot,
   stackTotals,
-  simulateStraightMCA,
-  simulateReverseSnapshot,
-  simulateHybrid,
-  buildExposureTimeline,
   runScenario,
-  HybridTrigger,
   LeverageBand,
-  PaymentCadence,
-  BUSINESS_DAYS_PER_WEEK,
 } from '@/lib/leverageMath';
 import {
   Scenario,
@@ -51,8 +32,7 @@ import {
 } from '@/lib/scenarioTypes';
 import { StepCard } from '@/components/leverage/StepCard';
 import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
-import { Download, TrendingDown, AlertTriangle, Plus, Save, FileDown, Layers, Zap, Clock, PlusCircle, Repeat } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
