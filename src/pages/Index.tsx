@@ -303,10 +303,15 @@ export default function Index() {
   const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
   
   const positionsWithDays = positions.map(p => {
-    const effectiveBalance = getEffectiveBalance(p);
+    const notStartedYet = !!p.fundedDate && isBeforeISODate(asOfDate, p.fundedDate);
+    const rawEffective = getEffectiveBalance(p);
+    const effectiveBalance = notStartedYet ? 0 : rawEffective;
     return {
       ...p,
-      balance: effectiveBalance, // Use effective balance for calculations
+      // Force out of all "included" math while not started; preserve user's intent on the original field.
+      includeInReverse: notStartedYet ? false : p.includeInReverse,
+      notStartedYet,
+      balance: effectiveBalance,
       daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
     };
   });
