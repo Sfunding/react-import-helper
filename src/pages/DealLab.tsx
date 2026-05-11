@@ -127,7 +127,11 @@ export default function DealLabPage() {
   const positions: Position[] = useMemo(
     () =>
       (selectedCalc?.positions || []).filter(
-        p => !p.isOurPosition && (p.balance ?? 0) > 0 && (p.dailyPayment ?? 0) > 0
+        p =>
+          !p.isOurPosition &&
+          p.includeInReverse !== false &&
+          (p.balance ?? 0) > 0 &&
+          (p.dailyPayment ?? 0) > 0
       ),
     [selectedCalc]
   );
