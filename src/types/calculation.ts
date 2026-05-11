@@ -44,6 +44,7 @@ export type SavedCalculation = {
   created_at: string;
   updated_at: string;
   funded_at?: string | null;
+  as_of_date?: string | null;
 };
 
 export type CalculationState = {
