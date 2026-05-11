@@ -497,6 +497,18 @@ export function runScenario(
     let profitStep = 0;
     let note: string | undefined;
 
+    // If the step has an absolute run date, fast-forward active positions to it.
+    if (step.kind !== 'wait') {
+      const targetDay = dayOffsetFromIso((step as { runOn?: string }).runOn);
+      if (targetDay != null) {
+        const delta = targetDay - dayOffset;
+        if (delta > 0) {
+          active = advanceDays(active, delta);
+          dayOffset += delta;
+        }
+      }
+    }
+
     if (step.kind === 'wait') {
       const days = Math.max(0, Math.round(step.weeks * BUSINESS_DAYS_PER_WEEK));
       active = advanceDays(active, days);
