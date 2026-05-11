@@ -1024,6 +1024,25 @@ export default function LeveragePage() {
                 </CardContent>
               </Card>
             </div>
+              </TabsContent>
+
+              <TabsContent value="builder" className="mt-4 space-y-4">
+                <ScenarioBuilderPanel
+                  scenario={scenario}
+                  setScenario={setScenario}
+                  scenarioRun={scenarioRun}
+                  monthlyRevenue={monthlyRevenue}
+                  onAddStep={addStep}
+                  onUpdateStep={updateStep}
+                  onMoveStep={moveStep}
+                  onDuplicateStep={duplicateStep}
+                  onDeleteStep={deleteStep}
+                  onSave={saveScenarioToDeal}
+                  onExport={exportScenarioPDF}
+                  canSave={!!selectedCalc}
+                />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
