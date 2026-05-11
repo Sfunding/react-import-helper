@@ -689,8 +689,8 @@ function BuilderTab({
             </DropdownMenuContent>
           </DropdownMenu>
           {originalCalc && (
-            <Button variant="outline" onClick={openFinalCommit} disabled={!canCommitFinal} title="Snapshot the merchant's state after every step has fired into a new calculator deal">
-              <GitBranch className="w-4 h-4 mr-1.5" /> Commit final state
+            <Button variant="outline" onClick={openStraightsCommit} disabled={!canCommitStraights} title="Add scenario straights to a new deal (no reverse); dated the day after the last straight.">
+              <GitBranch className="w-4 h-4 mr-1.5" /> Commit straights
             </Button>
           )}
           <Button variant="outline" onClick={onExport}>
