@@ -449,6 +449,7 @@ export default function DealLabPage() {
             <span className="ml-auto text-xs underline shrink-0">Open parent</span>
           </button>
         )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <button
               type="button"
