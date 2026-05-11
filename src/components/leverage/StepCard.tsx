@@ -89,11 +89,12 @@ interface StepCardProps {
   onMove: (dir: -1 | 1) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onCommit?: () => void;
 }
 
 export function StepCard({
   step, index, total, activeBeforeStep, checkpointNote,
-  onChange, onMove, onDuplicate, onDelete,
+  onChange, onMove, onDuplicate, onDelete, onCommit,
 }: StepCardProps) {
   const meta = KIND_META[step.kind];
 
