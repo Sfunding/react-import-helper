@@ -73,13 +73,14 @@ export function CommitScenarioDialog({
   // Reset defaults when dialog opens / step changes
   useEffect(() => {
     if (!open || !step || !originalCalc) return;
-    const defaultWhen: 'before' | 'after' = isFinal ? 'after' : (isReverse ? 'before' : 'after');
+    const effectiveReverse = isReverse && !isStraights;
+    const defaultWhen: 'before' | 'after' = (isFinal || isStraights) ? 'after' : (isReverse ? 'before' : 'after');
     setSnapshotWhen(defaultWhen);
     setCarryover('all');
     setCustomKeys({
-      rate: !!isReverse,
-      feePercent: !!isReverse,
-      dailyPaymentDecrease: !!isReverse,
+      rate: effectiveReverse,
+      feePercent: effectiveReverse,
+      dailyPaymentDecrease: effectiveReverse,
       brokerCommission: false,
       feeSchedule: false,
       currentExposure: false,
@@ -87,13 +88,15 @@ export function CommitScenarioDialog({
       whiteLabelCompany: false,
     });
 
-    if (isFinal) {
+    if (isStraights) {
+      setName(`${originalCalc.name} — With Straights`);
+    } else if (isFinal) {
       setName(`${originalCalc.name} — Final State`);
     } else {
       const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
       setName(`${originalCalc.name} @ ${stepLabel}`);
     }
-  }, [open, step, originalCalc, isReverse, isFinal, stepIndex, scenarioRun.checkpoints]);
+  }, [open, step, originalCalc, isReverse, isFinal, isStraights, stepIndex, scenarioRun.checkpoints]);
 
   const checkpoint = useMemo(() => {
     if (stepIndex == null) return null;
