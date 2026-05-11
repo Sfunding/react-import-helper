@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat } from 'lucide-react';
+import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers } from 'lucide-react';
 import { ScenarioStep, ActivePosition } from '@/lib/scenarioTypes';
 import { PaymentCadence } from '@/lib/leverageMath';
 
@@ -14,10 +14,11 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
 
 const KIND_META: Record<ScenarioStep['kind'], { icon: React.ReactNode; label: string; color: string }> = {
-  straight:       { icon: <Zap className="w-4 h-4" />,        label: 'Straight MCA',     color: 'bg-amber-100 text-amber-900 border-amber-300' },
-  wait:           { icon: <Clock className="w-4 h-4" />,      label: 'Wait',             color: 'bg-slate-100 text-slate-800 border-slate-300' },
-  'add-position': { icon: <PlusCircle className="w-4 h-4" />, label: 'Add Position',     color: 'bg-rose-100 text-rose-900 border-rose-300' },
-  reverse:        { icon: <Repeat className="w-4 h-4" />,     label: 'Reverse',          color: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
+  straight:              { icon: <Zap className="w-4 h-4" />,        label: 'Straight MCA',           color: 'bg-amber-100 text-amber-900 border-amber-300' },
+  'recurring-straight':  { icon: <Layers className="w-4 h-4" />,     label: 'Recurring Straight Program', color: 'bg-orange-100 text-orange-900 border-orange-300' },
+  wait:                  { icon: <Clock className="w-4 h-4" />,      label: 'Wait',                   color: 'bg-slate-100 text-slate-800 border-slate-300' },
+  'add-position':        { icon: <PlusCircle className="w-4 h-4" />, label: 'Add Position',           color: 'bg-rose-100 text-rose-900 border-rose-300' },
+  reverse:               { icon: <Repeat className="w-4 h-4" />,     label: 'Reverse',                color: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
 };
 
 interface StepCardProps {
