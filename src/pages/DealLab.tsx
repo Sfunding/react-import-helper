@@ -1094,20 +1094,53 @@ export default function DealLabPage() {
               </TabsContent>
 
               <TabsContent value="builder" className="mt-4 space-y-4">
-                <ScenarioBuilderPanel
-                  scenario={scenario}
-                  setScenario={setScenario}
-                  scenarioRun={scenarioRun}
-                  monthlyRevenue={monthlyRevenue}
-                  onAddStep={addStep}
-                  onUpdateStep={updateStep}
-                  onMoveStep={moveStep}
-                  onDuplicateStep={duplicateStep}
-                  onDeleteStep={deleteStep}
-                  onSave={saveScenarioToDeal}
-                  onExport={exportScenarioPDF}
-                  canSave={!!selectedCalc}
+                <ScenarioTabs
+                  rows={scenarioRows}
+                  activeId={activeScenarioId}
+                  dirty={isDirty}
+                  onSelect={handleSelectScenario}
+                  onCreate={handleCreateScenario}
+                  onRename={handleRenameScenario}
+                  onDuplicate={handleDuplicateScenario}
+                  onDelete={handleDeleteScenario}
+                  compareId={compareScenarioId}
+                  onSetCompare={setCompareScenarioId}
                 />
+
+                {compareScenarioId && compareRun && compareRow ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                        {scenarioRows.find(r => r.id === activeScenarioId)?.name || 'Active'}
+                      </div>
+                      <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">
+                        {compareRow.name}
+                      </div>
+                      <ScenarioStory scenario={compareRow.scenario} checkpoints={compareRun.checkpoints} />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <ScenarioBuilderPanel
+                      scenario={scenario}
+                      setScenario={setScenario}
+                      scenarioRun={scenarioRun}
+                      monthlyRevenue={monthlyRevenue}
+                      onAddStep={addStep}
+                      onUpdateStep={updateStep}
+                      onMoveStep={moveStep}
+                      onDuplicateStep={duplicateStep}
+                      onDeleteStep={deleteStep}
+                      onSave={saveScenarioToDeal}
+                      onExport={exportScenarioPDF}
+                      canSave={!!selectedCalc && !!activeScenarioId}
+                    />
+                    <ScenarioStory scenario={scenario} checkpoints={scenarioRun.checkpoints} />
+                  </>
+                )}
               </TabsContent>
             </Tabs>
           </>
