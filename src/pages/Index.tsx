@@ -892,20 +892,22 @@ export default function Index() {
           />
         )}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             {parentCalculationId && (
               <button
                 type="button"
                 onClick={() => {
                   sessionStorage.setItem('loadCalculation', JSON.stringify({ id: parentCalculationId }));
-                  // Hard reload to re-trigger the load flow with the parent id
                   navigate('/');
                   window.location.reload();
                 }}
-                className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start"
+                className="w-full flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-sm text-primary text-left transition"
                 title="Open the parent deal"
               >
-                ↩ Derived from <span className="underline">{parentCalculationName || 'parent deal'}</span>
+                <span aria-hidden>↩</span>
+                <span className="font-medium">Derived from</span>
+                <span className="truncate">{parentCalculationName || 'parent deal'}</span>
+                <span className="ml-auto text-xs underline shrink-0">Open parent</span>
               </button>
             )}
             <h1 className="text-primary text-2xl md:text-3xl font-bold">
