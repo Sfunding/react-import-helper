@@ -45,6 +45,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from 'lucide-react';
 
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
 
