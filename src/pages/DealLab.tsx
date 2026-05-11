@@ -467,24 +467,46 @@ export default function DealLabPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Current Position</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Open Balance</div>
-                  <div className="text-xl font-bold">{fmt(totals.totalBalance)}</div>
+              <CardContent className="space-y-3">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold">As of {format(new Date(asOfDate + 'T00:00:00'), 'MMM d, yyyy')}:</span>{' '}
+                  {fmt(totals.totalBalance)} balance / {fmt(totals.totalDaily)}/day
                 </div>
-                <div className="rounded-md border border-border p-3">
-                  <div className="text-xs text-muted-foreground">Total Daily Debits</div>
-                  <div className="text-xl font-bold">{fmt(totals.totalDaily)}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    Weekly {fmt(totals.totalDaily * 5)} / Monthly {fmt(totals.totalDaily * 22)}
+                {businessDaysSinceAsOf > 0 && (
+                  <>
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        Projected to today ({businessDaysSinceAsOf} business {businessDaysSinceAsOf === 1 ? 'day' : 'days'} later):
+                      </span>{' '}
+                      {fmt(projectedTotals.totalBalance)} / {fmt(projectedTotals.totalDaily)}/day
+                    </div>
+                    {weeklyPositions.length > 0 && (
+                      <div className="text-[11px] text-muted-foreground italic">
+                        {weeklyPositions.map(p => p.entity || `Position ${p.id}`).join(', ')}{' '}
+                        <span className="opacity-70">(weekly — not projected)</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-xs text-muted-foreground">Open Balance</div>
+                    <div className="text-xl font-bold">{fmt(projectedTotals.totalBalance)}</div>
                   </div>
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-xs text-muted-foreground">Total Daily Debits</div>
+                    <div className="text-xl font-bold">{fmt(projectedTotals.totalDaily)}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Weekly {fmt(projectedTotals.totalDaily * 5)} / Monthly {fmt(projectedTotals.totalDaily * 22)}
+                    </div>
+                  </div>
+                  <MetricsBlock
+                    title="Today"
+                    totalBalance={projectedTotals.totalBalance}
+                    totalDaily={projectedTotals.totalDaily}
+                    monthlyRevenue={monthlyRevenue}
+                  />
                 </div>
-                <MetricsBlock
-                  title="Today"
-                  totalBalance={totals.totalBalance}
-                  totalDaily={totals.totalDaily}
-                  monthlyRevenue={monthlyRevenue}
-                />
               </CardContent>
             </Card>
 
