@@ -129,8 +129,9 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
             <div className="font-semibold text-emerald-900">Final state</div>
             <div className="text-emerald-900/80">
               After {entries.length} step{entries.length === 1 ? '' : 's'} ({final.weekOffset.toFixed(1)} weeks), the
-              merchant's balance settles at <b>{fmtMoney(final.totalBalance)}</b> with daily debits of{' '}
-              <b>{fmtMoney(final.totalDaily)}</b>. Total cash delivered: <b>{fmtMoney(final.cashToMerchantCumulative)}</b>.
+              merchant's balance settles at <b>{fmtMoney(final.totalBalance)}</b> with{' '}
+              {lastCadence === 'weekly' ? 'weekly' : 'daily'} debits of{' '}
+              <b>{fmtMoney(lastCadence === 'weekly' ? final.totalDaily * 5 : final.totalDaily)}</b>. Total cash delivered: <b>{fmtMoney(final.cashToMerchantCumulative)}</b>.
               Gross profit booked: <b>{fmtMoney(final.profitCumulative)}</b>.
             </div>
           </div>
