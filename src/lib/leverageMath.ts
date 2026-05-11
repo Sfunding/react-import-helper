@@ -614,8 +614,32 @@ export function runScenario(
     let curDay = 0;
     for (const s of scenario.steps) {
       if (s.kind === 'wait') {
-        // Wait happens AFTER instant actions queued for curDay
         curDay += Math.max(0, Math.round(s.weeks * BUSINESS_DAYS_PER_WEEK));
+      } else if (s.kind === 'recurring-straight') {
+        const count = Math.max(0, Math.floor(s.count));
+        const cadDays = Math.max(0, Math.round(s.cadenceWeeks * BUSINESS_DAYS_PER_WEEK));
+        for (let i = 0; i < count; i++) {
+          const synthetic: ScenarioStep = {
+            id: `${s.id}-${i + 1}`,
+            kind: 'straight',
+            grossFunding: s.amountEach,
+            factorRate: s.factorRate,
+            feePercent: s.feePercent,
+            termWeeks: s.termWeeks,
+            paymentCadence: s.paymentCadence,
+            payoffPositionIds: [],
+          };
+          const list = stepActionsByDay.get(curDay) ?? [];
+          list.push(synthetic);
+          stepActionsByDay.set(curDay, list);
+          if (i < count - 1) curDay += cadDays;
+        }
+      } else if (s.kind === 'reverse' && s.runAtWeek != null && Number.isFinite(s.runAtWeek)) {
+        const targetDay = Math.max(0, Math.round(s.runAtWeek * BUSINESS_DAYS_PER_WEEK));
+        if (targetDay > curDay) curDay = targetDay;
+        const list = stepActionsByDay.get(curDay) ?? [];
+        list.push(s);
+        stepActionsByDay.set(curDay, list);
       } else {
         const list = stepActionsByDay.get(curDay) ?? [];
         list.push(s);
