@@ -20,8 +20,10 @@ import {
   snapshot,
   stackTotals,
   runScenario,
+  projectStackToDate,
   LeverageBand,
 } from '@/lib/leverageMath';
+import { format } from 'date-fns';
 import {
   Scenario,
   ScenarioStep,
@@ -125,7 +127,34 @@ export default function DealLabPage() {
     [selectedCalc]
   );
 
-  const totals = stackTotals(positions);
+  // As-of date stamped on the deal (fallback to created_at::date for legacy rows)
+  const asOfDate: string = useMemo(() => {
+    const stamped = (selectedCalc as unknown as { as_of_date?: string | null } | undefined)?.as_of_date;
+    if (stamped) return stamped;
+    const created = selectedCalc?.created_at;
+    return created ? String(created).slice(0, 10) : format(new Date(), 'yyyy-MM-dd');
+  }, [selectedCalc]);
+
+  const todayIso = format(new Date(), 'yyyy-MM-dd');
+
+  // Project the saved stack forward to today. All downstream lenses run against this.
+  const projectedPositions = useMemo(
+    () => projectStackToDate(positions, asOfDate, todayIso),
+    [positions, asOfDate, todayIso]
+  );
+
+  const businessDaysSinceAsOf = useMemo(() => {
+    const a = new Date(asOfDate + 'T00:00:00');
+    const t = new Date(todayIso + 'T00:00:00');
+    if (Number.isNaN(a.getTime()) || t <= a) return 0;
+    // Reuse the same util the projector uses for symmetry
+    const { getBusinessDaysBetween } = require('@/lib/dateUtils') as typeof import('@/lib/dateUtils');
+    return getBusinessDaysBetween(a, t);
+  }, [asOfDate, todayIso]);
+
+  const totals = stackTotals(positions);              // stored
+  const projectedTotals = stackTotals(projectedPositions); // projected to today
+  const weeklyPositions = positions.filter(p => p.frequency === 'weekly');
 
 
   // ---------------- Scenario Builder ----------------
