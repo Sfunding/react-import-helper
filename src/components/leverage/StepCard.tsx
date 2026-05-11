@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers, CalendarIcon } from 'lucide-react';
+import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers, CalendarIcon, GitBranch } from 'lucide-react';
 import { ScenarioStep, ActivePosition } from '@/lib/scenarioTypes';
 import { PaymentCadence } from '@/lib/leverageMath';
 import { cn } from '@/lib/utils';
