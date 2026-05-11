@@ -9,6 +9,8 @@ export interface StraightStep {
   id: string;
   kind: 'straight';
   label?: string;
+  /** ISO date (YYYY-MM-DD) the step runs on. If unset, runs immediately after prior step. */
+  runOn?: string;
   grossFunding: number;
   factorRate: number;
   feePercent: number;
@@ -29,6 +31,7 @@ export interface AddPositionStep {
   id: string;
   kind: 'add-position';
   label?: string;
+  runOn?: string;
   entity: string;
   balance: number;
   dailyPayment: number;
@@ -38,6 +41,8 @@ export interface ReverseStep {
   id: string;
   kind: 'reverse';
   label?: string;
+  /** ISO date the reverse runs on. Takes precedence over runAtWeek. */
+  runOn?: string;
   factorRate: number;
   feePercent: number;
   dailyDecrease: number;
