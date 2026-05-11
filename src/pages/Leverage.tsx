@@ -15,6 +15,13 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Position, SavedCalculation } from '@/types/calculation';
 import {
   snapshot,
@@ -23,12 +30,25 @@ import {
   simulateReverseSnapshot,
   simulateHybrid,
   buildExposureTimeline,
+  runScenario,
   HybridTrigger,
   LeverageBand,
   PaymentCadence,
   BUSINESS_DAYS_PER_WEEK,
 } from '@/lib/leverageMath';
-import { Download, TrendingDown, AlertTriangle } from 'lucide-react';
+import {
+  Scenario,
+  ScenarioStep,
+  StepKind,
+  makeStep,
+  newScenario,
+  reorderSteps,
+} from '@/lib/scenarioTypes';
+import { StepCard } from '@/components/leverage/StepCard';
+import { ScenarioSparkline } from '@/components/leverage/ScenarioSparkline';
+import { Download, TrendingDown, AlertTriangle, Plus, Save, FileDown, Layers, Zap, Clock, PlusCircle, Repeat } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
