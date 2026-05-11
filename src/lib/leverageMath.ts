@@ -453,20 +453,26 @@ function makeCheckpoint(
 
 function stepLabel(step: ScenarioStep): string {
   if (step.label) return step.label;
+  const funder = (step as { funderName?: string }).funderName;
   const datePart = (step as { runOn?: string }).runOn
     ? ` on ${new Date((step as { runOn?: string }).runOn + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
     : '';
   switch (step.kind) {
-    case 'straight': return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}${datePart}`;
+    case 'straight': {
+      const f = funder ? ` (${funder})` : '';
+      return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}${f}${datePart}`;
+    }
     case 'recurring-straight':
       return `${step.count} x Straight ($${Math.round(step.amountEach).toLocaleString()} every ${step.cadenceWeeks}w)${datePart}`;
     case 'wait': return `Wait ${step.weeks} wk`;
     case 'add-position': return `Add: ${step.entity}${datePart}`;
-    case 'reverse':
-      if (step.runOn) return `Reverse Consolidation${datePart}`;
+    case 'reverse': {
+      const f = funder ? ` (${funder})` : '';
+      if (step.runOn) return `Reverse Consolidation${f}${datePart}`;
       return step.runAtWeek != null
-        ? `Reverse Consolidation @ wk ${step.runAtWeek}`
-        : 'Reverse Consolidation';
+        ? `Reverse Consolidation${f} @ wk ${step.runAtWeek}`
+        : `Reverse Consolidation${f}`;
+    }
   }
 }
 
