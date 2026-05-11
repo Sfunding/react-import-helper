@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Scenario, ScenarioRunResult, ScenarioStep } from '@/lib/scenarioTypes';
 import { SavedCalculation, Settings, DEFAULT_SETTINGS, DEFAULT_EPO_SETTINGS } from '@/types/calculation';
 import { checkpointToPositions, stackTotals } from '@/lib/leverageMath';
+import { addBusinessDays } from '@/lib/dateUtils';
 
 type CarryoverMode = 'reverse-only' | 'all' | 'custom';
 
@@ -45,13 +46,14 @@ interface CommitScenarioDialogProps {
   scenarioRun: ScenarioRunResult;
   stepIndex: number | null;
   originalCalc: SavedCalculation | null | undefined;
-  mode?: 'step' | 'final';
+  mode?: 'step' | 'final' | 'straights';
 }
 
 export function CommitScenarioDialog({
   open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc, mode = 'step',
 }: CommitScenarioDialogProps) {
   const isFinal = mode === 'final';
+  const isStraights = mode === 'straights';
   const navigate = useNavigate();
   const { toast } = useToast();
   const { commitScenario, isCommittingScenario } = useCalculations();
@@ -71,13 +73,14 @@ export function CommitScenarioDialog({
   // Reset defaults when dialog opens / step changes
   useEffect(() => {
     if (!open || !step || !originalCalc) return;
-    const defaultWhen: 'before' | 'after' = isFinal ? 'after' : (isReverse ? 'before' : 'after');
+    const effectiveReverse = isReverse && !isStraights;
+    const defaultWhen: 'before' | 'after' = (isFinal || isStraights) ? 'after' : (isReverse ? 'before' : 'after');
     setSnapshotWhen(defaultWhen);
     setCarryover('all');
     setCustomKeys({
-      rate: !!isReverse,
-      feePercent: !!isReverse,
-      dailyPaymentDecrease: !!isReverse,
+      rate: effectiveReverse,
+      feePercent: effectiveReverse,
+      dailyPaymentDecrease: effectiveReverse,
       brokerCommission: false,
       feeSchedule: false,
       currentExposure: false,
@@ -85,13 +88,15 @@ export function CommitScenarioDialog({
       whiteLabelCompany: false,
     });
 
-    if (isFinal) {
+    if (isStraights) {
+      setName(`${originalCalc.name} — With Straights`);
+    } else if (isFinal) {
       setName(`${originalCalc.name} — Final State`);
     } else {
       const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
       setName(`${originalCalc.name} @ ${stepLabel}`);
     }
-  }, [open, step, originalCalc, isReverse, isFinal, stepIndex, scenarioRun.checkpoints]);
+  }, [open, step, originalCalc, isReverse, isFinal, isStraights, stepIndex, scenarioRun.checkpoints]);
 
   const checkpoint = useMemo(() => {
     if (stepIndex == null) return null;
@@ -119,7 +124,8 @@ export function CommitScenarioDialog({
 
   const buildSettings = (): Settings => {
     const orig = originalCalc.settings ?? DEFAULT_SETTINGS;
-    const reverseOverrides: Partial<Settings> = isReverse && step.kind === 'reverse'
+    const applyReverse = isReverse && !isStraights && step.kind === 'reverse';
+    const reverseOverrides: Partial<Settings> = applyReverse && step.kind === 'reverse'
       ? { rate: step.factorRate, feePercent: step.feePercent, dailyPaymentDecrease: step.dailyDecrease }
       : {};
 
@@ -144,13 +150,27 @@ export function CommitScenarioDialog({
 
   const handleCommit = async () => {
     if (!checkpoint) return;
-    const { positions, asOfDate } = checkpointToPositions(
-      checkpoint,
+
+    // In 'straights' mode, filter out any reverse-RTR active positions so the
+    // child deal contains only the parent's positions + scenario straights.
+    const sourceCheckpoint = isStraights
+      ? { ...checkpoint, activePositions: checkpoint.activePositions.filter(ap => ap.source !== 'reverse-rtr') }
+      : checkpoint;
+
+    const today = new Date();
+    const { positions, asOfDate: defaultAsOf } = checkpointToPositions(
+      sourceCheckpoint,
       scenario.steps,
       originalCalc.positions ?? [],
-      new Date(),
+      today,
       scenarioRun.checkpoints,
     );
+
+    // In 'straights' mode, snap as-of to the business day AFTER the last straight fires.
+    const asOfDate = isStraights
+      ? format(addBusinessDays(today, Math.max(0, checkpoint.dayOffset + 1)), 'yyyy-MM-dd')
+      : defaultAsOf;
+
     if (positions.length === 0) {
       toast({
         title: 'Nothing to commit',
@@ -204,17 +224,23 @@ export function CommitScenarioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isFinal ? 'Commit final state to Calculator' : 'Commit snapshot to Calculator'}</DialogTitle>
+          <DialogTitle>
+            {isStraights ? 'Commit straights to Calculator'
+              : isFinal ? 'Commit final state to Calculator'
+              : 'Commit snapshot to Calculator'}
+          </DialogTitle>
           <DialogDescription>
-            {isFinal
-              ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
-              : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
+            {isStraights
+              ? <>Snapshot the <span className="font-semibold text-foreground">business day after the last straight fires</span>. All straights kept, reverses skipped — so you can structure a fresh reverse on honest balances.</>
+              : isFinal
+                ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
+                : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
             }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
-          {!isFinal && (
+          {!isFinal && !isStraights && (
             <div>
               <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
               <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
@@ -284,7 +310,10 @@ export function CommitScenarioDialog({
             Cancel
           </Button>
           <Button onClick={handleCommit} disabled={isCommittingScenario || !checkpoint}>
-            {isCommittingScenario ? 'Committing…' : (isFinal ? 'Commit final state' : 'Commit to Calculator')}
+            {isCommittingScenario ? 'Committing…'
+              : isStraights ? 'Commit straights'
+              : isFinal ? 'Commit final state'
+              : 'Commit to Calculator'}
           </Button>
         </DialogFooter>
       </DialogContent>

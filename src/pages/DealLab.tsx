@@ -620,12 +620,19 @@ function BuilderTab({
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
   const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
-  const [commitMode, setCommitMode] = useState<'step' | 'final'>('step');
-  const canCommitFinal = !!originalCalc && scenario.steps.length > 0 && scenarioRun.checkpoints.length > 1;
-  const openFinalCommit = () => {
-    if (!canCommitFinal) return;
-    setCommitMode('final');
-    setCommitStepIndex(scenario.steps.length - 1);
+  const [commitMode, setCommitMode] = useState<'step' | 'final' | 'straights'>('step');
+  const lastStraightIdx = (() => {
+    for (let i = scenario.steps.length - 1; i >= 0; i--) {
+      const k = scenario.steps[i].kind;
+      if (k === 'straight' || k === 'recurring-straight') return i;
+    }
+    return -1;
+  })();
+  const canCommitStraights = !!originalCalc && lastStraightIdx >= 0 && scenarioRun.checkpoints.length > lastStraightIdx + 1;
+  const openStraightsCommit = () => {
+    if (!canCommitStraights) return;
+    setCommitMode('straights');
+    setCommitStepIndex(lastStraightIdx);
   };
   const openStepCommit = (idx: number) => {
     setCommitMode('step');
@@ -682,8 +689,8 @@ function BuilderTab({
             </DropdownMenuContent>
           </DropdownMenu>
           {originalCalc && (
-            <Button variant="outline" onClick={openFinalCommit} disabled={!canCommitFinal} title="Snapshot the merchant's state after every step has fired into a new calculator deal">
-              <GitBranch className="w-4 h-4 mr-1.5" /> Commit final state
+            <Button variant="outline" onClick={openStraightsCommit} disabled={!canCommitStraights} title="Add scenario straights to a new deal (no reverse); dated the day after the last straight.">
+              <GitBranch className="w-4 h-4 mr-1.5" /> Commit straights
             </Button>
           )}
           <Button variant="outline" onClick={onExport}>
