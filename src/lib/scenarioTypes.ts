@@ -3,7 +3,7 @@
  */
 import { PaymentCadence } from '@/lib/leverageMath';
 
-export type StepKind = 'straight' | 'wait' | 'add-position' | 'reverse';
+export type StepKind = 'straight' | 'recurring-straight' | 'wait' | 'add-position' | 'reverse';
 
 export interface StraightStep {
   id: string;
@@ -43,9 +43,30 @@ export interface ReverseStep {
   dailyDecrease: number;
   /** IDs of currently-active positions to roll into the reverse */
   includedPositionIds: string[];
+  /** Optional: run the reverse at this absolute week offset from t=0. If undefined, runs immediately. */
+  runAtWeek?: number;
 }
 
-export type ScenarioStep = StraightStep | WaitStep | AddPositionStep | ReverseStep;
+/** A program of N identical straight MCAs fired on a fixed cadence. Pure cash infusions — no payoffs. */
+export interface RecurringStraightStep {
+  id: string;
+  kind: 'recurring-straight';
+  label?: string;
+  count: number;            // number of infusions
+  cadenceWeeks: number;     // weeks between each infusion (1 = weekly)
+  amountEach: number;       // gross funding per infusion
+  factorRate: number;
+  feePercent: number;
+  termWeeks: number;
+  paymentCadence: PaymentCadence;
+}
+
+export type ScenarioStep =
+  | StraightStep
+  | RecurringStraightStep
+  | WaitStep
+  | AddPositionStep
+  | ReverseStep;
 
 export interface Scenario {
   id: string;
@@ -109,6 +130,18 @@ export function makeStep(kind: StepKind): ScenarioStep {
       return { id: rid(), kind: 'wait', weeks: 4 };
     case 'add-position':
       return { id: rid(), kind: 'add-position', entity: 'New Position', balance: 0, dailyPayment: 0 };
+    case 'recurring-straight':
+      return {
+        id: rid(),
+        kind: 'recurring-straight',
+        count: 7,
+        cadenceWeeks: 1,
+        amountEach: 1_000_000,
+        factorRate: 1.35,
+        feePercent: 0.05,
+        termWeeks: 15,
+        paymentCadence: 'weekly',
+      };
     case 'reverse':
       return {
         id: rid(),
