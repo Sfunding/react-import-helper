@@ -404,6 +404,7 @@ function ReverseEditor({ step, active, onChange }: {
         <div><span className="text-muted-foreground">Total Funding (Gross): </span><b>{fmt(totalFunding)}</b></div>
         <div><span className="text-muted-foreground">Total Payback: </span><b>{fmt(totalPayback)}</b></div>
         <div><span className="text-muted-foreground">New Daily: </span><b>{fmt(newDaily)}</b></div>
+        <div><span className="text-muted-foreground">New Weekly: </span><b>{fmt(newDaily * 5)}</b></div>
         <div className="col-span-2">
           <span className="text-muted-foreground">Term: </span><b>{termDays} biz days (~{(termDays / 5).toFixed(1)} wk)</b>
         </div>
