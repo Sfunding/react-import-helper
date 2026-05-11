@@ -24,6 +24,8 @@ export interface StoryEntry {
   sentence: string;
   before: Checkpoint;
   after: Checkpoint;
+  /** Cadence for display purposes ('weekly' shows weekly debit figures). */
+  displayCadence: 'daily' | 'weekly';
 }
 
 const funderFor = (step: ScenarioStep): string | null => {
