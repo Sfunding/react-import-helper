@@ -70,6 +70,8 @@ export default function Index() {
   const [lastSavedCalculation, setLastSavedCalculation] = useState<SavedCalculation | null>(null);
   const [loadedCalculationId, setLoadedCalculationId] = useState<string | null>(null);
   const [loadedCalculationName, setLoadedCalculationName] = useState<string>('');
+  const [parentCalculationId, setParentCalculationId] = useState<string | null>(null);
+  const [parentCalculationName, setParentCalculationName] = useState<string>('');
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
   const [paymentView, setPaymentView] = useState<'daily' | 'weekly' | 'both'>(() => {
     try {
