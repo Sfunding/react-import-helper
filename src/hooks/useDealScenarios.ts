@@ -53,13 +53,13 @@ export function useDealScenarios(calculationId: string | undefined) {
     const nextOrder = rows.length;
     const { data, error } = await supabase
       .from('deal_scenarios')
-      .insert({
+      .insert([{
         calculation_id: calculationId,
         user_id: user.id,
         name,
         scenario: scenario as unknown as Record<string, unknown>,
         sort_order: nextOrder,
-      })
+      }])
       .select('*')
       .single();
     if (error) {
