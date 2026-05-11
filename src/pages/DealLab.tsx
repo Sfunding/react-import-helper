@@ -527,7 +527,7 @@ export default function DealLabPage() {
                 onDelete={handleDeleteScenario}
               />
 
-              <ScenarioBuilderPanel
+              <BuilderTab
                 scenario={scenario}
                 setScenario={setScenario}
                 scenarioRun={scenarioRun}
