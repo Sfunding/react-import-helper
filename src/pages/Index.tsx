@@ -845,6 +845,7 @@ export default function Index() {
     positions,
     totalBalance,
     totalDailyPayment: totalCurrentDailyPayment,
+    asOfDate,
     hasUnsavedChanges: isDirty,
     onSaved: () => {
       setLastSavedState(JSON.stringify({ merchant, settings, positions, asOfDate }));
