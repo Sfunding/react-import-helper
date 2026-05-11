@@ -1,53 +1,41 @@
-## Problem
+## What the user wants
 
-When the user clicks **Commit to Calculator** on a scenario step, we:
+Right now Commit to Calculator works step-by-step — they click one step and snapshot the merchant's state at that moment. They want one click that commits the **whole scenario at once** — i.e., a child deal whose positions reflect *every* step having fired (all straight MCAs added, all reverses consolidated, all wait/recurring steps applied).
 
-1. Create a new child `saved_calculation` with the snapshot positions.
-2. Navigate them to `/deal/<child-id>/lab`.
+The math already supports this: `scenarioRun.checkpoints[scenario.steps.length]` is the final checkpoint, and `checkpointToPositions(...)` against it returns the end-state position stack.
 
-The child has **no scenarios** of its own. Worse, the Lab auto-creates an "Untitled Scenario" on first load, which makes it look like the user landed on a fresh deal and lost everything. The parent's scenarios are still safe in the database but completely invisible from this page.
+## Change
 
-The breadcrumb "↩ Derived from …" exists but is small and the user blew right past it.
+### 1. New entry point — "Commit final state"
+Add a button in the Deal Lab control bar (next to "Export PDF"), and a second one inline at the top of `ScenarioSummary`:
 
-## Fix — three changes, in order of importance
+> **Commit final state** — opens the existing CommitScenarioDialog pre-loaded with the **last step** and **snapshotWhen = "after"**.
 
-### 1. Auto-copy the parent's scenarios into the child on commit (high impact)
+Disabled when:
+- `originalCalc` isn't loaded yet, or
+- the scenario has zero steps, or
+- the simulation hasn't run (no checkpoints).
 
-In `commitScenarioMutation` (`src/hooks/useCalculations.ts`), after inserting the child row:
+### 2. Dialog adjustments when invoked in "final state" mode
+The same `CommitScenarioDialog` handles it — just opened with `stepIndex = steps.length - 1` and the right defaults. To make the UX obvious when it's a full-scenario commit (as opposed to a per-step commit), add a small `mode` prop:
 
-- Read **all** `deal_scenarios` rows for the parent (`calculation_id = parentId`).
-- For each one, insert a clone with `calculation_id = newChildId`, same `name`, same `scenario` JSON, `is_pinned: false`, `sort_order` preserved.
-- Optionally prefix the cloned scenario name with `"↩ "` so it's obvious it came from the parent.
+- `'step'` (existing per-step behavior, unchanged).
+- `'final'` — title becomes "Commit final state to Calculator", description reads "Snapshot after all N steps have fired", and the "Snapshot state (Before/After)" radio group is **hidden** (always "after"). Default name becomes `${originalCalc.name} — Final State`.
 
-This means when the user lands on the child Lab, they immediately see the same scenarios they were just working on, ready to keep iterating.
+Everything else (carryover modes, settings copy, reverse-param overrides if the last step is a reverse) stays identical.
 
-### 2. Suppress the auto-create-on-empty for derived deals
-
-`DealLab.tsx` (or wherever the empty-scenarios auto-create lives) currently inserts an "Untitled Scenario" when the deal has zero scenarios. When `parent_calculation_id` is set, **skip** this auto-create — the user just arrived, let them see exactly what was copied over instead of a spurious blank scenario.
-
-(Bonus cleanup: the two empty "Untitled Scenario" / "New scenario" rows that exist on the current child deal can be silently deleted by the migration so the user sees a clean slate.)
-
-### 3. Make the parent breadcrumb impossible to miss
-
-In `Index.tsx` and `DealLab.tsx`, upgrade the "↩ Derived from [parent name]" line from a small caption into a visible banner above the page header:
-
-```
-[← Back to parent] Derived from "ONEflight WO AVION Consolidation WO AVION"
-```
-
-- Left-aligned banner, accent-bg, single line.
-- Whole banner is clickable, navigates to `/deal/<parent-id>/lab` (Lab → Lab, Calc → Calc).
-- Includes a small "Open parent" button as a secondary affordance.
+### 3. Wiring
+- `DealLab.tsx`: add `commitMode: 'step' | 'final' | null` state alongside `commitStepIndex`. New button sets `commitStepIndex = steps.length - 1`, `commitMode = 'final'`. Existing per-step triggers set `commitMode = 'step'`.
+- Pass `mode` into `CommitScenarioDialog`.
 
 ## Acceptance
 
-- Commit to Calculator on a parent that has Scenario A (11 steps) and Scenario B (3 steps) → child deal opens with **the same two scenarios** copied in, same step counts, ready to edit.
-- The child does **not** auto-create an empty "Untitled Scenario" on load.
-- A clearly visible banner at the top of the child deal's Lab and Calculator says "Derived from …" and clicking it returns to the parent.
-- Parent deal's scenarios are untouched (cloning is a copy, not a move).
+- A scenario with 10 straights + 1 reverse → click "Commit final state" → dialog opens titled "Commit final state to Calculator", "After all 11 steps". Click Commit → new child deal in Saved Calculations whose positions include all 10 straight RTRs (with correct fundedDate per step), reverses consolidated, and the parent's surviving balances projected through the entire timeline.
+- If the last step is a reverse, factor / fee / daily decrease overrides from that step apply to the new deal's settings (same as today's per-step reverse commit).
+- Per-step "Commit to Calculator" continues to work exactly as before.
+- Parent scenarios are auto-cloned into the child (already in place from previous change).
 
 ## Out of scope
 
-- Two-way sync between parent and child scenarios — they diverge after commit, intentionally.
-- A "children" list on the parent (nice to have, not blocking).
-- Undoing a commit (the child can always just be deleted from Saved Calculations).
+- Picking an arbitrary range of steps (only "everything" vs "single step"). Can be added later if needed.
+- Splitting one commit into multiple child deals (one per step). The per-step button already covers that one at a time.

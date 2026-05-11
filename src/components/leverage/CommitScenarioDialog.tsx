@@ -45,6 +45,7 @@ interface CommitScenarioDialogProps {
   scenarioRun: ScenarioRunResult;
   stepIndex: number | null;
   originalCalc: SavedCalculation | null | undefined;
+  mode?: 'step' | 'final';
 }
 
 export function CommitScenarioDialog({
