@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Scenario, ScenarioRunResult, ScenarioStep } from '@/lib/scenarioTypes';
 import { SavedCalculation, Settings, DEFAULT_SETTINGS, DEFAULT_EPO_SETTINGS } from '@/types/calculation';
 import { checkpointToPositions, stackTotals } from '@/lib/leverageMath';
+import { addBusinessDays } from '@/lib/dateUtils';
 
 type CarryoverMode = 'reverse-only' | 'all' | 'custom';
 
