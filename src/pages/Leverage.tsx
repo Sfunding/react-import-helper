@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Position, SavedCalculation } from '@/types/calculation';
 import {
   snapshot,
@@ -25,7 +24,6 @@ import {
   simulateHybrid,
   HybridTrigger,
   LeverageBand,
-  BUSINESS_DAYS_PER_MONTH,
 } from '@/lib/leverageMath';
 import { Download, TrendingDown, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
