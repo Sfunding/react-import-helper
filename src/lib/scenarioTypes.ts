@@ -57,6 +57,8 @@ export interface RecurringStraightStep {
   id: string;
   kind: 'recurring-straight';
   label?: string;
+  /** ISO date the first infusion fires on. */
+  runOn?: string;
   count: number;            // number of infusions
   cadenceWeeks: number;     // weeks between each infusion (1 = weekly)
   amountEach: number;       // gross funding per infusion
