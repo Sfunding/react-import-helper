@@ -128,7 +128,57 @@ export default function Index() {
     };
   }, [handleNavigation]);
 
+  // ============================================================
+  // Auto-save: local draft backup + cloud auto-save for loaded deals
+  // ============================================================
+  const isDirty = hasUnsavedChanges();
+
+  // Warn on tab close / refresh when there are unsaved changes
+  useBeforeUnloadGuard(isDirty);
+
+  // Detect a previously-saved draft on mount (e.g. after a crash/refresh)
+  const { draft: pendingDraft, dismiss: dismissDraft } = useDraftOnMount();
+  const [draftBannerDraft, setDraftBannerDraft] = useState<DraftPayload | null>(null);
+  useEffect(() => {
+    if (!pendingDraft) return;
+    // Only offer to restore if there's actually content
+    const hasContent = (pendingDraft.positions?.length ?? 0) > 0 ||
+                       (pendingDraft.merchant?.name ?? '') !== '' ||
+                       (pendingDraft.merchant?.monthlyRevenue ?? 0) > 0;
+    // Don't double-prompt when we're about to load a calc from sessionStorage
+    const incomingLoad = !!sessionStorage.getItem('loadCalculation');
+    if (hasContent && !incomingLoad) setDraftBannerDraft(pendingDraft);
+    else dismissDraft();
+  }, [pendingDraft, dismissDraft]);
+
+  const handleRestoreDraft = () => {
+    if (!draftBannerDraft) return;
+    setMerchant(draftBannerDraft.merchant);
+    setSettings(draftBannerDraft.settings);
+    setPositions(draftBannerDraft.positions);
+    setLoadedCalculationId(draftBannerDraft.loadedCalculationId);
+    setLoadedCalculationName(draftBannerDraft.loadedCalculationName);
+    setLastSavedState('');
+    setDraftBannerDraft(null);
+    dismissDraft();
+    toast({ title: 'Draft restored', description: 'Your unsaved changes have been recovered.' });
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setDraftBannerDraft(null);
+    dismissDraft();
+  };
+
+  // Cloud auto-save toggle (per-browser preference)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(() => readAutoSaveEnabled(true));
+  const handleToggleAutoSave = (next: boolean) => {
+    setAutoSaveEnabled(next);
+    writeAutoSaveEnabled(next);
+  };
+
   // Load calculation from sessionStorage if available
+
   useEffect(() => {
     const stored = sessionStorage.getItem('loadCalculation');
     if (stored) {
