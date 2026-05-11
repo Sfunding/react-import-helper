@@ -5,9 +5,21 @@
  * constants: 22 business days/month, 5 business days/week.
  */
 import { Position } from '@/types/calculation';
+import { getBusinessDaysBetween } from '@/lib/dateUtils';
 
 export const BUSINESS_DAYS_PER_MONTH = 22;
 export const BUSINESS_DAYS_PER_WEEK = 5;
+
+/** Convert an ISO date (YYYY-MM-DD) to a business-day offset from today (>=0). */
+function dayOffsetFromIso(iso?: string): number | null {
+  if (!iso) return null;
+  const target = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (target <= today) return 0;
+  return getBusinessDaysBetween(today, target);
+}
 
 // -------------------- Leverage ratios --------------------
 
@@ -441,13 +453,17 @@ function makeCheckpoint(
 
 function stepLabel(step: ScenarioStep): string {
   if (step.label) return step.label;
+  const datePart = (step as { runOn?: string }).runOn
+    ? ` on ${new Date((step as { runOn?: string }).runOn + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+    : '';
   switch (step.kind) {
-    case 'straight': return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}`;
+    case 'straight': return `Straight MCA $${Math.round(step.grossFunding).toLocaleString()}${datePart}`;
     case 'recurring-straight':
-      return `${step.count} x Straight ($${Math.round(step.amountEach).toLocaleString()} every ${step.cadenceWeeks}w)`;
+      return `${step.count} x Straight ($${Math.round(step.amountEach).toLocaleString()} every ${step.cadenceWeeks}w)${datePart}`;
     case 'wait': return `Wait ${step.weeks} wk`;
-    case 'add-position': return `Add: ${step.entity}`;
+    case 'add-position': return `Add: ${step.entity}${datePart}`;
     case 'reverse':
+      if (step.runOn) return `Reverse Consolidation${datePart}`;
       return step.runAtWeek != null
         ? `Reverse Consolidation @ wk ${step.runAtWeek}`
         : 'Reverse Consolidation';
@@ -484,6 +500,18 @@ export function runScenario(
     let cashStep = 0;
     let profitStep = 0;
     let note: string | undefined;
+
+    // If the step has an absolute run date, fast-forward active positions to it.
+    if (step.kind !== 'wait') {
+      const targetDay = dayOffsetFromIso((step as { runOn?: string }).runOn);
+      if (targetDay != null) {
+        const delta = targetDay - dayOffset;
+        if (delta > 0) {
+          active = advanceDays(active, delta);
+          dayOffset += delta;
+        }
+      }
+    }
 
     if (step.kind === 'wait') {
       const days = Math.max(0, Math.round(step.weeks * BUSINESS_DAYS_PER_WEEK));
@@ -613,6 +641,11 @@ export function runScenario(
   {
     let curDay = 0;
     for (const s of scenario.steps) {
+      // Honor absolute runOn date: fast-forward curDay to that target (only forwards)
+      if (s.kind !== 'wait') {
+        const td = dayOffsetFromIso((s as { runOn?: string }).runOn);
+        if (td != null && td > curDay) curDay = td;
+      }
       if (s.kind === 'wait') {
         curDay += Math.max(0, Math.round(s.weeks * BUSINESS_DAYS_PER_WEEK));
       } else if (s.kind === 'recurring-straight') {

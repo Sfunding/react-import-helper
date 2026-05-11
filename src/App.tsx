@@ -9,7 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import SavedCalculations from "./pages/SavedCalculations";
-import LeveragePage from "./pages/Leverage";
+import DealLabPage from "./pages/DealLab";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,10 +40,10 @@ const App = () => (
               } 
             />
             <Route 
-              path="/leverage" 
+              path="/deal/:id/lab" 
               element={
                 <AuthGuard>
-                  <LeveragePage />
+                  <DealLabPage />
                 </AuthGuard>
               } 
             />

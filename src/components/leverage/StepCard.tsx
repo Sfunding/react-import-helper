@@ -1,4 +1,5 @@
 import React from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,9 +7,66 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { ArrowUp, ArrowDown, Copy, Trash2, Zap, Clock, PlusCircle, Repeat, Layers, CalendarIcon } from 'lucide-react';
 import { ScenarioStep, ActivePosition } from '@/lib/scenarioTypes';
 import { PaymentCadence } from '@/lib/leverageMath';
+import { cn } from '@/lib/utils';
+
+const RUN_LABEL: Record<Exclude<ScenarioStep['kind'], 'wait'>, string> = {
+  straight: 'Fund on',
+  'recurring-straight': 'First infusion on',
+  'add-position': 'Position starts on',
+  reverse: 'Reverse on',
+};
+
+function StepDatePicker({ step, onChange }: {
+  step: Exclude<ScenarioStep, { kind: 'wait' }>;
+  onChange: (s: ScenarioStep) => void;
+}) {
+  const runOn = step.runOn ? new Date(step.runOn + 'T00:00:00') : undefined;
+  return (
+    <div className="flex items-center gap-2">
+      <Label className="text-xs whitespace-nowrap">{RUN_LABEL[step.kind]}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn('h-8 justify-start font-normal', !runOn && 'text-muted-foreground')}
+          >
+            <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+            {runOn ? format(runOn, 'EEE, MMM d, yyyy') : 'Immediate (after prior step)'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={runOn}
+            onSelect={(d) => {
+              if (!d) return;
+              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              onChange({ ...step, runOn: iso } as ScenarioStep);
+            }}
+            initialFocus
+            className="p-3 pointer-events-auto"
+          />
+        </PopoverContent>
+      </Popover>
+      {runOn && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs text-muted-foreground"
+          onClick={() => onChange({ ...step, runOn: undefined } as ScenarioStep)}
+        >
+          Clear
+        </Button>
+      )}
+    </div>
+  );
+}
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
@@ -61,6 +119,10 @@ export function StepCard({
             <Trash2 className="w-4 h-4 text-rose-600" />
           </Button>
         </div>
+
+        {step.kind !== 'wait' && (
+          <StepDatePicker step={step} onChange={onChange} />
+        )}
 
         {step.kind === 'straight' && (
           <StraightEditor

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calculator, FolderOpen, LogOut, Settings, TrendingDown } from 'lucide-react';
+import { Calculator, FolderOpen, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import avionLogo from '@/assets/avion-logo.png';
@@ -59,18 +59,8 @@ export function Navbar() {
                 <FolderOpen className="w-4 h-4" />
                 <span className="hidden sm:inline">Saved</span>
               </Link>
-              <Link
-                to="/leverage"
-                onClick={(e) => handleNavClick(e, '/leverage')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive('/leverage') 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`}
-              >
-                <TrendingDown className="w-4 h-4" />
-                <span className="hidden sm:inline">Leverage</span>
-              </Link>
+
+
               {isAdmin && (
                 <Link
                   to="/settings"
