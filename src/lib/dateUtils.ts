@@ -86,6 +86,15 @@ export function parseISODateLocal(iso: string): Date {
   return new Date(iso + 'T00:00:00');
 }
 
+/**
+ * Returns true if ISO date `a` is strictly before ISO date `b` (yyyy-MM-dd).
+ * Safe lexicographic compare since both strings are zero-padded.
+ */
+export function isBeforeISODate(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a < b;
+}
+
 type RepriceablePosition = {
   balance: number | null;
   dailyPayment: number;
