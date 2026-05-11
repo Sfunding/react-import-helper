@@ -228,7 +228,24 @@ export default function Index() {
           setLoadedCalculationId(data.id);
           setLoadedCalculationName(data.name || '');
         }
-        
+
+        // Hydrate parent breadcrumb (when this deal was committed from a scenario)
+        const parentId: string | null = data.parent_calculation_id ?? null;
+        const parentNameInline: string = data.parent_calculation_name ?? '';
+        setParentCalculationId(parentId);
+        setParentCalculationName(parentNameInline);
+        if (parentId && !parentNameInline) {
+          // Lazy fetch when not provided in the load payload
+          (async () => {
+            const { data: row } = await supabase
+              .from('saved_calculations')
+              .select('name')
+              .eq('id', parentId)
+              .maybeSingle();
+            if (row?.name) setParentCalculationName(row.name);
+          })();
+        }
+
         sessionStorage.removeItem('loadCalculation');
         // Mark as "saved" state since we just loaded it
         setLastSavedState(JSON.stringify({ 
