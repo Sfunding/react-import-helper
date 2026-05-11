@@ -527,7 +527,43 @@ export function runScenario(
       cashStep = netAdvance - payoffsTotal;
       profitStep = totalPayback - gross;
       note = `Payoffs ${payoffsTotal.toFixed(0)}, net ${netAdvance.toFixed(0)}, daily ${daily.toFixed(0)}`;
+    } else if (step.kind === 'recurring-straight') {
+      const count = Math.max(0, Math.floor(step.count));
+      const cadDays = Math.max(0, Math.round(step.cadenceWeeks * BUSINESS_DAYS_PER_WEEK));
+      const termDays = Math.max(1, Math.round(step.termWeeks * BUSINESS_DAYS_PER_WEEK));
+      const gross = Math.max(0, step.amountEach);
+      const netEach = gross * (1 - step.feePercent);
+      const paybackEach = gross * step.factorRate;
+      const dailyEach = paybackEach / termDays;
+      for (let i = 0; i < count; i++) {
+        if (i > 0 && cadDays > 0) {
+          active = advanceDays(active, cadDays);
+          dayOffset += cadDays;
+        }
+        active = [
+          ...active,
+          {
+            id: `rstraight-${step.id}-${i + 1}`,
+            entity: `Straight #${i + 1} ($${Math.round(gross).toLocaleString()} @ ${step.factorRate.toFixed(2)})`,
+            balance: paybackEach,
+            dailyPayment: dailyEach,
+            source: 'straight-rtr',
+          },
+        ];
+        cashStep += netEach;
+        profitStep += paybackEach - gross;
+      }
+      note = `${count} infusions of $${Math.round(gross).toLocaleString()} @ ${step.factorRate.toFixed(2)} / ${step.termWeeks}w (daily +${dailyEach.toFixed(0)} each)`;
     } else if (step.kind === 'reverse') {
+      // Optionally fast-forward to an absolute week before running the reverse
+      if (step.runAtWeek != null && Number.isFinite(step.runAtWeek)) {
+        const targetDay = Math.max(0, Math.round(step.runAtWeek * BUSINESS_DAYS_PER_WEEK));
+        const delta = targetDay - dayOffset;
+        if (delta > 0) {
+          active = advanceDays(active, delta);
+          dayOffset += delta;
+        }
+      }
       const incSet = new Set(step.includedPositionIds);
       const included = active.filter(p => incSet.has(p.id) && p.balance > 0);
       const totalAdvance = included.reduce((s, p) => s + p.balance, 0);
