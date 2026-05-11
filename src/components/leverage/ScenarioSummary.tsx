@@ -76,9 +76,10 @@ interface ScenarioSummaryProps {
   scenarioRun: ScenarioRunResult;
   monthlyRevenue: number;
   onJumpToStep: (idx: number) => void;
+  onCommitStep?: (idx: number) => void;
 }
 
-export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpToStep }: ScenarioSummaryProps) {
+export function ScenarioSummary({ scenario, scenarioRun, monthlyRevenue, onJumpToStep, onCommitStep }: ScenarioSummaryProps) {
   const start = scenarioRun.checkpoints[0];
   const end = scenarioRun.finalState;
   const hasSteps = scenario.steps.length > 0;
