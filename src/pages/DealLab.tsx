@@ -110,17 +110,13 @@ function MetricsBlock({
   );
 }
 
-type ScenarioKind = 'reverse' | 'straight' | 'hybrid';
-
 export default function DealLabPage() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { calculations, isLoading, updateCalculation } = useCalculations();
+  const { calculations, isLoading } = useCalculations();
   const { toast } = useToast();
 
   const selectedId = routeId ?? '';
-  const [chosenScenario, setChosenScenario] = useState<ScenarioKind | null>(null);
-  const [activeTab, setActiveTab] = useState<'compare' | 'builder'>('compare');
 
   // Scenario Builder state
   const [scenario, setScenario] = useState<Scenario>(() => newScenario());
