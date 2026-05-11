@@ -1,66 +1,89 @@
 ## Goal
 
-Add a new commit action that produces a child deal containing the **parent's original positions** (projected to the right date) plus every **straight (and recurring-straight) position** from the scenario — and **excludes any reverse consolidation**. The snapshot date is the **business day immediately after the last straight fires**, so balances and daily payments are honest at the moment the user will structure the new reverse.
+Make the calculator's "Positions as of" date a **live re-pricing control**. Whenever the as-of date changes (forward or back), every position with enough info to be re-priced updates its balance automatically — so you can move the date in either direction and see real, honest balances.
 
-## Why the current "Commit final state" is wrong
+## Today vs target behavior
 
-`Commit final state` uses `checkpoints[last]`, which is the state **after every reverse has fired**. Reverses consolidate prior straights into a single reverse RTR, so the individual straights disappear and the user can't build a new reverse on top of them. The user wants the straights intact, no reverse, and balances accurate to the moment the last straight has landed.
+Today:
+- Each position stores a single `balance` and (optionally) `fundedDate` + `amountFunded`.
+- `asOfDate` exists at the top of the calculator, but changing it does NOT reprice balances. The only repricing that happens is a one-shot adjustment when loading a funded deal (`businessDaysElapsed` since `funded_at`), and inside Deal Lab.
+- If you change the as-of date today, totals stay the same — which makes the date a label, not a control.
 
-## New behavior — "Commit straights to Calculator"
+Target:
+- Every position has an anchor: a known balance on a known date.
+- Changing `asOfDate` reprices every anchored position by `(business days between anchor date and as-of date) × dailyPayment` — moving forward decreases balance, moving back increases it (clamped at the original funded amount when known, never below 0).
+- Positions without an anchor (no funded date AND no "as of" history) stay manual.
 
-Replace the existing "Commit final state" button with **"Commit straights"** (same `GitBranch` icon, same location). Clicking it opens the dialog in a new `mode='straights'` that:
+## Anchor model (per position)
 
-1. Hides the Before/After radio (not relevant).
-2. Title: "Commit straights to Calculator". Description: "Snapshot the day after the last straight fires — all straights kept, reverses skipped."
-3. Default name: `${originalCalc.name} — With Straights`.
-4. Carryover defaults to `all` settings from the parent, with reverse-param overrides **off** (user will configure a new reverse from scratch).
+Add two optional fields (frontend type only — JSONB column, no DB migration):
 
-### Snapshot logic
+- `balanceAsOfDate: string | null` — the date the stored `balance` is true on.
+- `balanceAnchor: 'funded' | 'manual' | null` — how the anchor was set.
 
-- Find `lastStraightIdx` = highest step index where `kind === 'straight' || kind === 'recurring-straight'`. If none exists, disable the button.
-- Target checkpoint = `scenarioRun.checkpoints[lastStraightIdx + 1]` (state **after** that step fires).
-- `asOfDate` = `addBusinessDays(today, checkpoint.dayOffset + 1)` — the next business day after the last straight, formatted `yyyy-MM-dd`. This is the "honest balance" date.
-- Walk `checkpoint.activePositions` and emit positions via the existing `checkpointToPositions` rules, but **filter out any `ap.source === 'reverse-rtr'`** entries. Everything else (originals projected to that day, straights at their post-funding partial-paydown balance, outside-added positions) passes through unchanged.
-- If a reverse fires **between** straights, the originals it consumed are already gone from the active set at the snapshot checkpoint — that's correct, the user explicitly chose to model that consolidation in the scenario; we just don't carry the resulting reverse RTR into the child.
+Anchor rules:
+1. **Funded-date anchor.** If `fundedDate` + `amountFunded` are set, anchor = `fundedDate` with balance = `amountFunded`. This is the strongest anchor — repricing can go all the way back to funding and forward to today (or any as-of date).
+2. **Manual anchor.** If the user types a balance for a position without a funded date, we stamp `balanceAsOfDate = currentAsOfDate` and `balanceAnchor = 'manual'`. From then on, changing the calculator's as-of date reprices off that stamp.
+3. **Legacy positions** (no anchor saved): on load, treat `balanceAsOfDate = saved_calculations.as_of_date` (or today) as the manual anchor so existing deals keep working.
 
-### Settings
+Repricing formula (single source of truth, in a new helper):
 
-- `carryover === 'all'`: copy parent's `originalCalc.settings` verbatim. Do NOT apply any reverse-step overrides (`rate`, `feePercent`, `dailyPaymentDecrease` stay parent's). The "custom" branch's reverse-key auto-toggle is also skipped in straights mode.
+```
+repricedBalance(p, asOfDate):
+  anchor = p.fundedDate && p.amountFunded ? { date: fundedDate, bal: amountFunded }
+         : p.balanceAsOfDate && p.balance != null ? { date: balanceAsOfDate, bal: balance }
+         : null
+  if !anchor: return p.balance              // can't reprice, leave manual
+  days = businessDaysBetween(anchor.date, asOfDate)   // signed
+  newBal = anchor.bal - days * p.dailyPayment
+  cap at anchor.bal (never grow past it); floor at 0
+  return round(newBal, 2)
+```
 
-## Files to change
+## UX changes
 
-- `src/components/leverage/CommitScenarioDialog.tsx`
-  - Extend `mode` union to `'step' | 'final' | 'straights'`.
-  - In the reset `useEffect`: when straights mode, set default name, force `carryover='all'`, set all `customKeys` to `false`.
-  - Update title/description and submit-button label for straights mode.
-  - In `handleCommit`, when straights mode:
-    1. Compute `lastStraightIdx` from `scenario.steps`.
-    2. Get `checkpoint = scenarioRun.checkpoints[lastStraightIdx + 1]`.
-    3. Build a filtered checkpoint (omit `reverse-rtr` active positions) and pass to `checkpointToPositions`.
-    4. Override `asOfDate` to `addBusinessDays(today, checkpoint.dayOffset + 1)`.
-    5. Build settings with no reverse overrides (treat `isReverse` as false in `buildSettings`).
-  - Disable Commit button when no straight exists in the scenario.
+- **Positions table:** keep editable balance cell, but when the user edits it, stamp `balanceAsOfDate = asOfDate` and `balanceAnchor = 'manual'` on that row.
+- **As-of date picker:** unchanged UI, but on change → run repricing across all positions (only the `balance` field updates; daily payment, funded date, amount funded untouched).
+- **Per-row indicator:** small muted caption under the balance: "as of {date}" (uses `balanceAsOfDate` or `fundedDate`) so it's obvious which positions are live-priced.
+- **Helper text under date picker:** replace the "balances will be projected forward… in the Deal Lab" line with "Move this date to reprice balances. Funded positions reprice from their funding date; manually-entered balances reprice from when you entered them."
+- **Allow future as-of dates?** Yes — capping at today is removed so you can model "what's the balance Friday?". (Easy to revert if undesired.)
 
-- `src/pages/DealLab.tsx`
-  - Rename handler `openFinalCommit` → `openStraightsCommit`; set `commitMode = 'straights'`, `commitStepIndex = lastStraightIdx` (or `steps.length - 1` — dialog computes its own target).
-  - Update button label "Commit straights" and hint "Add scenario straights to a new deal (no reverse); dated the day after the last straight."
-  - Disable when scenario has zero straights.
+## Edge cases
 
-- `src/lib/leverageMath.ts`
-  - Ensure `addBusinessDays` is exported (it already is via the dialog's import path — confirm during implementation; no logic change).
+- **Weekly-pay positions:** business-day-based math is wrong for weekly; for `frequency === 'weekly'` use full-week increments — `weeks × dailyPayment × 5` between anchor and as-of, snapping to the position's `weeklyPullDay` if set. Same clamp rules.
+- **Unknown balance positions (`balance === null`):** never reprice; leave null.
+- **Going backward past the anchor:** clamp to `anchor.bal` so we don't invent balance the merchant never owed.
+- **Going forward past payoff:** clamp at 0 (already standard).
 
-## Acceptance
+## Persistence
 
-- Scenario with parent positions A, B, C + 5 straights spread over 8 weeks + 1 reverse at week 6 → click "Commit straights" → child deal has:
-  - A, B, C projected to "day after last straight" balances/dailies (paid down realistically).
-  - S1..S5 at their balance/daily on that same date (early straights partially paid, late straight nearly full).
-  - No reverse RTR.
-  - `asOfDate` = business day after S5's funding day.
-- Settings = parent's settings, reverse params untouched.
-- Per-step "Commit to Calculator" continues to work exactly as before. Parent scenarios still auto-clone into the child.
+- New fields ride inside `positions` JSONB — no schema change.
+- `saved_calculations.as_of_date` keeps tracking the calculator's current as-of for re-load continuity.
+- On load: hydrate anchors from saved positions, fall back to legacy rule above.
+
+## Files to touch
+
+- `src/types/calculation.ts` — add `balanceAsOfDate`, `balanceAnchor` to `Position`.
+- `src/lib/dateUtils.ts` — add `repricePositionBalance(position, fromDate, toDate, frequency)` and a signed `businessDaysBetweenSigned`.
+- `src/pages/Index.tsx`:
+  - `setAsOfDate` becomes a wrapper that also reprices all positions from `oldAsOfDate` → `newAsOfDate`.
+  - Balance input `onChange` stamps `balanceAsOfDate = asOfDate`, `balanceAnchor = 'manual'`.
+  - Add new-position default includes `balanceAsOfDate: asOfDate, balanceAnchor: null`.
+  - Load path: hydrate anchors; drop the one-shot "funded_at" adjustment (the new system covers it).
+  - Remove `disabled={(date) => date > new Date()}` on the calendar (or keep — open question).
+  - Add the per-row "as of {date}" caption.
+- `src/hooks/useCalculations.ts` — no change (JSONB carries the new fields).
+- `src/components/leverage/CommitScenarioDialog.tsx` — when committing, stamp the committed positions with `balanceAsOfDate = asOfDate` so the new child deal is anchored correctly.
+- Deal Lab (`src/pages/DealLab.tsx`) — read anchors when projecting; existing forward-projection already does the right thing, just needs to start from each position's anchor rather than assuming "today".
 
 ## Out of scope
 
-- Picking a subset of straights to include.
-- Forcing straights to "full RTR" (we use honest post-paydown balance).
-- Auto-creating a placeholder reverse in the child.
+- No backend migration; everything piggybacks on the existing `positions` JSONB and `as_of_date` columns.
+- No change to scenario math, EPO, or PDF export formulas — they continue to consume `balance` at the current `asOfDate` and stay accurate.
+- No bulk "re-anchor all positions to today" button (can add later if needed).
+
+## Open questions
+
+1. Should the as-of date be allowed to go past today (model future balances)?
+2. For weekly positions, do you want repricing snapped to the configured `weeklyPullDay`, or just "weeks × daily × 5"?
+3. When a user edits a position's `dailyPayment`, should we re-stamp the anchor to "today as-of" or keep the original anchor? (Default in this plan: keep original — only balance edits restamp.)
