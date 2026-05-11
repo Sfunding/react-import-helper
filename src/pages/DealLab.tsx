@@ -652,13 +652,30 @@ export default function DealLabPage() {
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <Link
-              to="/"
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedCalc) {
+                  sessionStorage.setItem('loadCalculation', JSON.stringify({
+                    id: selectedCalc.id,
+                    name: selectedCalc.name,
+                    merchant: {
+                      name: selectedCalc.merchant_name || '',
+                      businessType: selectedCalc.merchant_business_type || '',
+                      monthlyRevenue: selectedCalc.merchant_monthly_revenue || 0,
+                    },
+                    settings: selectedCalc.settings,
+                    positions: selectedCalc.positions,
+                    funded_at: (selectedCalc as unknown as { funded_at?: string | null }).funded_at || null,
+                  }));
+                }
+                navigate('/');
+              }}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Back to {selectedCalc?.merchant_name || 'calculator'}
-            </Link>
+            </button>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <TrendingDown className="w-6 h-6 text-primary" />
               Deal Lab
