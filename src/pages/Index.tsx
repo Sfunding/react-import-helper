@@ -1271,7 +1271,7 @@ export default function Index() {
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Balance</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Daily</th>
                       <th className="p-3 text-right border-b-2 border-border font-semibold">Weekly</th>
-                      <th className="p-3 text-center border-b-2 border-border font-semibold">Days Left / Last Pay</th>
+                      <th className="p-3 text-center border-b-2 border-border font-semibold">Days / Weeks Left</th>
                       <th className="p-3 text-center border-b-2 border-border font-semibold w-12"></th>
                     </tr>
                   </thead>
@@ -1408,21 +1408,43 @@ export default function Index() {
                               />
                             </div>
                           </td>
-                          {/* Days Left / Last Pay - stacked */}
+                          {/* Days / Weeks Left - editable, writes back to balance */}
                           <td className="py-3 px-2 text-center">
                             {isUnknown ? (
                               <span className="text-xs text-muted-foreground">?</span>
-                            ) : (
+                            ) : p.dailyPayment > 0 ? (
                               <div className="flex flex-col items-center gap-1">
-                                <span className={`px-3 py-0.5 rounded-full font-semibold text-sm ${
-                                  daysLeft > 186 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
-                                }`}>
-                                  {daysLeft} days
-                                </span>
+                                <div className={`flex items-center gap-1 rounded-md px-1 ${daysLeft > 186 ? 'bg-destructive/10' : ''}`}>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={daysLeft}
+                                    onChange={e => {
+                                      const d = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+                                      updatePosition(p.id, 'balance', d * p.dailyPayment);
+                                    }}
+                                    className={`w-14 p-1 border border-input rounded-md bg-background text-center text-sm font-semibold ${daysLeft > 186 ? 'text-destructive' : ''}`}
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">d</span>
+                                  <span className="text-muted-foreground">/</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={Math.ceil(daysLeft / 5)}
+                                    onChange={e => {
+                                      const w = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+                                      updatePosition(p.id, 'balance', w * 5 * p.dailyPayment);
+                                    }}
+                                    className={`w-12 p-1 border border-input rounded-md bg-background text-center text-sm font-semibold ${daysLeft > 186 ? 'text-destructive' : ''}`}
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">w</span>
+                                </div>
                                 <span className="text-xs text-muted-foreground">
                                   {getFormattedLastPaymentDate(daysLeft)}
                                 </span>
                               </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground" title="Set daily first">—</span>
                             )}
                           </td>
                           {/* Actions - dropdown */}
