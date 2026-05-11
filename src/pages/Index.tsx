@@ -32,6 +32,10 @@ import { getFormattedLastPaymentDate, formatBusinessDate, getBusinessDaysBetween
 import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/exportUtils';
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
+import { DraftRestoreBanner } from '@/components/DraftRestoreBanner';
+import { AutoSaveIndicator } from '@/components/AutoSaveIndicator';
+import { useDraftBackup, useBeforeUnloadGuard, useDraftOnMount, clearDraft, DraftPayload } from '@/hooks/useDraftBackup';
+import { useAutoSave, readAutoSaveEnabled, writeAutoSaveEnabled } from '@/hooks/useAutoSave';
 import { format } from 'date-fns';
 
 import { cn } from '@/lib/utils';
@@ -124,7 +128,57 @@ export default function Index() {
     };
   }, [handleNavigation]);
 
+  // ============================================================
+  // Auto-save: local draft backup + cloud auto-save for loaded deals
+  // ============================================================
+  const isDirty = hasUnsavedChanges();
+
+  // Warn on tab close / refresh when there are unsaved changes
+  useBeforeUnloadGuard(isDirty);
+
+  // Detect a previously-saved draft on mount (e.g. after a crash/refresh)
+  const { draft: pendingDraft, dismiss: dismissDraft } = useDraftOnMount();
+  const [draftBannerDraft, setDraftBannerDraft] = useState<DraftPayload | null>(null);
+  useEffect(() => {
+    if (!pendingDraft) return;
+    // Only offer to restore if there's actually content
+    const hasContent = (pendingDraft.positions?.length ?? 0) > 0 ||
+                       (pendingDraft.merchant?.name ?? '') !== '' ||
+                       (pendingDraft.merchant?.monthlyRevenue ?? 0) > 0;
+    // Don't double-prompt when we're about to load a calc from sessionStorage
+    const incomingLoad = !!sessionStorage.getItem('loadCalculation');
+    if (hasContent && !incomingLoad) setDraftBannerDraft(pendingDraft);
+    else dismissDraft();
+  }, [pendingDraft, dismissDraft]);
+
+  const handleRestoreDraft = () => {
+    if (!draftBannerDraft) return;
+    setMerchant(draftBannerDraft.merchant);
+    setSettings(draftBannerDraft.settings);
+    setPositions(draftBannerDraft.positions);
+    setLoadedCalculationId(draftBannerDraft.loadedCalculationId);
+    setLoadedCalculationName(draftBannerDraft.loadedCalculationName);
+    setLastSavedState('');
+    setDraftBannerDraft(null);
+    dismissDraft();
+    toast({ title: 'Draft restored', description: 'Your unsaved changes have been recovered.' });
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setDraftBannerDraft(null);
+    dismissDraft();
+  };
+
+  // Cloud auto-save toggle (per-browser preference)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(() => readAutoSaveEnabled(true));
+  const handleToggleAutoSave = (next: boolean) => {
+    setAutoSaveEnabled(next);
+    writeAutoSaveEnabled(next);
+  };
+
   // Load calculation from sessionStorage if available
+
   useEffect(() => {
     const stored = sessionStorage.getItem('loadCalculation');
     if (stored) {
@@ -571,6 +625,7 @@ export default function Index() {
     setLoadedCalculationId(null);
     setLoadedCalculationName('');
     setLastSavedState('');
+    clearDraft();
   };
 
   // Create export data from current state (for exporting without saving)
@@ -600,6 +655,7 @@ export default function Index() {
     });
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+    clearDraft();
     
     // Clear loaded ID since this is now a new calculation
     setLoadedCalculationId(result?.id || null);
@@ -676,6 +732,7 @@ export default function Index() {
     // Mark current state as saved
     setLastSavedState(JSON.stringify({ merchant, settings, positions }));
     setLoadedCalculationName(name);
+    clearDraft();
     
     // Store the saved calculation for export options
     if (result) {
@@ -759,15 +816,58 @@ export default function Index() {
     { key: 'merchantOffer', label: "Merchant's Offer" },
   ];
 
+  // Debounced local-storage draft backup (always on while dirty)
+  useDraftBackup({
+    merchant,
+    settings,
+    positions,
+    loadedCalculationId,
+    loadedCalculationName,
+    hasUnsavedChanges: isDirty,
+  });
+
+  // Debounced cloud auto-save for loaded calcs
+  const autoSave = useAutoSave({
+    enabled: autoSaveEnabled,
+    loadedCalculationId,
+    loadedCalculationName,
+    merchant,
+    settings,
+    positions,
+    totalBalance,
+    totalDailyPayment: totalCurrentDailyPayment,
+    hasUnsavedChanges: isDirty,
+    onSaved: () => {
+      setLastSavedState(JSON.stringify({ merchant, settings, positions }));
+      clearDraft();
+    },
+    updateCalculation,
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        {draftBannerDraft && (
+          <DraftRestoreBanner
+            savedAt={draftBannerDraft.savedAt}
+            calcName={draftBannerDraft.loadedCalculationName || undefined}
+            onRestore={handleRestoreDraft}
+            onDiscard={handleDiscardDraft}
+          />
+        )}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <h1 className="text-primary text-2xl md:text-3xl font-bold">
             Reverse Consolidation Calculator
           </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <AutoSaveIndicator
+              enabled={autoSaveEnabled}
+              onToggle={handleToggleAutoSave}
+              status={autoSave.status}
+              hasLoadedCalc={!!loadedCalculationId}
+              onRetry={autoSave.retry}
+            />
             <Button variant="outline" onClick={handleNewCalculation}>
               <FilePlus className="w-4 h-4 mr-2" />
               New
@@ -794,6 +894,7 @@ export default function Index() {
             </Button>
           </div>
         </div>
+
 
         <SaveCalculationDialog
           open={saveDialogOpen}
