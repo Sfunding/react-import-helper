@@ -375,6 +375,8 @@ export function simulateHybrid(
   return {
     straight,
     triggerDay,
+    triggerWeek,
+    triggerReached,
     straightBalanceAtTrigger,
     straightDailyAtTrigger,
     remainingPositionsAtTrigger,
