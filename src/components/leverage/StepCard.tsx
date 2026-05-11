@@ -320,3 +320,122 @@ function ReverseEditor({ step, active, onChange }: {
     </div>
   );
 }
+
+function RecurringStraightEditor({ step, onChange }: {
+  step: Extract<ScenarioStep, { kind: 'recurring-straight' }>;
+  onChange: (s: ScenarioStep) => void;
+}) {
+  const count = Math.max(0, Math.floor(step.count));
+  const termDays = Math.max(1, Math.round(step.termWeeks * 5));
+  const paybackEach = step.amountEach * step.factorRate;
+  const dailyEach = paybackEach / termDays;
+  const netEach = step.amountEach * (1 - step.feePercent);
+  const totalGross = step.amountEach * count;
+  const totalPayback = paybackEach * count;
+  const totalNet = netEach * count;
+  const programWeeks = count > 0 ? (count - 1) * step.cadenceWeeks : 0;
+
+  // Build the infusion ladder
+  const ladder: Array<{ idx: number; weekFired: number; balanceAtEnd: number; daily: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const weekFired = i * step.cadenceWeeks;
+    // weeks left until program end (relative to last infusion)
+    const businessDaysSinceFire = (programWeeks - weekFired) * 5;
+    const paidDown = Math.min(paybackEach, dailyEach * businessDaysSinceFire);
+    ladder.push({
+      idx: i + 1,
+      weekFired,
+      balanceAtEnd: Math.max(0, paybackEach - paidDown),
+      daily: paybackEach - paidDown > 0 ? dailyEach : 0,
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <Label className="text-xs"># of Straights</Label>
+          <Input type="number" min={1} value={step.count}
+            onChange={e => onChange({ ...step, count: Math.max(1, parseInt(e.target.value) || 1) })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Every N weeks</Label>
+          <Input type="number" step="0.5" min={0.5} value={step.cadenceWeeks}
+            onChange={e => onChange({ ...step, cadenceWeeks: Math.max(0.5, parseFloat(e.target.value) || 1) })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Amount each ($)</Label>
+          <Input type="number" value={step.amountEach || ''}
+            onChange={e => onChange({ ...step, amountEach: parseFloat(e.target.value) || 0 })}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          <Label className="text-xs">Factor</Label>
+          <Input type="number" step="0.01" value={step.factorRate}
+            onChange={e => onChange({ ...step, factorRate: parseFloat(e.target.value) || 0 })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Fee %</Label>
+          <Input type="number" step="0.01" value={step.feePercent}
+            onChange={e => onChange({ ...step, feePercent: parseFloat(e.target.value) || 0 })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Term (weeks)</Label>
+          <Input type="number" value={step.termWeeks}
+            onChange={e => onChange({ ...step, termWeeks: Math.max(1, parseInt(e.target.value) || 1) })}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Cadence</Label>
+          <RadioGroup
+            value={step.paymentCadence}
+            onValueChange={(v: PaymentCadence) => onChange({ ...step, paymentCadence: v })}
+            className="flex gap-3 mt-2"
+          >
+            <div className="flex items-center gap-1">
+              <RadioGroupItem value="daily" id={`rs-d-${step.id}`} />
+              <Label htmlFor={`rs-d-${step.id}`} className="text-xs">Daily</Label>
+            </div>
+            <div className="flex items-center gap-1">
+              <RadioGroupItem value="weekly" id={`rs-w-${step.id}`} />
+              <Label htmlFor={`rs-w-${step.id}`} className="text-xs">Wk</Label>
+            </div>
+          </RadioGroup>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-amber-200 bg-amber-50/50 p-2">
+        <div className="text-[11px] font-semibold text-amber-900 mb-1">Infusion Ladder</div>
+        <div className="grid grid-cols-4 gap-x-2 text-[10px] font-semibold text-muted-foreground border-b border-amber-200 pb-1 mb-1">
+          <div>#</div><div>Wk Fired</div><div>RTR Added</div><div>Daily Added</div>
+        </div>
+        <div className="max-h-40 overflow-y-auto">
+          {ladder.map(r => (
+            <div key={r.idx} className="grid grid-cols-4 gap-x-2 text-[11px] py-0.5">
+              <div>#{r.idx}</div>
+              <div>wk {r.weekFired}</div>
+              <div>{fmt(paybackEach)}</div>
+              <div>+{fmt(dailyEach)}/d</div>
+            </div>
+          ))}
+          {ladder.length === 0 && <div className="text-[11px] text-muted-foreground">No infusions.</div>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs border-t border-border pt-2">
+        <div><span className="text-muted-foreground">Total Gross Funded: </span><b>{fmt(totalGross)}</b></div>
+        <div><span className="text-muted-foreground">Total Net to Merchant: </span><b className="text-emerald-700">{fmt(totalNet)}</b></div>
+        <div><span className="text-muted-foreground">Total Payback (all RTRs): </span><b>{fmt(totalPayback)}</b></div>
+        <div><span className="text-muted-foreground">Program Length: </span><b>{programWeeks} wks</b></div>
+        <div><span className="text-muted-foreground">Daily Added per Straight: </span><b>{fmt(dailyEach)}</b></div>
+        <div><span className="text-muted-foreground">Peak Daily Stack (all open): </span><b className="text-rose-600">{fmt(dailyEach * count)}</b></div>
+      </div>
+    </div>
+  );
+}
