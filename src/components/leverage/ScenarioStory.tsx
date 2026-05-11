@@ -36,6 +36,7 @@ export function ScenarioStory({ scenario, checkpoints }: ScenarioStoryProps) {
   const entries = buildStory(scenario, checkpoints);
   const baseline = checkpoints[0];
   const final = checkpoints[checkpoints.length - 1];
+  const lastCadence: 'daily' | 'weekly' = entries.length > 0 ? entries[entries.length - 1].displayCadence : 'daily';
 
   if (!baseline) return null;
 
