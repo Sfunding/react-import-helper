@@ -109,9 +109,14 @@ type ScenarioKind = 'reverse' | 'straight' | 'hybrid';
 
 export default function LeveragePage() {
   const { calculations, isLoading, updateCalculation } = useCalculations();
+  const { toast } = useToast();
 
   const [selectedId, setSelectedId] = useState<string>('');
   const [chosenScenario, setChosenScenario] = useState<ScenarioKind | null>(null);
+  const [activeTab, setActiveTab] = useState<'compare' | 'builder'>('compare');
+
+  // Scenario Builder state
+  const [scenario, setScenario] = useState<Scenario>(() => newScenario());
 
   const selectedCalc: SavedCalculation | undefined = useMemo(
     () => calculations.find(c => c.id === selectedId),
