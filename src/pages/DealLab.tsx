@@ -1267,7 +1267,7 @@ type ScenarioRunResultLite = ScenarioRunResult;
 function ScenarioBuilderPanel({
   scenario, setScenario, scenarioRun, monthlyRevenue,
   onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
-  onSave, onExport, canSave,
+  onExport,
 }: {
   scenario: Scenario;
   setScenario: React.Dispatch<React.SetStateAction<Scenario>>;
@@ -1278,9 +1278,7 @@ function ScenarioBuilderPanel({
   onMoveStep: (idx: number, dir: -1 | 1) => void;
   onDuplicateStep: (idx: number) => void;
   onDeleteStep: (idx: number) => void;
-  onSave: () => void;
   onExport: () => void;
-  canSave: boolean;
 }) {
   const fs = scenarioRun.finalState;
   const stepMarkers = useMemo(() => {
@@ -1300,12 +1298,8 @@ function ScenarioBuilderPanel({
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4 flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-xs">Scenario Name</Label>
-            <Input
-              value={scenario.name}
-              onChange={e => setScenario(s => ({ ...s, name: e.target.value }))}
-            />
+          <div className="flex-1 min-w-[200px] text-sm text-muted-foreground">
+            Edits auto-save to this deal. Rename the scenario from its tab above.
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1329,9 +1323,6 @@ function ScenarioBuilderPanel({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" onClick={onSave} disabled={!canSave}>
-            <Save className="w-4 h-4 mr-1.5" /> Save to Deal
-          </Button>
           <Button variant="outline" onClick={onExport}>
             <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
           </Button>
