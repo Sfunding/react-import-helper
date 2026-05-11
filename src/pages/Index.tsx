@@ -194,35 +194,39 @@ export default function Index() {
         if (data.merchant) setMerchant(data.merchant);
         if (data.settings) setSettings(data.settings);
         
-        // If deal is funded, auto-adjust position balances
-        let loadedPositions = data.positions || [];
-        if (data.funded_at && loadedPositions.length > 0) {
-          const fundedDate = new Date(data.funded_at);
-          const today = new Date();
-          const businessDaysElapsed = getBusinessDaysBetween(fundedDate, today);
-          
-          if (businessDaysElapsed > 0) {
-            loadedPositions = loadedPositions.map((p: Position) => {
-              if (p.balance !== null && p.balance > 0 && p.dailyPayment > 0) {
-                const totalPaid = businessDaysElapsed * p.dailyPayment;
-                const adjustedBalance = Math.max(0, p.balance - totalPaid);
-                return { ...p, balance: Math.round(adjustedBalance * 100) / 100 };
-              }
-              return p;
-            });
-            toast({
-              title: 'Balances adjusted',
-              description: `Position balances updated for ${businessDaysElapsed} business days since funding on ${format(fundedDate, 'MMM d, yyyy')}.`,
-            });
-          }
-        }
-        
-        if (loadedPositions) setPositions(loadedPositions);
-        
-        // Hydrate as-of date: prefer explicit field, fallback to created_at::date or today
+        // Determine the effective as-of date the saved data was true on.
         const loadedAsOf: string = data.as_of_date
+          || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
           || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-        setAsOfDate(loadedAsOf);
+
+        // Hydrate anchors so future as-of-date changes reprice correctly.
+        let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
+          // Funded anchor is implicit — fundedDate + amountFunded handle it.
+          if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+            return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
+          }
+          // Otherwise stamp a manual anchor on the as-of date the data was true on.
+          if (!p.balanceAsOfDate) {
+            return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
+          }
+          return p;
+        });
+
+        // Project forward to today if the saved as-of date is in the past.
+        const todayISO = format(new Date(), 'yyyy-MM-dd');
+        if (loadedAsOf !== todayISO && loadedPositions.length > 0) {
+          loadedPositions = loadedPositions.map(p => ({ ...p, balance: repricedBalance(p, todayISO) }));
+          toast({
+            title: 'Balances projected to today',
+            description: `Repriced from ${format(new Date(loadedAsOf + 'T00:00:00'), 'MMM d, yyyy')}. Use the "Positions as of" date to move it.`,
+          });
+        }
+        const effectiveAsOf = todayISO;
+
+        if (loadedPositions) setPositions(loadedPositions);
+
+        setAsOfDate(effectiveAsOf);
+
 
         // Track the loaded calculation ID and name for updates
         if (data.id) {
