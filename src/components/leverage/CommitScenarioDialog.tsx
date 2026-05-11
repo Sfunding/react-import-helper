@@ -45,11 +45,13 @@ interface CommitScenarioDialogProps {
   scenarioRun: ScenarioRunResult;
   stepIndex: number | null;
   originalCalc: SavedCalculation | null | undefined;
+  mode?: 'step' | 'final';
 }
 
 export function CommitScenarioDialog({
-  open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc,
+  open, onOpenChange, scenario, scenarioRun, stepIndex, originalCalc, mode = 'step',
 }: CommitScenarioDialogProps) {
+  const isFinal = mode === 'final';
   const navigate = useNavigate();
   const { toast } = useToast();
   const { commitScenario, isCommittingScenario } = useCalculations();
@@ -69,10 +71,9 @@ export function CommitScenarioDialog({
   // Reset defaults when dialog opens / step changes
   useEffect(() => {
     if (!open || !step || !originalCalc) return;
-    const defaultWhen: 'before' | 'after' = isReverse ? 'before' : 'after';
+    const defaultWhen: 'before' | 'after' = isFinal ? 'after' : (isReverse ? 'before' : 'after');
     setSnapshotWhen(defaultWhen);
     setCarryover('all');
-    // For Custom, pre-check reverse params if reverse
     setCustomKeys({
       rate: !!isReverse,
       feePercent: !!isReverse,
@@ -84,13 +85,13 @@ export function CommitScenarioDialog({
       whiteLabelCompany: false,
     });
 
-    const cpIdx = defaultWhen === 'before' ? (stepIndex ?? 0) : (stepIndex ?? 0) + 1;
-    const cp = scenarioRun.checkpoints[cpIdx] ?? scenarioRun.checkpoints[scenarioRun.checkpoints.length - 1];
-    const snapDate = cp ? format(new Date(), 'MMM d') : '';
-    void snapDate;
-    const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
-    setName(`${originalCalc.name} @ ${stepLabel}`);
-  }, [open, step, originalCalc, isReverse, stepIndex, scenarioRun.checkpoints]);
+    if (isFinal) {
+      setName(`${originalCalc.name} — Final State`);
+    } else {
+      const stepLabel = scenarioRun.checkpoints[(stepIndex ?? 0) + 1]?.stepLabel ?? step.kind;
+      setName(`${originalCalc.name} @ ${stepLabel}`);
+    }
+  }, [open, step, originalCalc, isReverse, isFinal, stepIndex, scenarioRun.checkpoints]);
 
   const checkpoint = useMemo(() => {
     if (stepIndex == null) return null;
@@ -203,26 +204,31 @@ export function CommitScenarioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Commit snapshot to Calculator</DialogTitle>
+          <DialogTitle>{isFinal ? 'Commit final state to Calculator' : 'Commit snapshot to Calculator'}</DialogTitle>
           <DialogDescription>
-            Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span>
+            {isFinal
+              ? <>Snapshot <span className="font-semibold text-foreground">after all {scenario.steps.length} steps</span> have fired.</>
+              : <>Snapshot at: <span className="font-semibold text-foreground">Step {stepIndex + 1} — {stepLabel}</span></>
+            }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
-          <div>
-            <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
-            <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="snap-before" value="before" />
-                <Label htmlFor="snap-before" className="font-normal cursor-pointer">Before this step fires</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="snap-after" value="after" />
-                <Label htmlFor="snap-after" className="font-normal cursor-pointer">After this step fires</Label>
-              </div>
-            </RadioGroup>
-          </div>
+          {!isFinal && (
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">Snapshot state</Label>
+              <RadioGroup value={snapshotWhen} onValueChange={(v) => setSnapshotWhen(v as 'before' | 'after')} className="mt-2">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="snap-before" value="before" />
+                  <Label htmlFor="snap-before" className="font-normal cursor-pointer">Before this step fires</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem id="snap-after" value="after" />
+                  <Label htmlFor="snap-after" className="font-normal cursor-pointer">After this step fires</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
 
           <div>
             <Label className="text-xs uppercase text-muted-foreground">Settings to carry over</Label>
@@ -278,7 +284,7 @@ export function CommitScenarioDialog({
             Cancel
           </Button>
           <Button onClick={handleCommit} disabled={isCommittingScenario || !checkpoint}>
-            {isCommittingScenario ? 'Committing…' : 'Commit to Calculator'}
+            {isCommittingScenario ? 'Committing…' : (isFinal ? 'Commit final state' : 'Commit to Calculator')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -39,7 +39,7 @@ import { ScenarioSummary } from '@/components/leverage/ScenarioSummary';
 import { CommitScenarioDialog } from '@/components/leverage/CommitScenarioDialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat } from 'lucide-react';
+import { TrendingDown, AlertTriangle, Plus, FileDown, Layers, Zap, PlusCircle, Repeat, GitBranch } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import jsPDF from 'jspdf';
@@ -620,6 +620,17 @@ function BuilderTab({
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
   const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
+  const [commitMode, setCommitMode] = useState<'step' | 'final'>('step');
+  const canCommitFinal = !!originalCalc && scenario.steps.length > 0 && scenarioRun.checkpoints.length > 1;
+  const openFinalCommit = () => {
+    if (!canCommitFinal) return;
+    setCommitMode('final');
+    setCommitStepIndex(scenario.steps.length - 1);
+  };
+  const openStepCommit = (idx: number) => {
+    setCommitMode('step');
+    setCommitStepIndex(idx);
+  };
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const handleJumpToStep = useCallback((idx: number) => {
@@ -670,6 +681,11 @@ function BuilderTab({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {originalCalc && (
+            <Button variant="outline" onClick={openFinalCommit} disabled={!canCommitFinal} title="Snapshot the merchant's state after every step has fired into a new calculator deal">
+              <GitBranch className="w-4 h-4 mr-1.5" /> Commit final state
+            </Button>
+          )}
           <Button variant="outline" onClick={onExport}>
             <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
           </Button>
@@ -682,7 +698,7 @@ function BuilderTab({
         scenarioRun={scenarioRun}
         monthlyRevenue={monthlyRevenue}
         onJumpToStep={handleJumpToStep}
-        onCommitStep={originalCalc ? setCommitStepIndex : undefined}
+        onCommitStep={originalCalc ? openStepCommit : undefined}
       />
 
       {/* Step editor — behind the toggle */}
@@ -697,7 +713,7 @@ function BuilderTab({
           onMoveStep={onMoveStep}
           onDuplicateStep={onDuplicateStep}
           onDeleteStep={onDeleteStep}
-          onCommitStep={originalCalc ? setCommitStepIndex : undefined}
+          onCommitStep={originalCalc ? openStepCommit : undefined}
         />
       )}
 
@@ -708,6 +724,7 @@ function BuilderTab({
         scenarioRun={scenarioRun}
         stepIndex={commitStepIndex}
         originalCalc={originalCalc}
+        mode={commitMode}
       />
     </div>
   );
