@@ -1,63 +1,103 @@
 
-## Deal Lab — embedded scenario planning per deal
+## Multi-scenario Deal Lab + named steps + plain-English summary
 
-Rename "Leverage" to **Deal Lab** and stop treating it as a separate destination. Every deal opens its own Lab pre-loaded with that merchant's positions, revenue, and stack. The Scenario Builder timeline switches to real calendar dates so you can say "this Friday, give him a straight" and "4 weeks from then, reverse him."
+Today every deal has exactly one scenario stored in `saved_calculations.recommended_scenario`. We're upgrading the Deal Lab so you can build, save, and switch between many named scenarios on the same deal, label every step and funder, and read a clear "if you do this, then this happens" story.
 
-### 1. Routing & navigation
+### 1. Multiple scenarios per deal
 
-- New route: `/deal/:id/lab` → renders the current `Leverage.tsx` logic but locked to one calculation.
-- Remove the standalone `/leverage` route and the global "Leverage" nav link in `Navbar.tsx`.
-- On the calculator (`Index.tsx`), the existing Leverage button becomes **"Open Deal Lab"** and navigates to `/deal/{currentCalcId}/lab`.
-  - If the deal has unsaved changes → trigger the existing unsaved-changes flow first (save, then navigate), so the Lab always reads the latest persisted state.
-  - If the deal has never been saved → button is disabled with tooltip "Save the deal first to open the Lab."
-- Add a back link in the Lab header: "← Back to {Merchant Name}" returns to `/` with the deal loaded.
+**New table `deal_scenarios`** (one row per scenario):
 
-### 2. Deal Lab page (replaces current Leverage page)
+```text
+id              uuid pk
+calculation_id  uuid  → saved_calculations.id (indexed)
+user_id         uuid  (owner, for RLS)
+name            text  ('Bridge then reverse', 'Aggressive payoff', ...)
+scenario        jsonb (the full Scenario object: steps, runOn dates, labels)
+is_pinned       boolean default false   (sticky tab, default scenario)
+sort_order      int default 0           (tab order)
+created_at, updated_at timestamps
+```
 
-A trimmed `DealLab.tsx`:
+RLS: same shape as `saved_calculations` — owner sees own, admins see all, shared-edit users can read/write through the existing `deal_shares` link on the parent calculation.
 
-- Reads `:id` from the URL via `useParams`, fetches the calc from `useCalculations`, and **removes** the deal-picker dropdown / "select a deal" state entirely.
-- Header shows merchant name, monthly revenue, current total balance, current daily debits, current leverage/burden badges — sourced automatically from the loaded deal.
-- Keeps two tabs: **Compare** (Reverse / Straight / Hybrid side-by-side, unchanged math) and **Scenario Builder** (the timeline).
-- Save-to-deal and PDF export buttons stay; the manual-revenue fallback input is removed (revenue always comes from the deal).
+**Migration path:** existing `saved_calculations.recommended_scenario` stays as-is and is treated as a "legacy fallback" — on Lab load, if no rows exist in `deal_scenarios` for this deal but `recommended_scenario` has data, we surface it as a single scenario named "Saved scenario" and offer to migrate it on first save.
 
-### 3. Scenario Builder → calendar dates
+### 2. Switcher UI — tabs + side-by-side compare
 
-Currently steps are positioned by relative weeks (`runAtWeek`, `weeks`). We move to absolute dates while keeping the math engine identical:
+Above the Scenario Builder section:
 
-- Each step gets a `runOn: string` (ISO date) instead of (or alongside) week offsets. Internally, the engine converts `runOn` → business-day offset from "today" before calling `runScenario`.
-- Step cards (`StepCard.tsx`) get a shadcn `<Popover>` + `<Calendar>` date picker labelled e.g. "Fund on" / "Reverse on" / "Wait until". Default smart-snaps to the next Friday when the step is added.
-- `WaitStep` is replaced/augmented: instead of "wait N weeks," the next step's date implicitly defines the gap. We keep `WaitStep` for backward compat but hide it from the "Add step" menu; existing saved scenarios still render.
-- Checkpoint table and exposure timeline display real dates ("Fri, Nov 14") next to the existing week-offset column.
-- "Add step" menu copy updated: "Straight MCA on…", "Reverse on…", "Recurring program starting…", "Add outside position on…".
+```text
+[ Bridge then reverse ▾ ] [ Aggressive payoff ] [ + New ]    [ ⇆ Compare ]
+                              Rename · Duplicate · Delete
+```
 
-### 4. Naming sweep
+- **Tab strip** of all saved scenarios for this deal. Click to switch. Long names truncate, the right-click / chevron opens rename / duplicate / delete / pin.
+- **+ New** prompts for a name and creates a blank scenario.
+- **⇆ Compare** flips the layout to two columns: pick a second scenario from a dropdown; the builder is hidden and you see two read-only summary panels (final state metrics + step-by-step narrative) next to each other. One click to swap which is "left" / "right". Exit Compare to return to single-edit mode.
+- A small **● Unsaved** dot appears on the active tab while you have local edits; **Save scenario** persists the row. Auto-save toggle reuses the existing hook for the active scenario.
 
-- Nav link, button labels, page titles, PDF export titles: `Leverage → Deal Lab`.
-- File renames: `src/pages/Leverage.tsx` → `src/pages/DealLab.tsx`. `leverageMath.ts` stays (internal module, no user-visible name).
-- Update `App.tsx` route, `Navbar.tsx` (remove link), the calculator's Leverage button label, and any leftover copy in `StepCard.tsx` / `ScenarioSparkline.tsx`.
+### 3. Named steps + named funders
 
-### 5. Data model
+- **Step nickname:** the step card title becomes editable inline. Click `Step 1 · Straight MCA` → cursor lands in a text input that holds `step.label`. On blur, save. Empty clears back to the auto label. This already exists in the data model (`ScenarioStep.label`) — just no UI today.
+- **Funder name per step:** straight and reverse steps gain a `funderName?: string` field rendered as a small `Funder` input next to the date picker. The active position list, the auto-label, the checkpoint label, and the summary narrative all use this name (falls back to "Straight MCA"/"Reverse RTR").
+- `AddPositionStep.entity` is already a name input — we just relabel it "Funder name" for consistency.
 
-No schema changes. `recommended_scenario` jsonb already stores the full `Scenario` object — we just add the optional `runOn` field per step. Old scenarios without `runOn` fall back to their existing `runAtWeek`/`weeks` values, so saved deals keep working.
+### 4. Step-by-step plain-English summary
+
+A new **Story** panel below the builder (and the primary view inside Compare mode):
+
+For each checkpoint, render:
+
+```text
+─────────────────────────────────────────────────────────────
+Step 1 · "Bridge funding"  ·  Fri, Nov 14, 2026  ·  Day 14
+Straight MCA $200,000 with Velocity Capital
+You pay off 2 positions ($95k total). Net cash to merchant: $93,000.
+
+| Metric              | Before    | After     |
+|---------------------|-----------|-----------|
+| Total balance       | $312,400  | $477,400  |
+| Daily debits        | $4,820    | $6,150    |
+| Balance leverage    | 0.78x     | 1.19x     |
+| Payment burden      | 24.1%     | 30.7%     |
+─────────────────────────────────────────────────────────────
+Step 2 · "Wait for cleanup"  ·  Fri, Dec 12, 2026  ·  Day 34
+...
+```
+
+Each block is one sentence describing the action (templated per step kind, plugging in the funder name, dollar amounts, date, and any payoffs/added positions), plus a compact 4-row before/after table sourced from the existing `Checkpoint` data — so no new math, just new rendering.
+
+A header at the top of the Story sets the baseline:
+
+```text
+Today (Mon, Nov 10, 2026): balance $312,400 · daily $4,820 · 0.78x · 24% burden.
+```
+
+A footer summarizes the final state and cumulative cash + profit.
 
 ### Files to touch
 
 ```text
-src/App.tsx                                — swap /leverage route for /deal/:id/lab
-src/components/Navbar.tsx                  — remove Leverage nav link
-src/pages/Index.tsx                        — rename button, navigate to /deal/:id/lab, guard on unsaved/never-saved
-src/pages/Leverage.tsx → src/pages/DealLab.tsx
-                                             — read :id, drop picker, drop manual-revenue input,
-                                               update titles, add "Back to deal" link
-src/lib/scenarioTypes.ts                   — add optional runOn?: string to step types
-src/lib/leverageMath.ts                    — runScenario: convert runOn → business-day offset
-src/components/leverage/StepCard.tsx       — date picker per step, hide WaitStep from add menu,
-                                               relabel actions
-src/components/leverage/ScenarioSparkline.tsx — render date labels along x-axis
+NEW  supabase migration                       — deal_scenarios table + RLS
+NEW  src/hooks/useDealScenarios.ts            — fetch / create / update / delete / reorder
+NEW  src/components/leverage/ScenarioTabs.tsx — tab strip + rename/duplicate/delete + Compare toggle
+NEW  src/components/leverage/ScenarioStory.tsx— renders the narrative + before/after tables
+NEW  src/lib/scenarioNarrative.ts             — pure helpers: buildStorySentences(scenario, checkpoints)
+
+EDIT src/lib/scenarioTypes.ts                 — add `funderName?: string` to straight + reverse step types
+EDIT src/components/leverage/StepCard.tsx     — inline-editable step label, funderName input
+EDIT src/lib/leverageMath.ts                  — stepLabel uses funderName/label; checkpoint note enriched
+EDIT src/pages/DealLab.tsx                    — scenarios state list, tabs, Compare mode,
+                                                 Story panel, swap save/load to deal_scenarios,
+                                                 legacy `recommended_scenario` migration on first save
 ```
 
+### Data backfill / compatibility
+- Old saved scenario blob keeps loading (read-only, surfaced as one tab).
+- First save in the new system migrates that blob into a `deal_scenarios` row and clears the legacy field (optional second migration later — not blocking).
+- PDF export emits the Story for the currently-active scenario.
+
 ### Out of scope
-- No changes to the Reverse / Straight / Hybrid math itself.
-- No multi-deal Lab (e.g. comparing two merchants) — explicitly one deal per Lab page.
-- No new database tables; `recommended_scenario` keeps holding everything.
+- Cross-deal scenario templates (copy a scenario from deal A to deal B).
+- Auto-recommendation across multiple custom scenarios (the existing reverse/straight/hybrid recommender stays untouched).
+- Real-time multiplayer editing.

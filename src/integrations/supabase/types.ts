@@ -65,6 +65,50 @@ export type Database = {
         }
         Relationships: []
       }
+      deal_scenarios: {
+        Row: {
+          calculation_id: string
+          created_at: string
+          id: string
+          is_pinned: boolean
+          name: string
+          scenario: Json
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          calculation_id: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          name?: string
+          scenario?: Json
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          calculation_id?: string
+          created_at?: string
+          id?: string
+          is_pinned?: boolean
+          name?: string
+          scenario?: Json
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deal_scenarios_calculation_id_fkey"
+            columns: ["calculation_id"]
+            isOneToOne: false
+            referencedRelation: "saved_calculations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deal_shares: {
         Row: {
           access_level: string
@@ -243,6 +287,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_calculation: {
+        Args: { _calc_id: string; _require_edit: boolean }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
