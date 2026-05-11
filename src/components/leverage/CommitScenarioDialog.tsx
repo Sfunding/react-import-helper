@@ -284,7 +284,7 @@ export function CommitScenarioDialog({
             Cancel
           </Button>
           <Button onClick={handleCommit} disabled={isCommittingScenario || !checkpoint}>
-            {isCommittingScenario ? 'Committing…' : 'Commit to Calculator'}
+            {isCommittingScenario ? 'Committing…' : (isFinal ? 'Commit final state' : 'Commit to Calculator')}
           </Button>
         </DialogFooter>
       </DialogContent>
