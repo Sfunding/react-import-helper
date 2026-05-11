@@ -102,6 +102,10 @@ export function buildStory(scenario: Scenario, checkpoints: Checkpoint[]): Story
     const before = checkpoints[i];        // state before this step
     const after = checkpoints[i + 1];     // state after
     if (!before || !after) continue;
+    const displayCadence: 'daily' | 'weekly' =
+      (step.kind === 'straight' || step.kind === 'recurring-straight')
+        ? step.paymentCadence
+        : 'daily';
     out.push({
       stepIndex: i,
       title: titleFor(step, i),
@@ -110,6 +114,7 @@ export function buildStory(scenario: Scenario, checkpoints: Checkpoint[]): Story
       sentence: sentenceFor(step, before, after),
       before,
       after,
+      displayCadence,
     });
   }
   return out;
