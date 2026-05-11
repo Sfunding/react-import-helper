@@ -276,6 +276,130 @@ export default function LeveragePage() {
 
   const winner: ScenarioKind = chosenScenario ?? recommendation;
 
+  // ---------------- Scenario Builder ----------------
+  const scenarioRun = useMemo(
+    () => runScenario(positions, scenario, monthlyRevenue),
+    [positions, scenario, monthlyRevenue]
+  );
+
+  // Reset scenario when deal changes; try to load saved scenario from row
+  React.useEffect(() => {
+    if (!selectedCalc) {
+      setScenario(newScenario());
+      return;
+    }
+    const saved = (selectedCalc as unknown as { recommended_scenario?: { scenario?: Scenario } | null })
+      .recommended_scenario;
+    if (saved?.scenario && Array.isArray(saved.scenario.steps)) {
+      setScenario(saved.scenario);
+    } else {
+      setScenario(newScenario());
+    }
+  }, [selectedCalc]);
+
+  const updateStep = (idx: number, next: ScenarioStep) =>
+    setScenario(s => ({ ...s, steps: s.steps.map((st, i) => (i === idx ? next : st)) }));
+
+  const addStep = (kind: StepKind) => {
+    const newStep = makeStep(kind);
+    // For reverse: pre-select all active positions at that point
+    if (newStep.kind === 'reverse') {
+      const activeBefore = scenarioRun.checkpoints[scenarioRun.checkpoints.length - 1]?.activePositions ?? [];
+      newStep.includedPositionIds = activeBefore.map(p => p.id);
+    }
+    setScenario(s => ({ ...s, steps: [...s.steps, newStep] }));
+  };
+
+  const moveStep = (idx: number, dir: -1 | 1) =>
+    setScenario(s => ({ ...s, steps: reorderSteps(s.steps, idx, Math.max(0, Math.min(s.steps.length - 1, idx + dir))) }));
+
+  const duplicateStep = (idx: number) =>
+    setScenario(s => {
+      const dup = { ...s.steps[idx], id: Math.random().toString(36).slice(2, 10) } as ScenarioStep;
+      const next = s.steps.slice();
+      next.splice(idx + 1, 0, dup);
+      return { ...s, steps: next };
+    });
+
+  const deleteStep = (idx: number) =>
+    setScenario(s => ({ ...s, steps: s.steps.filter((_, i) => i !== idx) }));
+
+  const saveScenarioToDeal = async () => {
+    if (!selectedCalc) return;
+    const payload = {
+      scenario,
+      checkpoints: scenarioRun.checkpoints,
+      savedAt: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('saved_calculations')
+      // recommended_scenario is jsonb; cast through unknown to bypass strict typing
+      .update({ recommended_scenario: payload } as unknown as Record<string, unknown>)
+      .eq('id', selectedCalc.id);
+    if (error) {
+      toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Scenario saved', description: `${scenario.name} saved to deal.` });
+    }
+  };
+
+  const exportScenarioPDF = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Scenario Builder — Timeline', 40, 50);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      `Merchant: ${selectedCalc?.merchant_name || '-'}   Monthly Revenue: ${fmt(monthlyRevenue)}`,
+      40, 68
+    );
+    doc.text(`Scenario: ${scenario.name}`, 40, 82);
+
+    autoTable(doc, {
+      startY: 100,
+      head: [['#', 'Step', 'Week', 'Total Bal', 'Daily', 'Leverage', 'Burden', 'Cash (step)', 'Profit (step)']],
+      body: scenarioRun.checkpoints.map(c => [
+        c.stepIndex < 0 ? 'Start' : String(c.stepIndex + 1),
+        c.stepLabel,
+        c.weekOffset.toFixed(1),
+        fmt(c.totalBalance),
+        fmt(c.totalDaily),
+        fmtX(c.balanceLeverage),
+        fmtPct(c.paymentBurden),
+        fmt(c.cashToMerchantStep),
+        fmt(c.profitStep),
+      ]),
+      styles: { fontSize: 8, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    const afterTbl = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Final State', 40, afterTbl);
+    const fs = scenarioRun.finalState;
+    autoTable(doc, {
+      startY: afterTbl + 6,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Balance', fmt(fs.totalBalance)],
+        ['Total Daily Debits', fmt(fs.totalDaily)],
+        ['Balance Leverage', fmtX(fs.balanceLeverage)],
+        ['Payment Burden', fmtPct(fs.paymentBurden)],
+        ['Cumulative Cash to Merchant', fmt(fs.cashToMerchantCumulative)],
+        ['Cumulative Profit (est)', fmt(fs.profitCumulative)],
+        ['Peak Combined Exposure', fmt(scenarioRun.peakCombinedExposure)],
+        ['Timeline Length', `${fs.weekOffset.toFixed(1)} weeks (${fs.dayOffset} biz days)`],
+      ],
+      styles: { fontSize: 9, font: 'helvetica' },
+      headStyles: { fillColor: [11, 29, 58] },
+    });
+
+    doc.save(`scenario_${(selectedCalc?.merchant_name || 'deal').replace(/[^a-z0-9]/gi, '_')}.pdf`);
+  };
+
+
   const togglePayoff = (id: number) => {
     setStraightPayoffs(prev => {
       const next = new Set(prev);
