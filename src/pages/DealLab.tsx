@@ -126,7 +126,7 @@ export default function DealLabPage() {
   );
 
   const totals = stackTotals(positions);
-  const currentSnap = snapshot(totals.totalBalance, totals.totalDaily, monthlyRevenue);
+
 
   // ---------------- Scenario Builder ----------------
 
