@@ -1009,6 +1009,37 @@ export default function Index() {
             </div>
           </div>
         </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-semibold uppercase tracking-wide">Positions as of</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 px-2 font-normal",
+                  !asOfDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                {asOfDate ? format(new Date(asOfDate + 'T00:00:00'), 'MMM d, yyyy') : 'Pick a date'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={asOfDate ? new Date(asOfDate + 'T00:00:00') : undefined}
+                onSelect={(d) => d && setAsOfDate(format(d, 'yyyy-MM-dd'))}
+                disabled={(date) => date > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          <span className="text-[11px]">— balances will be projected forward to today in the Deal Lab.</span>
+        </div>
+        </div>
       </div>
 
       {/* Settings Section */}
