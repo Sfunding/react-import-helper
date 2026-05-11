@@ -97,12 +97,15 @@ export function projectStack(positions: Position[], businessDays: number): Stack
 
 // -------------------- Scenario: Straight MCA --------------------
 
+export type PaymentCadence = 'daily' | 'weekly';
+
 export interface StraightMCAInputs {
   grossFunding: number;     // total advance (gross of fees)
-  factorRate: number;       // e.g. 1.49
-  feePercent: number;       // 0.09 = 9%
-  termMonths: number;       // amortization length in months (22 biz days each)
+  factorRate: number;       // e.g. 1.35
+  feePercent: number;       // 0.05 = 5%
+  termWeeks: number;        // amortization length in weeks (5 biz days each)
   payoffPositionIds: number[]; // ids of positions paid off on day 1
+  paymentCadence?: PaymentCadence; // informational; default 'daily'
 }
 
 export interface StraightMCAResult {
@@ -111,7 +114,10 @@ export interface StraightMCAResult {
   cashToMerchant: number;
   totalPayback: number;
   termDays: number;
+  termWeeks: number;
   newDailyPayment: number;
+  newWeeklyPayment: number;
+  paymentCadence: PaymentCadence;
   remainingStackBalance: number;   // unselected positions, before the new MCA
   remainingStackDaily: number;
   newTotalBalance: number;         // remaining stack + new MCA payback
@@ -131,8 +137,10 @@ export function simulateStraightMCA(
   const netAdvance = inputs.grossFunding * (1 - inputs.feePercent);
   const cashToMerchant = netAdvance - payoffsTotal;
   const totalPayback = inputs.grossFunding * inputs.factorRate;
-  const termDays = Math.max(1, Math.round(inputs.termMonths * BUSINESS_DAYS_PER_MONTH));
+  const termWeeks = Math.max(1, inputs.termWeeks || 1);
+  const termDays = Math.max(1, Math.round(termWeeks * BUSINESS_DAYS_PER_WEEK));
   const newDailyPayment = totalPayback / termDays;
+  const newWeeklyPayment = newDailyPayment * BUSINESS_DAYS_PER_WEEK;
 
   const rem = stackTotals(remaining);
 
@@ -142,13 +150,56 @@ export function simulateStraightMCA(
     cashToMerchant,
     totalPayback,
     termDays,
+    termWeeks,
     newDailyPayment,
+    newWeeklyPayment,
+    paymentCadence: inputs.paymentCadence ?? 'daily',
     remainingStackBalance: rem.totalBalance,
     remainingStackDaily: rem.totalDaily,
     newTotalBalance: rem.totalBalance + totalPayback,
     newTotalDailyDebits: rem.totalDaily + newDailyPayment,
     profit: totalPayback - inputs.grossFunding,
   };
+}
+
+/** Straight-MCA RTR balance on a given business day (cap at 0). */
+export function projectStraightMCABalance(
+  result: StraightMCAResult,
+  businessDay: number
+): number {
+  const paid = Math.min(result.totalPayback, result.newDailyPayment * Math.max(0, businessDay));
+  return Math.max(0, result.totalPayback - paid);
+}
+
+/** Week-by-week exposure for the hybrid timeline chart. */
+export interface ExposurePoint {
+  week: number;
+  straightRTR: number;
+  remainingStackBalance: number;
+  combined: number;
+}
+
+export function buildExposureTimeline(
+  positions: Position[],
+  straightResult: StraightMCAResult,
+  payoffPositionIds: number[],
+  weeks: number
+): ExposurePoint[] {
+  const paidOff = new Set(payoffPositionIds);
+  const surviving = positions.filter(p => !paidOff.has(p.id));
+  const out: ExposurePoint[] = [];
+  for (let w = 0; w <= weeks; w++) {
+    const day = w * BUSINESS_DAYS_PER_WEEK;
+    const straightRTR = projectStraightMCABalance(straightResult, day);
+    const stack = projectStack(surviving, day);
+    out.push({
+      week: w,
+      straightRTR,
+      remainingStackBalance: stack.totalBalance,
+      combined: straightRTR + stack.totalBalance,
+    });
+  }
+  return out;
 }
 
 // -------------------- Scenario: Reverse (snapshot only) --------------------
@@ -217,7 +268,10 @@ export function simulateReverseSnapshot(
 
 export type HybridTrigger =
   | { kind: 'days'; businessDays: number }
-  | { kind: 'positions-fall-off'; positionIds: number[] };
+  | { kind: 'week'; week: number }
+  | { kind: 'positions-fall-off'; positionIds: number[] }
+  | { kind: 'straight-exposure-below'; threshold: number }
+  | { kind: 'combined-exposure-below'; threshold: number };
 
 export interface HybridInputs {
   straight: StraightMCAInputs;
@@ -228,31 +282,49 @@ export interface HybridInputs {
 export interface HybridResult {
   straight: StraightMCAResult;
   triggerDay: number;
-  /** straight-MCA RTR balance still outstanding at trigger day */
+  triggerWeek: number;
+  triggerReached: boolean;
   straightBalanceAtTrigger: number;
-  /** straight-MCA daily payment, still active at trigger day (or 0 if paid off) */
   straightDailyAtTrigger: number;
-  /** projected non-paid-off positions at trigger day */
   remainingPositionsAtTrigger: Array<Position & { projectedBalance: number; projectedDaily: number }>;
-  /** what a reverse on the remaining stack looks like at the trigger */
   reverseAtTrigger: ReverseSnapshotResult;
-  /** total cash to merchant across both phases */
   totalCashToMerchant: number;
-  /** combined profit estimate */
   combinedProfit: number;
 }
 
-function computeTriggerDay(positions: Position[], trigger: HybridTrigger): number {
-  if (trigger.kind === 'days') return Math.max(0, Math.round(trigger.businessDays));
-  const idSet = new Set(trigger.positionIds);
-  const days = positions
-    .filter(p => idSet.has(p.id))
-    .map(p => {
-      const d = p.dailyPayment ?? 0;
-      const b = p.balance ?? 0;
-      return d > 0 && b > 0 ? Math.ceil(b / d) : 0;
-    });
-  return days.length ? Math.max(...days) : 0;
+const HYBRID_TRIGGER_CAP_DAYS = 30 * BUSINESS_DAYS_PER_WEEK; // 150 business days
+
+function computeTriggerDay(
+  positions: Position[],
+  straight: StraightMCAResult,
+  payoffIds: number[],
+  trigger: HybridTrigger
+): { day: number; reached: boolean } {
+  if (trigger.kind === 'days') return { day: Math.max(0, Math.round(trigger.businessDays)), reached: true };
+  if (trigger.kind === 'week') return { day: Math.max(0, Math.round(trigger.week * BUSINESS_DAYS_PER_WEEK)), reached: true };
+  if (trigger.kind === 'positions-fall-off') {
+    const idSet = new Set(trigger.positionIds);
+    const days = positions
+      .filter(p => idSet.has(p.id))
+      .map(p => {
+        const d = p.dailyPayment ?? 0;
+        const b = p.balance ?? 0;
+        return d > 0 && b > 0 ? Math.ceil(b / d) : 0;
+      });
+    return { day: days.length ? Math.max(...days) : 0, reached: true };
+  }
+  const paidOff = new Set(payoffIds);
+  const surviving = positions.filter(p => !paidOff.has(p.id));
+  for (let d = 0; d <= HYBRID_TRIGGER_CAP_DAYS; d++) {
+    const straightRTR = projectStraightMCABalance(straight, d);
+    if (trigger.kind === 'straight-exposure-below') {
+      if (straightRTR <= trigger.threshold) return { day: d, reached: true };
+    } else {
+      const stack = projectStack(surviving, d);
+      if (straightRTR + stack.totalBalance <= trigger.threshold) return { day: d, reached: true };
+    }
+  }
+  return { day: HYBRID_TRIGGER_CAP_DAYS, reached: false };
 }
 
 export function simulateHybrid(
@@ -261,11 +333,16 @@ export function simulateHybrid(
 ): HybridResult {
   const straight = simulateStraightMCA(positions, inputs.straight);
 
-  // Positions not paid off on day 1
   const paidOffIds = new Set(inputs.straight.payoffPositionIds);
   const survivingPositions = positions.filter(p => !paidOffIds.has(p.id));
 
-  const triggerDay = computeTriggerDay(positions, inputs.trigger);
+  const { day: triggerDay, reached: triggerReached } = computeTriggerDay(
+    positions,
+    straight,
+    inputs.straight.payoffPositionIds,
+    inputs.trigger
+  );
+  const triggerWeek = triggerDay / BUSINESS_DAYS_PER_WEEK;
 
   // Project surviving positions to trigger day
   const remainingPositionsAtTrigger = survivingPositions
@@ -298,6 +375,8 @@ export function simulateHybrid(
   return {
     straight,
     triggerDay,
+    triggerWeek,
+    triggerReached,
     straightBalanceAtTrigger,
     straightDailyAtTrigger,
     remainingPositionsAtTrigger,
