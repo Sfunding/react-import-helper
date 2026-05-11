@@ -75,6 +75,9 @@ export function StepCard({
         {step.kind === 'add-position' && (
           <AddPositionEditor step={step} onChange={onChange} />
         )}
+        {step.kind === 'recurring-straight' && (
+          <RecurringStraightEditor step={step} onChange={onChange} />
+        )}
         {step.kind === 'reverse' && (
           <ReverseEditor step={step} active={activeBeforeStep} onChange={onChange} />
         )}
