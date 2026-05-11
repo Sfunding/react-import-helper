@@ -219,6 +219,32 @@ export function useCalculations(filterUserId?: string | null) {
         .single();
 
       if (error) throw error;
+
+      // Clone all of the parent's scenarios into the new child deal so the
+      // user lands on the child Lab with the same scenarios ready to iterate.
+      try {
+        const { data: parentScenarios } = await supabase
+          .from('deal_scenarios')
+          .select('name, scenario, sort_order')
+          .eq('calculation_id', params.parentId)
+          .order('sort_order', { ascending: true });
+
+        if (parentScenarios && parentScenarios.length > 0 && data?.id) {
+          const rows = parentScenarios.map((s: any, i: number) => ({
+            user_id: session.user.id,
+            calculation_id: data.id,
+            name: s.name || `Scenario ${i + 1}`,
+            scenario: s.scenario ?? {},
+            is_pinned: false,
+            sort_order: typeof s.sort_order === 'number' ? s.sort_order : i,
+          }));
+          await supabase.from('deal_scenarios').insert(rows as any);
+        }
+      } catch (cloneErr) {
+        // Non-fatal: child deal still exists, scenarios just weren't copied.
+        console.warn('[commitScenario] failed to clone parent scenarios', cloneErr);
+      }
+
       return data;
     },
     onSuccess: (data) => {
