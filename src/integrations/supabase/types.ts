@@ -152,6 +152,7 @@ export type Database = {
           merchant_name: string | null
           name: string
           positions: Json
+          recommended_scenario: Json | null
           settings: Json
           total_balance: number | null
           total_daily_payment: number | null
@@ -167,6 +168,7 @@ export type Database = {
           merchant_name?: string | null
           name: string
           positions?: Json
+          recommended_scenario?: Json | null
           settings?: Json
           total_balance?: number | null
           total_daily_payment?: number | null
@@ -182,6 +184,7 @@ export type Database = {
           merchant_name?: string | null
           name?: string
           positions?: Json
+          recommended_scenario?: Json | null
           settings?: Json
           total_balance?: number | null
           total_daily_payment?: number | null
