@@ -1123,3 +1123,208 @@ function ExposureSparkline({
     </div>
   );
 }
+
+// ---------------- Scenario Builder Panel ----------------
+
+interface ScenarioRunResultLite {
+  checkpoints: Array<{
+    stepIndex: number;
+    stepLabel: string;
+    weekOffset: number;
+    dayOffset: number;
+    activePositions: Array<{ id: string; entity: string; balance: number; dailyPayment: number; source: string }>;
+    totalBalance: number;
+    totalDaily: number;
+    balanceLeverage: number;
+    paymentBurden: number;
+    cashToMerchantStep: number;
+    profitStep: number;
+    cashToMerchantCumulative: number;
+    profitCumulative: number;
+    note?: string;
+  }>;
+  weeklyExposure: Array<{ week: number; combined: number }>;
+  finalState: ScenarioRunResultLite['checkpoints'][number];
+  peakCombinedExposure: number;
+}
+
+function ScenarioBuilderPanel({
+  scenario, setScenario, scenarioRun, monthlyRevenue,
+  onAddStep, onUpdateStep, onMoveStep, onDuplicateStep, onDeleteStep,
+  onSave, onExport, canSave,
+}: {
+  scenario: Scenario;
+  setScenario: React.Dispatch<React.SetStateAction<Scenario>>;
+  scenarioRun: ScenarioRunResultLite;
+  monthlyRevenue: number;
+  onAddStep: (k: StepKind) => void;
+  onUpdateStep: (idx: number, s: ScenarioStep) => void;
+  onMoveStep: (idx: number, dir: -1 | 1) => void;
+  onDuplicateStep: (idx: number) => void;
+  onDeleteStep: (idx: number) => void;
+  onSave: () => void;
+  onExport: () => void;
+  canSave: boolean;
+}) {
+  const fs = scenarioRun.finalState;
+  const stepMarkers = useMemo(() => {
+    return scenarioRun.checkpoints
+      .filter(c => c.stepIndex >= 0)
+      .map(c => {
+        const step = scenario.steps[c.stepIndex];
+        return {
+          week: c.weekOffset,
+          label: step ? `S${c.stepIndex + 1}` : '',
+          kind: step?.kind || 'wait',
+        };
+      });
+  }, [scenario.steps, scenarioRun.checkpoints]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <Label className="text-xs">Scenario Name</Label>
+            <Input
+              value={scenario.name}
+              onChange={e => setScenario(s => ({ ...s, name: e.target.value }))}
+            />
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add Step
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => onAddStep('straight')}>
+                <Zap className="w-4 h-4 mr-2 text-amber-600" /> Straight MCA
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('wait')}>
+                <Clock className="w-4 h-4 mr-2 text-slate-600" /> Wait (let positions pay down)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('add-position')}>
+                <PlusCircle className="w-4 h-4 mr-2 text-rose-600" /> Add Outside Position
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onAddStep('reverse')}>
+                <Repeat className="w-4 h-4 mr-2 text-emerald-600" /> Reverse Consolidation
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" onClick={onSave} disabled={!canSave}>
+            <Save className="w-4 h-4 mr-1.5" /> Save to Deal
+          </Button>
+          <Button variant="outline" onClick={onExport}>
+            <FileDown className="w-4 h-4 mr-1.5" /> Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Final state summary */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Balance</div>
+          <div className="text-lg font-bold">{fmt(fs.totalBalance)}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Daily</div>
+          <div className="text-lg font-bold">{fmt(fs.totalDaily)}</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">End Leverage</div>
+          <div className="text-lg font-bold">{fmtX(fs.balanceLeverage)}</div>
+          <div className="text-[10px] text-muted-foreground">{fmtPct(fs.paymentBurden)} burden</div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">Total Cash to Merchant</div>
+          <div className={`text-lg font-bold ${fs.cashToMerchantCumulative < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+            {fmt(fs.cashToMerchantCumulative)}
+          </div>
+        </div>
+        <div className="rounded-md border border-border bg-card p-3">
+          <div className="text-[10px] text-muted-foreground uppercase">Cumulative Profit</div>
+          <div className="text-lg font-bold">{fmt(fs.profitCumulative)}</div>
+          <div className="text-[10px] text-muted-foreground">Peak: {fmt(scenarioRun.peakCombinedExposure)}</div>
+        </div>
+      </div>
+
+      <ScenarioSparkline weekly={scenarioRun.weeklyExposure} stepMarkers={stepMarkers} />
+
+      {/* Step cards */}
+      {scenario.steps.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Add steps above to build a multi-stage scenario.
+            <br />
+            Example: <b>Straight MCA</b> (4 wks, $1M, 1.35, 5%) -&gt; <b>Wait</b> 10 wks -&gt; <b>Reverse</b> on whatever remains.
+          </CardContent>
+        </Card>
+      )}
+
+      {scenario.steps.map((step, idx) => {
+        // Active positions BEFORE this step = checkpoint at idx-1 (or start = checkpoints[0])
+        const beforeCp = scenarioRun.checkpoints[idx]; // start checkpoint is at index 0, step 0 sees that
+        const note = scenarioRun.checkpoints[idx + 1]?.note;
+        return (
+          <div key={step.id} className="space-y-2">
+            <StepCard
+              step={step}
+              index={idx}
+              total={scenario.steps.length}
+              activeBeforeStep={beforeCp?.activePositions ?? []}
+              checkpointNote={note}
+              onChange={next => onUpdateStep(idx, next)}
+              onMove={dir => onMoveStep(idx, dir)}
+              onDuplicate={() => onDuplicateStep(idx)}
+              onDelete={() => onDeleteStep(idx)}
+            />
+            {/* After-step snapshot */}
+            <AfterStepRow checkpoint={scenarioRun.checkpoints[idx + 1]} monthlyRevenue={monthlyRevenue} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AfterStepRow({
+  checkpoint, monthlyRevenue,
+}: {
+  checkpoint?: ScenarioRunResultLite['checkpoints'][number];
+  monthlyRevenue: number;
+}) {
+  if (!checkpoint) return null;
+  const lev: LeverageBand =
+    checkpoint.balanceLeverage < 0.5 ? 'green' : checkpoint.balanceLeverage < 1.0 ? 'amber' : 'red';
+  const bur: LeverageBand =
+    checkpoint.paymentBurden < 0.15 ? 'green' : checkpoint.paymentBurden < 0.30 ? 'amber' : 'red';
+  const cls = (b: LeverageBand) =>
+    b === 'green' ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    : b === 'amber' ? 'bg-amber-100 text-amber-800 border-amber-300'
+    : 'bg-rose-100 text-rose-800 border-rose-300';
+  return (
+    <div className="ml-2 pl-4 border-l-2 border-dashed border-muted-foreground/30 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+      <div>
+        <span className="text-muted-foreground">After step · wk {checkpoint.weekOffset.toFixed(1)}</span>
+      </div>
+      <div>
+        <span className="text-muted-foreground">Bal: </span>
+        <b>{fmt(checkpoint.totalBalance)}</b>
+      </div>
+      <div>
+        <span className="text-muted-foreground">Daily: </span>
+        <b>{fmt(checkpoint.totalDaily)}</b>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground">Lev:</span>
+        <Badge variant="outline" className={cls(lev)}>{fmtX(checkpoint.balanceLeverage)}</Badge>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-muted-foreground">Burd:</span>
+        <Badge variant="outline" className={cls(bur)}>{fmtPct(checkpoint.paymentBurden)}</Badge>
+      </div>
+    </div>
+  );
+}
