@@ -278,7 +278,7 @@ export default function DealLabPage() {
   };
 
   const scenarioRun = useMemo(
-    () => runScenario(positions, scenario, monthlyRevenue),
+    () => runScenario(projectedPositions, scenario, monthlyRevenue),
     [positions, scenario, monthlyRevenue]
   );
 
