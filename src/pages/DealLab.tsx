@@ -1167,19 +1167,16 @@ function ScenarioBuilderPanel({
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => onAddStep('straight')}>
-                <Zap className="w-4 h-4 mr-2 text-amber-600" /> Straight MCA (single)
+                <Zap className="w-4 h-4 mr-2 text-amber-600" /> Straight MCA on…
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAddStep('recurring-straight')}>
-                <Layers className="w-4 h-4 mr-2 text-orange-600" /> Recurring Straight Program (N x weekly)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAddStep('wait')}>
-                <Clock className="w-4 h-4 mr-2 text-slate-600" /> Wait (let positions pay down)
+                <Layers className="w-4 h-4 mr-2 text-orange-600" /> Recurring program starting…
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAddStep('add-position')}>
-                <PlusCircle className="w-4 h-4 mr-2 text-rose-600" /> Add Outside Position
+                <PlusCircle className="w-4 h-4 mr-2 text-rose-600" /> Add outside position on…
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onAddStep('reverse')}>
-                <Repeat className="w-4 h-4 mr-2 text-emerald-600" /> Reverse Consolidation
+                <Repeat className="w-4 h-4 mr-2 text-emerald-600" /> Reverse on…
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
