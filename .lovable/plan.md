@@ -1,62 +1,68 @@
+# Builder Tab Summary-First Restructure
+
 ## Goal
-Stamp every saved deal with an "as-of date" so balances don't go silently stale. When the deal is reopened, project the stack forward to today and use the projected state everywhere downstream.
+Make the Builder tab open to a clean underwriter-friendly summary (start → sequence → end), with the existing step-card editor hidden behind a "Show steps" toggle.
 
-## Note on scope
-The Compare Scenarios tab (Reverse / Straight / Hybrid lenses) was removed in the previous round — Deal Lab now renders only the Scenario Builder. The acceptance line about "Reverse, Straight, Hybrid, and Builder tabs all compute against $95k" is reduced to: **Current Position card + Scenario Builder both compute against the projected stack.**
+## Files touched
+- `src/pages/DealLab.tsx` (rename existing panel + add new summary + toggle wiring)
+- `src/components/leverage/ScenarioSummary.tsx` (new)
 
-## Changes
+## 1. Rename existing builder
+In `src/pages/DealLab.tsx`, rename `ScenarioBuilderPanel` → `ScenarioStepEditor`. Strip from this component:
+- the header card with the Add Step dropdown + Export PDF (lines ~586–617) — these move to the always-visible top bar in section 3
+- the 5-tile end-state strip (lines ~619–645) — moves into the new summary
+- the `ScenarioSparkline` (line ~647) — moves into the new summary
 
-### 1. Schema — migration
-- Add `as_of_date date` column on `saved_calculations`, nullable.
-- Backfill: `UPDATE saved_calculations SET as_of_date = updated_at::date WHERE as_of_date IS NULL` (closer to "when these numbers were last true" than `created_at`).
-- Default for new rows: `DEFAULT (now() AT TIME ZONE 'utc')::date`.
+Keep: the empty-state card and the per-step `StepCard` + `AfterStepRow` rendering loop.
 
-### 2. Types — `src/types/calculation.ts`
-- Add `as_of_date: string | null` to `SavedCalculation`.
+## 2. New `ScenarioSummary` component
+Props: `{ scenario, scenarioRun, monthlyRevenue, onJumpToStep(idx) }`.
 
-### 3. Persistence — `src/hooks/useCalculations.ts`
-- Extend `saveMutation` and `updateMutation` params with `asOfDate: string` (YYYY-MM-DD); write to `as_of_date`.
-- `duplicateMutation`: set `as_of_date` to today (fresh deal).
+Three stacked sections plus the existing sparkline:
 
-### 4. Index.tsx — date picker
-- New state `asOfDate: string` defaulting to `format(new Date(), 'yyyy-MM-dd')`. When loading a saved deal, hydrate from `calc.as_of_date ?? calc.created_at`.
-- Render a small **"Positions as of [date]"** control near merchant info, using shadcn `Popover` + `Calendar` with `pointer-events-auto`.
-- Pass through to `saveCalculation` / `updateCalculation`. Include in dirty-state hash.
+**a. Starting state card** — single card titled "Starting state · As of today". Source: `scenarioRun.checkpoints[0]`. Show: Total Balance, Daily, Weekly (= daily × 5), Leverage badge (band coloring reused from `AfterStepRow`), Burden badge.
 
-### 5. Engine helper — `src/lib/leverageMath.ts`
-```ts
-export function projectStackToDate(
-  positions: Position[],
-  asOfDate: string,
-  viewDate: string
-): Position[]
+**b. Sequence panel** — card titled "Sequence".
+- If `scenario.steps.length === 0`: muted "Add a step above to start modeling".
+- Otherwise: one button-row per step. Layout: `<date> · <action> → <delta>`.
+  - Date: `step.runOn` if set; else compute by accumulating prior-step durations using `addBusinessDays(today, checkpoint.dayOffset)` from `dateUtils`. For wait steps, render the after-checkpoint date.
+  - Action: the engine-emitted `Checkpoint.stepLabel` (fallback: step.kind label).
+  - Delta: two pieces — `cashToMerchantStep` (signed, colored) and Δdaily = `after.totalDaily - before.totalDaily` (signed; negative is good).
+- Each row is a button (keyboard accessible) calling `onJumpToStep(idx)`.
+
+**c. Sparkline** — render `<ScenarioSparkline>` between Sequence and Ending state, with `weeklyExposure` + `stepMarkers` (move marker-build logic out of `ScenarioStepEditor` into the summary).
+
+**d. Ending state card** — titled "Ending state". Two-column side-by-side: left = starting metrics, right = `scenarioRun.finalState` metrics (balance/daily/weekly/leverage/burden). Below, a 3-tile journey-stats row:
+- Peak Combined Exposure → `scenarioRun.peakCombinedExposure`
+- Total Cash to Merchant → `finalState.cashToMerchantCumulative` (color emerald/rose by sign)
+- Total Profit → `finalState.profitCumulative`
+
+Hide sparkline + ending state when `scenario.steps.length === 0`.
+
+## 3. Builder tab wiring (DealLab.tsx, around lines 527–540)
+Replace the single `<ScenarioBuilderPanel …/>` with:
+
+```text
+<TopActionsBar>   // single always-visible card: Add Step dropdown + Export PDF + "Show steps" Switch
+<ScenarioSummary scenario scenarioRun monthlyRevenue onJumpToStep />
+{showSteps && <ScenarioStepEditor … />}
+<ScenarioStory … />   // unchanged
 ```
-- Use `getBusinessDaysBetween` from `src/lib/dateUtils.ts`.
-- If `viewDate <= asOfDate` → return clone unchanged.
-- Per position: `paid = dailyPayment * businessDays`; `newBalance = max(0, balance - paid)`; if `newBalance === 0` set `dailyPayment = 0`.
-- Skip positions with `balance == null` (unknown) — leave as-is.
-- Weekly-frequency positions (`frequency === 'weekly'`): leave untouched in v1 (with `// TODO weekly projection` note).
 
-### 6. Deal Lab header — `src/pages/DealLab.tsx`
-- Read `selectedCalc.as_of_date` (fallback to `created_at::date`).
-- `projectedPositions = useMemo(() => projectStackToDate(positions, asOf, today), …)`.
-- In the "Current Position" card show:
-  - Line 1: `As of {asOf}: ${storedBalance} balance / ${storedDaily}/day`
-  - Line 2 (only when `businessDays > 0`): `Projected to today ({N} business days later): ${projBalance} / ${projDaily}/day`
-  - Below the projected line, list any position with `frequency === 'weekly'` with a small muted tag `(weekly — not projected)` so the v1 gap reads as intentional, not a bug.
+State: `const [showSteps, setShowSteps] = useState(false)`. Toggle is a shadcn `Switch` labeled "Show steps". The Add Step dropdown and Export PDF button live **only** in this top bar — they no longer appear inside `ScenarioStepEditor`.
 
-### 7. Plumbing — `src/pages/DealLab.tsx`
-- Feed `projectedPositions` into `runScenario(...)` (Scenario Builder) and into `stackTotals` / `snapshot` for the Current Position metrics so leverage bands reflect today.
-- Auto-saved scenario steps unaffected (steps store deltas, not absolute balances).
+## 4. Click-through from sequence row
+- Lift `stepRefs = useRef<Record<string, HTMLDivElement | null>>({})` into the DealLab Builder block. Pass it down to `ScenarioStepEditor`, which attaches `ref={el => stepRefs.current[step.id] = el}` on the wrapper div around each `StepCard`.
+- `onJumpToStep(idx)`:
+  1. `setShowSteps(true)`
+  2. `requestAnimationFrame(() => stepRefs.current[scenario.steps[idx].id]?.scrollIntoView({ behavior:'smooth', block:'center' }))`
+  3. Set `focusedStepId` state, cleared after ~1.5s; `StepCard` wrapper applies `ring-2 ring-primary` while matched.
+
+## 5. Acceptance
+- 3-step scenario, default view: start card → 3 sequence rows → sparkline → end card with side-by-side + 3 journey tiles. Step cards hidden.
+- Toggle Switch on → step cards render below summary.
+- Click a sequence row → toggle flips on, target step scrolls into view with ring highlight.
+- 0-step scenario → start card + "Add a step above to start modeling"; sparkline + ending card hidden.
 
 ## Out of scope
-- `fundedDate` / `amountFunded` per-position auto-balance logic.
-- Position entry UI, summary view, scenario step UI.
-- Weekly-frequency projection.
-
-## Acceptance
-- Saved deals carry an `as_of_date` (today on new save; `updated_at::date` for legacy rows).
-- Index shows a "Positions as of …" date picker defaulting to today; chosen date persists.
-- Deal saved 5 business days ago with $100k @ $1,000/day → Current Position card shows stored ($100k / $1,000) and projected ($95k / $1,000); Scenario Builder runs against $95k.
-- When `as_of_date == today`, only the stored line shows.
-- Weekly-frequency positions render with the `(weekly — not projected)` tag under the projected line.
+Engine math, new step kinds, Current Position card, as-of-date display, ScenarioStory, ScenarioTabs.
