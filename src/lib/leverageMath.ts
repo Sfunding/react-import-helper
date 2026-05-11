@@ -5,9 +5,21 @@
  * constants: 22 business days/month, 5 business days/week.
  */
 import { Position } from '@/types/calculation';
+import { getBusinessDaysBetween } from '@/lib/dateUtils';
 
 export const BUSINESS_DAYS_PER_MONTH = 22;
 export const BUSINESS_DAYS_PER_WEEK = 5;
+
+/** Convert an ISO date (YYYY-MM-DD) to a business-day offset from today (>=0). */
+function dayOffsetFromIso(iso?: string): number | null {
+  if (!iso) return null;
+  const target = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (target <= today) return 0;
+  return getBusinessDaysBetween(today, target);
+}
 
 // -------------------- Leverage ratios --------------------
 
