@@ -436,7 +436,19 @@ export default function DealLabPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        {parentCalculationId && (
+          <button
+            type="button"
+            onClick={() => navigate(`/deal/${parentCalculationId}/lab`)}
+            className="w-full flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-sm text-primary text-left transition"
+            title="Open the parent deal's Lab"
+          >
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Derived from</span>
+            <span className="truncate">{parentCalculationName || 'parent deal'}</span>
+            <span className="ml-auto text-xs underline shrink-0">Open parent</span>
+          </button>
+        )}
           <div>
             <button
               type="button"
