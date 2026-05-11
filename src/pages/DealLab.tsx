@@ -620,6 +620,17 @@ function BuilderTab({
   const [showSteps, setShowSteps] = useState(false);
   const [focusedStepId, setFocusedStepId] = useState<string | null>(null);
   const [commitStepIndex, setCommitStepIndex] = useState<number | null>(null);
+  const [commitMode, setCommitMode] = useState<'step' | 'final'>('step');
+  const canCommitFinal = !!originalCalc && scenario.steps.length > 0 && scenarioRun.checkpoints.length > 1;
+  const openFinalCommit = () => {
+    if (!canCommitFinal) return;
+    setCommitMode('final');
+    setCommitStepIndex(scenario.steps.length - 1);
+  };
+  const openStepCommit = (idx: number) => {
+    setCommitMode('step');
+    setCommitStepIndex(idx);
+  };
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const handleJumpToStep = useCallback((idx: number) => {
