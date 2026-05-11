@@ -552,7 +552,7 @@ export function runScenario(
         ...active,
         {
           id: `straight-${step.id}`,
-          entity: `Straight MCA (${step.termWeeks}w @ ${step.factorRate.toFixed(2)})`,
+          entity: step.funderName?.trim() || `Straight MCA (${step.termWeeks}w @ ${step.factorRate.toFixed(2)})`,
           balance: totalPayback,
           dailyPayment: daily,
           source: 'straight-rtr',
@@ -612,7 +612,7 @@ export function runScenario(
       if (totalPayback > 0) {
         active.push({
           id: `rev-${step.id}`,
-          entity: `Reverse RTR (${step.factorRate.toFixed(2)})`,
+          entity: step.funderName?.trim() || `Reverse RTR (${step.factorRate.toFixed(2)})`,
           balance: totalPayback,
           dailyPayment: newDaily,
           source: 'reverse-rtr',
