@@ -257,7 +257,7 @@ export default function Index() {
           merchant: data.merchant || DEFAULT_MERCHANT, 
           settings: data.settings || DEFAULT_SETTINGS, 
           positions: loadedPositions || [],
-          asOfDate: loadedAsOf,
+          asOfDate: effectiveAsOf,
         }));
         toast({
           title: 'Calculation loaded',
