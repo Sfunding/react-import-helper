@@ -510,10 +510,8 @@ export default function Index() {
           if (daysContributing > 0) {
             let totalContribution = p.dailyPayment * daysContributing;
             if (lastDayInRange) {
-              const remainder = p.balance % p.dailyPayment;
-              if (remainder !== 0) {
-                totalContribution -= (p.dailyPayment - remainder);
-              }
+              const lastPayment = Math.min(p.dailyPayment, Math.max(0, p.balance - (p.daysLeft - 1) * p.dailyPayment));
+              totalContribution = totalContribution - p.dailyPayment + lastPayment;
             }
             entries.push({
               entity: p.entity,
