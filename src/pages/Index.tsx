@@ -275,45 +275,51 @@ export default function Index() {
 
 
 
-  // All external positions with known balances (for leverage calculations - merchant's full debt picture)
-  const allExternalPositions = positions.filter(p => {
-    const effectiveBalance = getEffectiveBalance(p);
-    return !p.isOurPosition && effectiveBalance !== null && effectiveBalance > 0;
-  });
-  // Only positions included in the reverse (for advance/funding calculations)
-  const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
-  // Count "our" positions and unknown balance positions for display
-  const ourPositionsCount = positions.filter(p => p.isOurPosition).length;
-  const unknownBalanceCount = positions.filter(p => getEffectiveBalance(p) === null).length;
-  
-  // Use ALL positions for leverage metrics
-  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
-  const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
-  
-  // Use INCLUDED positions for reverse calculations
-  const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
-  const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
-  
-  // Advance Amount = Included positions only (no new money on top)
-  const totalAdvanceAmount = includedBalance;
-  // For display purposes, keep totalBalance as included balance only
-  const totalBalance = includedBalance;
-  const totalCurrentDailyPayment = includedDailyPayment;
-  const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
-  
+  // Build positionsWithDays FIRST so future-funded scenario positions are
+  // zeroed-out on dates before they exist. All downstream totals derive from
+  // this view so a position with `fundedDate > asOfDate` contributes nothing
+  // to balance, daily payment, advance amount, or schedules.
   const positionsWithDays = positions.map(p => {
     const notStartedYet = !!p.fundedDate && isBeforeISODate(asOfDate, p.fundedDate);
     const rawEffective = getEffectiveBalance(p);
     const effectiveBalance = notStartedYet ? 0 : rawEffective;
+    const effectiveDaily = notStartedYet ? 0 : (p.dailyPayment || 0);
     return {
       ...p,
       // Force out of all "included" math while not started; preserve user's intent on the original field.
       includeInReverse: notStartedYet ? false : p.includeInReverse,
       notStartedYet,
       balance: effectiveBalance,
-      daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
+      dailyPayment: effectiveDaily,
+      daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / effectiveDaily) : 0
     };
   });
+
+  // All external positions with known balances (for leverage calculations - merchant's full debt picture).
+  // Derived from positionsWithDays so not-started scenario positions are excluded.
+  const allExternalPositions = positionsWithDays.filter(p => {
+    return !p.isOurPosition && p.balance !== null && (p.balance || 0) > 0;
+  });
+  // Only positions included in the reverse (for advance/funding calculations)
+  const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
+  // Count "our" positions and unknown balance positions for display
+  const ourPositionsCount = positions.filter(p => p.isOurPosition).length;
+  const unknownBalanceCount = positions.filter(p => getEffectiveBalance(p) === null).length;
+
+  // Use ALL positions for leverage metrics
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+
+  // Use INCLUDED positions for reverse calculations
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
+  const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
+
+  // Advance Amount = Included positions only (no new money on top)
+  const totalAdvanceAmount = includedBalance;
+  // For display purposes, keep totalBalance as included balance only
+  const totalBalance = includedBalance;
+  const totalCurrentDailyPayment = includedDailyPayment;
+  const totalCurrentWeeklyPayment = totalCurrentDailyPayment * 5;
 
   // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
   const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
