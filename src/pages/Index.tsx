@@ -201,6 +201,11 @@ export default function Index() {
 
         // Hydrate anchors so future as-of-date changes reprice correctly.
         let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
+          // Respect an explicit manual anchor when present (e.g., committed scenarios
+          // lock a manual anchor at the commit date so round-trips are exact).
+          if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) {
+            return p;
+          }
           // Funded anchor is implicit — fundedDate + amountFunded handle it.
           if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
             return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
