@@ -735,7 +735,8 @@ export default function Index() {
     total_balance: totalBalance,
     total_daily_payment: totalCurrentDailyPayment,
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
+    as_of_date: asOfDate,
   });
 
   const handleSave = async (name: string) => {
@@ -770,7 +771,8 @@ export default function Index() {
         total_balance: totalBalance,
         total_daily_payment: totalCurrentDailyPayment,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        as_of_date: asOfDate,
       };
       setLastSavedCalculation(savedCalc);
       
@@ -844,7 +846,8 @@ export default function Index() {
         total_balance: totalBalance,
         total_daily_payment: totalCurrentDailyPayment,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        as_of_date: asOfDate,
       };
       setLastSavedCalculation(savedCalc);
       

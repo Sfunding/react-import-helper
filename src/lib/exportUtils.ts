@@ -10,7 +10,7 @@ import {
   WeekScheduleExport,
   EarlyPaySettings
 } from '@/types/calculation';
-import { getFormattedLastPaymentDate, calculateRemainingBalance } from '@/lib/dateUtils';
+import { getFormattedLastPaymentDate, calculateRemainingBalance, isBeforeISODate } from '@/lib/dateUtils';
 import { format } from 'date-fns';
 
 // Helper to format currency
@@ -31,44 +31,49 @@ const sanitizeFilename = (name: string) => {
 export function calculateSchedules(
   positions: Position[],
   settings: Settings,
-  merchantMonthlyRevenue: number
+  merchantMonthlyRevenue: number,
+  asOfDate?: string | null
 ) {
-  // Helper to get effective balance - use the stored balance directly
-  // This matches the UI behavior where balance is the source of truth
-  const getEffectiveBalance = (p: Position): number | null => {
-    return p.balance;
-  };
+  // Normalize using the same as-of-date logic as the on-screen calculator:
+  // positions whose fundedDate is in the future relative to asOfDate are
+  // zeroed-out so they don't contribute to totals or the schedule.
+  const effectiveAsOf = asOfDate || format(new Date(), 'yyyy-MM-dd');
+
+  const positionsWithDays = positions.map(p => {
+    const notStartedYet = !!p.fundedDate && isBeforeISODate(effectiveAsOf, p.fundedDate);
+    const rawBalance = p.balance;
+    const effectiveBalance = notStartedYet ? 0 : rawBalance;
+    const effectiveDaily = notStartedYet ? 0 : (p.dailyPayment || 0);
+    return {
+      ...p,
+      includeInReverse: notStartedYet ? false : p.includeInReverse,
+      balance: effectiveBalance,
+      dailyPayment: effectiveDaily,
+      daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0
+        ? Math.ceil(effectiveBalance / effectiveDaily)
+        : 0,
+    };
+  });
 
   // All external positions with known balances (for leverage calculations)
-  const allExternalPositions = positions.filter(p => {
-    const effectiveBalance = getEffectiveBalance(p);
-    return !p.isOurPosition && effectiveBalance !== null && effectiveBalance > 0;
+  const allExternalPositions = positionsWithDays.filter(p => {
+    return !p.isOurPosition && p.balance !== null && (p.balance || 0) > 0;
   });
   // Only included positions (for reverse calculations)
   const includedPositions = allExternalPositions.filter(p => p.includeInReverse !== false);
-  
+
   // Use ALL positions for leverage metrics
-  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
+  const totalBalanceAll = allExternalPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
   const totalCurrentDailyPaymentAll = allExternalPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
-  
+
   // Use INCLUDED positions for reverse calculations
-  const includedBalance = includedPositions.reduce((sum, p) => sum + (getEffectiveBalance(p) || 0), 0);
+  const includedBalance = includedPositions.reduce((sum, p) => sum + (p.balance || 0), 0);
   const includedDailyPayment = includedPositions.reduce((sum, p) => sum + (p.dailyPayment || 0), 0);
-  
+
   // Advance Amount = Included positions only (no new money on top)
   const totalAdvanceAmount = includedBalance;
-  // For display purposes
   const totalBalance = includedBalance;
   const totalCurrentDailyPayment = includedDailyPayment;
-  
-  const positionsWithDays = positions.map(p => {
-    const effectiveBalance = getEffectiveBalance(p);
-    return {
-      ...p,
-      balance: effectiveBalance, // Use effective balance for calculations
-      daysLeft: p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / p.dailyPayment) : 0
-    };
-  });
 
   // Total Funding = Advance Amount / (1 - Fee%) since new money is already in advance amount
   const totalFunding = totalAdvanceAmount / (1 - settings.feePercent);
@@ -248,11 +253,7 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const workbook = XLSX.utils.book_new();
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -318,19 +319,18 @@ export function exportToExcel(calculation: SavedCalculation) {
         isOurs ? '-' : (p.includeInReverse !== false ? 'Yes' : 'No'),
         p.entity || 'Unknown',
         p.fundedDate ? format(new Date(p.fundedDate), 'MMM d, yyyy') : '-',
-        p.amountFunded !== null ? fmtNoDecimals(p.amountFunded) : '-',
-        isUnknown ? 'Unknown' : (hasAutoCalc ? `${fmtNoDecimals(effectiveBalance || 0)} (auto)` : fmtNoDecimals(effectiveBalance || 0)),
-        fmtNoDecimals(p.dailyPayment),
+        p.amountFunded !== null ? p.amountFunded : '-',
+        isUnknown ? 'Unknown' : (effectiveBalance || 0),
+        p.dailyPayment || 0,
         isUnknown ? '?' : (posWithDays?.daysLeft || 0),
         isUnknown ? '-' : getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
       ];
     }),
     [''],
-    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, '', '', fmtNoDecimals(metrics.totalBalance), fmtNoDecimals(metrics.totalCurrentDailyPayment), '', '']
+    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, '', '', metrics.totalBalance, metrics.totalCurrentDailyPayment, '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
+  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
 
   // Currency format that preserves cents in Excel
   const CURRENCY_FMT = '$#,##0.00;($#,##0.00);-';
@@ -346,6 +346,10 @@ export function exportToExcel(calculation: SavedCalculation) {
       }
     }
   };
+
+  // Position rows start at row 4 (header rows 1-3); totals row is the last row.
+  applyCurrencyFormat(positionsSheet, ['E', 'F', 'G'], 4, 3 + positions.length + 2);
+  XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
   const dailyData = [
@@ -428,11 +432,7 @@ export async function exportToPDF(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -688,11 +688,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { positionsWithDays, includedPositions, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -947,7 +943,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
     
     // Helper to get RTR balance at a specific day
     const getRtrAtDay = (day: number): number => {
-      const { dailySchedule } = calculateSchedules(positions, settings, merchantRevenue);
+      const { dailySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
       if (dailySchedule.length === 0) return 0;
       if (day >= dailySchedule.length) {
         const lastDay = dailySchedule[dailySchedule.length - 1];
@@ -1033,11 +1029,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -1637,11 +1629,7 @@ export async function exportMerchantProposal(
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
 
-  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const companyName = settings.whiteLabelCompany?.trim() || 'AVION FUNDING';
   const dateStr = pdfFmtDate();
