@@ -253,11 +253,7 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const workbook = XLSX.utils.book_new();
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -433,11 +429,7 @@ export async function exportToPDF(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { dailySchedule, weeklySchedule, positionsWithDays, allExternalPositions, includedPositions, totalBalanceAll, totalCurrentDailyPaymentAll, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -693,11 +685,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { positionsWithDays, includedPositions, metrics } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -952,7 +940,7 @@ export async function exportMerchantPDF(calculation: SavedCalculation) {
     
     // Helper to get RTR balance at a specific day
     const getRtrAtDay = (day: number): number => {
-      const { dailySchedule } = calculateSchedules(positions, settings, merchantRevenue);
+      const { dailySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
       if (dailySchedule.length === 0) return 0;
       if (day >= dailySchedule.length) {
         const lastDay = dailySchedule[dailySchedule.length - 1];
@@ -1038,11 +1026,7 @@ export async function exportMerchantCashReport(calculation: SavedCalculation) {
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
   
-  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -1642,11 +1626,7 @@ export async function exportMerchantProposal(
   const positions = calculation.positions as Position[];
   const merchantRevenue = calculation.merchant_monthly_revenue || 0;
 
-  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(
-    positions,
-    settings,
-    merchantRevenue
-  );
+  const { positionsWithDays, includedPositions, metrics, dailySchedule, weeklySchedule } = calculateSchedules(positions, settings, merchantRevenue, calculation.as_of_date);
 
   const companyName = settings.whiteLabelCompany?.trim() || 'AVION FUNDING';
   const dateStr = pdfFmtDate();
