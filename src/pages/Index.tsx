@@ -576,9 +576,22 @@ export default function Index() {
   const handleAsOfDateChange = (newDate: string) => {
     if (newDate === asOfDate) return;
     setPositions(prev => prev.map(p => {
+      // Scenario position not started yet — leave stored balance untouched.
       if (p.fundedDate && isBeforeISODate(newDate, p.fundedDate)) return p;
       const newBal = repricedBalance(p, newDate);
-      return { ...p, balance: newBal };
+      // For manual-anchor positions, advance the anchor date with the balance so the
+      // next date change re-prices from the correct point (prevents cumulative drift
+      // when moving the as-of date back and forth).
+      const hasFundedAnchor = !!p.fundedDate && p.amountFunded != null && p.amountFunded > 0;
+      if (hasFundedAnchor) {
+        return { ...p, balance: newBal };
+      }
+      return {
+        ...p,
+        balance: newBal,
+        balanceAsOfDate: newDate,
+        balanceAnchor: 'manual',
+      };
     }));
     setAsOfDate(newDate);
   };

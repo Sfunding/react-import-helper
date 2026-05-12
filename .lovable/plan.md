@@ -1,35 +1,21 @@
-## Fix plan
+Root cause: date changes are mutating `position.balance`, but manual-anchor positions keep the old `balanceAsOfDate`. On the next date change, the app treats the already-mutated balance as if it still belonged to the old anchor date, so moving May -> July -> May compounds the math instead of restoring the May values.
 
-The problem is that committed original positions are saved only with their future checkpoint balance. When the calculator date is moved backward, those positions only have a manual anchor at the future commit date, so the current repricing function caps the balance at that future amount instead of restoring the larger balance they had on May 11.
+Plan:
+1. Make as-of-date repricing reversible
+   - In `src/pages/Index.tsx`, update `handleAsOfDateChange` so every repriced position saves the new balance together with the new `balanceAsOfDate`.
+   - That makes the next move calculate from the actual date the current balance represents, not from a stale date.
 
-### What I’ll change
+2. Preserve not-started scenario behavior
+   - Keep future-funded scenario positions grayed out when the selected as-of date is before their `fundedDate`.
+   - Do not force those balances into calculator math while they are not started yet.
 
-1. **Preserve original funding anchors during scenario commit**
-   - In `checkpointToPositions`, when carrying over an original position, keep its original `fundedDate`, `amountFunded`, and funded anchor metadata instead of treating it like a manual snapshot.
-   - If an original position already had `fundedDate + amountFunded`, it will reprice from that true funding point.
+3. Prevent future anchor confusion
+   - Tighten `repricedBalance` comments/logic so manual anchors mean: “this current balance is true as of `balanceAsOfDate`.”
+   - Funded anchors still use `fundedDate + amountFunded` as the stable source for scenario/newly funded positions.
 
-2. **Allow backward repricing to increase balances for funded positions**
-   - Update `repricedBalance` so funded-anchor positions can move both ways by date:
-     - moving forward lowers balance
-     - moving backward raises balance up to the original `amountFunded`
-   - Keep manual-anchor positions capped at their stored manual balance, because we do not know their true original funding amount.
-
-3. **Hydrate loaded positions correctly**
-   - In the calculator load effect, only assign a manual anchor when a position lacks a valid funded anchor.
-   - This avoids accidentally freezing carried-over original positions at the commit-date balance.
-
-4. **Expected behavior after the fix**
-   - Commit all straights opens on the day after the last straight.
-   - Scenario straights are active when the as-of date is after they funded.
-   - Moving date back to May 11 grays out future straights as “not started yet.”
-   - Original positions with funding data restore their May 11 balances and weeks left.
-   - Moving date forward again lowers those balances again.
-
-### Technical scope
-
-Files to update:
-- `src/lib/leverageMath.ts`
-- `src/lib/dateUtils.ts`
-- `src/pages/Index.tsx`
-
-No backend/schema changes are needed.
+Acceptance check:
+- Commit all straights.
+- Move the as-of date from May 11 to July.
+- Move it back to May 11.
+- Original positions return to their May 11 balances and weeks left instead of drifting lower/higher.
+- Scenario straights that had not started by May 11 remain grayed out as “scenario did not start yet.”
