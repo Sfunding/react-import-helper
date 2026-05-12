@@ -477,10 +477,8 @@ export default function Index() {
             // Account for partial last-day payment
             let totalContribution = p.dailyPayment * daysContributing;
             if (lastDayInRange) {
-              const remainder = p.balance % p.dailyPayment;
-              if (remainder !== 0) {
-                totalContribution -= (p.dailyPayment - remainder);
-              }
+              const lastPayment = Math.min(p.dailyPayment, Math.max(0, p.balance - (p.daysLeft - 1) * p.dailyPayment));
+              totalContribution = totalContribution - p.dailyPayment + lastPayment;
             }
             entries.push({
               entity: p.entity,
