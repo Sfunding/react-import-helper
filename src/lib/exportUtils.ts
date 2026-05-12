@@ -116,22 +116,24 @@ export function calculateSchedules(
   const dailySchedule: DayScheduleExport[] = [];
   let cumulativeNetFunded = 0;
   let cumulativeDebits = 0;
-  let dealComplete = false;
-  const maxDays = 500;
+  let debitsComplete = false;
   const originationFee = consolidationFees;
-  
+
   // Only use INCLUDED positions for the schedule
   const includedPositionsWithDays = positionsWithDays.filter(p => !p.isOurPosition && p.includeInReverse !== false);
 
+  // Loop until every included position is fully paid off (no truncation of funder tail).
+  const maxPositionDaysLeft = includedPositionsWithDays.reduce((m, p) => Math.max(m, p.daysLeft || 0), 0);
+  const maxDays = Math.max(500, maxPositionDaysLeft + 5);
+
   for (let day = 1; day <= maxDays; day++) {
-    if (dealComplete) break;
     const week = Math.ceil(day / 5);
     const dayOfWeek = ((day - 1) % 5) + 1;
     const isPayDay = dayOfWeek === 1;
 
     let cashInfusion = 0;
     if (isPayDay) {
-      for (let d = day; d <= day + 4 && d <= maxDays; d++) {
+      for (let d = day; d <= day + 4; d++) {
         const dayPayment = includedPositionsWithDays
           .filter(p => p.balance > 0 && d <= p.daysLeft)
           .reduce((sum, p) => {
@@ -152,7 +154,7 @@ export function calculateSchedules(
     const rtrBeforeDebit = (cumulativeGross * settings.rate) - cumulativeDebits;
 
     let dailyWithdrawal = 0;
-    if (day >= 2 && rtrBeforeDebit > 0) {
+    if (!debitsComplete && day >= 2 && rtrBeforeDebit > 0) {
       dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
     }
     cumulativeDebits += dailyWithdrawal;
@@ -169,7 +171,11 @@ export function calculateSchedules(
       rtrBalance
     });
 
-    if (rtrBalance <= 0) dealComplete = true;
+    if (rtrBalance <= 0) debitsComplete = true;
+
+    // Stop once debits are done AND every included position has been fully paid off.
+    const infusionsComplete = day >= maxPositionDaysLeft;
+    if (debitsComplete && infusionsComplete) break;
   }
 
   // Generate weekly summary
