@@ -212,16 +212,10 @@ export default function Index() {
           return p;
         });
 
-        // Project forward to today if the saved as-of date is in the past.
-        const todayISO = format(new Date(), 'yyyy-MM-dd');
-        if (loadedAsOf !== todayISO && loadedPositions.length > 0) {
-          loadedPositions = loadedPositions.map(p => ({ ...p, balance: repricedBalance(p, todayISO) }));
-          toast({
-            title: 'Balances projected to today',
-            description: `Repriced from ${format(new Date(loadedAsOf + 'T00:00:00'), 'MMM d, yyyy')}. Use the "Positions as of" date to move it.`,
-          });
-        }
-        const effectiveAsOf = todayISO;
+        // Use the saved as-of date as-is. Balances saved at loadedAsOf are already correct for that
+        // date, and `fundedDate` anchors will reprice on demand when the user moves the
+        // "Positions as of" picker via handleAsOfDateChange.
+        const effectiveAsOf = loadedAsOf;
 
         if (loadedPositions) setPositions(loadedPositions);
 
