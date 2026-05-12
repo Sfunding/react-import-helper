@@ -1,26 +1,37 @@
-Why the round-trip drifts:
-- On commit, original positions keep their old `fundedDate`/`amountFunded` and old `balanceAsOfDate` (May 11), but `balance` is overwritten with the July-projected value.
-- `repricedBalance` picks the funded anchor first, so moving back to May 11 reconstructs the balance from `amountFunded − days × daily`, not from the actual May 11 number the user had entered.
+Your screenshots changed the diagnosis: this is not only an anchor drift bug. On May 11, the totals are still including future straight positions that should not exist yet.
 
-Fix plan:
+Evidence from screenshots:
+- Original May 11 total balance: $53,927,892 and current daily about $478,998.
+- After committing straights and returning to May 11: $65,267,892 and current daily about $685,998.
+- The increase is about $11.34M balance and $207K daily, which matches future scenario straight positions being counted on May 11.
 
-1. Lock a manual anchor at commit time
-   - In `src/lib/leverageMath.ts` `checkpointToPositions`, when emitting an `original`-sourced position, also set:
-     - `balanceAsOfDate = <commit asOfDate>` (the checkpoint date)
-     - `balanceAnchor = 'manual'`
-   - This says: “this projected balance is true on the commit date,” which is exactly what the schedule produced.
+Plan:
 
-2. Make the manual anchor authoritative when present
-   - In `src/lib/dateUtils.ts` `repricedBalance`, prefer the manual anchor when `balanceAnchor === 'manual'` (or when `balanceAsOfDate` is set and is newer than `fundedDate`).
-   - Funded anchor stays the fallback for positions that only have funding metadata (e.g., scenario straights with no manual snapshot yet).
+1. Fix total calculations to exclude not-started positions
+   - In `src/pages/Index.tsx`, build `positionsWithDays` before totals.
+   - Use `positionsWithDays` for `allExternalPositions`, `includedPositions`, `totalBalance`, and `totalCurrentDailyPayment`.
+   - This ensures any position with `fundedDate > asOfDate` contributes $0 balance and $0 daily to all header totals, savings, schedules, advance amount, and deal summary.
 
-3. Hydration alignment
-   - In `src/pages/Index.tsx` load effect, when a position has `balanceAnchor === 'manual'` and a `balanceAsOfDate`, keep it as manual (don't promote to `funded`).
+2. Fix the date-change anchor precedence
+   - In `handleAsOfDateChange`, check manual anchors before funded metadata.
+   - If `balanceAnchor === 'manual'`, update the position’s `balance`, `balanceAsOfDate`, and `balanceAnchor` together on every date move.
+   - Only funded-only positions keep using the funded-date anchor.
+   - This prevents the original carried-over positions from drifting when moving May → July → May.
+
+3. Preserve “not started yet” behavior for scenario straights
+   - Keep future-funded scenario straight rows visually marked as not started when `asOfDate` is before their `fundedDate`.
+   - Make sure they are excluded from totals and reverse calculations while not started, but still remain stored in the deal so they reappear when the as-of date moves forward.
+
+4. Fix Deal Lab projection consistency
+   - In `src/lib/leverageMath.ts`, remove the weekly-position projection exception in `projectStackToDate`.
+   - The app’s math treats `dailyPayment` as the daily-equivalent value even for weekly positions, so Deal Lab should project them the same way before running/committing scenarios.
+
+5. Add regression tests for the exact flow
+   - Test a manual-anchored original position that also has funded metadata.
+   - Test May 11 → future commit date → back to May 11 → forward again.
+   - Test future-funded straight positions are excluded from May 11 totals and included only once their funded date arrives.
 
 Acceptance:
-- Open a deal on May 11 with manually-entered balances.
-- Commit straights → child opens at the day-after-last-straight with projected balances.
-- Move as-of date to July, then back to May 11.
-- Original positions show the exact May 11 balances and weeks left from before commit.
-- Scenario straights with `fundedDate` after May 11 still gray out as “not started yet.”
-- Forward-then-back moves on the same deal remain stable (no cumulative drift).
+- After committing all straights, moving the child deal back to May 11 shows the same total balance/current daily as before the commit, not the inflated $65.27M/$685.99K values.
+- Future straight rows remain present but inactive/gray/not-started on May 11.
+- Moving forward to July and back to May 11 repeatedly gives stable totals with no compounding drift.
