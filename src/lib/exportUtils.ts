@@ -331,7 +331,6 @@ export function exportToExcel(calculation: SavedCalculation) {
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
   positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Currency format that preserves cents in Excel
   const CURRENCY_FMT = '$#,##0.00;($#,##0.00);-';
@@ -347,6 +346,10 @@ export function exportToExcel(calculation: SavedCalculation) {
       }
     }
   };
+
+  // Position rows start at row 4 (header rows 1-3); totals row is the last row.
+  applyCurrencyFormat(positionsSheet, ['E', 'F', 'G'], 4, 3 + positions.length + 2);
+  XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule
   const dailyData = [
