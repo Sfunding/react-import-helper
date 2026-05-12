@@ -401,8 +401,8 @@ export default function Index() {
             .filter(p => p.balance > 0 && d <= p.daysLeft)
             .reduce((sum, p) => {
               if (d === p.daysLeft) {
-                const remainder = p.balance % p.dailyPayment;
-                return sum + (remainder === 0 ? p.dailyPayment : remainder);
+                const lastPayment = p.balance - (p.daysLeft - 1) * p.dailyPayment;
+                return sum + Math.min(p.dailyPayment, Math.max(0, lastPayment));
               }
               return sum + p.dailyPayment;
             }, 0);
@@ -477,10 +477,8 @@ export default function Index() {
             // Account for partial last-day payment
             let totalContribution = p.dailyPayment * daysContributing;
             if (lastDayInRange) {
-              const remainder = p.balance % p.dailyPayment;
-              if (remainder !== 0) {
-                totalContribution -= (p.dailyPayment - remainder);
-              }
+              const lastPayment = Math.min(p.dailyPayment, Math.max(0, p.balance - (p.daysLeft - 1) * p.dailyPayment));
+              totalContribution = totalContribution - p.dailyPayment + lastPayment;
             }
             entries.push({
               entity: p.entity,
@@ -512,10 +510,8 @@ export default function Index() {
           if (daysContributing > 0) {
             let totalContribution = p.dailyPayment * daysContributing;
             if (lastDayInRange) {
-              const remainder = p.balance % p.dailyPayment;
-              if (remainder !== 0) {
-                totalContribution -= (p.dailyPayment - remainder);
-              }
+              const lastPayment = Math.min(p.dailyPayment, Math.max(0, p.balance - (p.daysLeft - 1) * p.dailyPayment));
+              totalContribution = totalContribution - p.dailyPayment + lastPayment;
             }
             entries.push({
               entity: p.entity,
@@ -649,8 +645,8 @@ export default function Index() {
             .filter(p => p.balance > 0 && d <= p.daysLeft)
             .reduce((sum, p) => {
               if (d === p.daysLeft) {
-                const remainder = p.balance % p.dailyPayment;
-                return sum + (remainder === 0 ? p.dailyPayment : remainder);
+                const lastPayment = p.balance - (p.daysLeft - 1) * p.dailyPayment;
+                return sum + Math.min(p.dailyPayment, Math.max(0, lastPayment));
               }
               return sum + p.dailyPayment;
             }, 0);
