@@ -1,66 +1,35 @@
-## Root cause
+## Fix plan
 
-When you "Commit straights" the dialog correctly saves `as_of_date = day-after-last-straight` (e.g. ~10 weeks in the future) and writes scenario positions with `fundedDate` set to each straight's fire date.
+The problem is that committed original positions are saved only with their future checkpoint balance. When the calculator date is moved backward, those positions only have a manual anchor at the future commit date, so the current repricing function caps the balance at that future amount instead of restoring the larger balance they had on May 11.
 
-But the Calculator's load handler in `src/pages/Index.tsx` (the `sessionStorage.getItem('loadCalculation')` effect at ~L188–225) does two things that break this:
+### What I’ll change
 
-1. It computes `loadedAsOf` from the saved record (future date), then forces **`effectiveAsOf = todayISO`** at L224 and calls `setAsOfDate(effectiveAsOf)`. So the calculator opens at TODAY instead of day-after-last-straight.
-2. Because `loadedAsOf !== todayISO`, it then runs the "project balances to today" block (L217–223) and reprices every position to today.
+1. **Preserve original funding anchors during scenario commit**
+   - In `checkpointToPositions`, when carrying over an original position, keep its original `fundedDate`, `amountFunded`, and funded anchor metadata instead of treating it like a manual snapshot.
+   - If an original position already had `fundedDate + amountFunded`, it will reprice from that true funding point.
 
-Consequence with your straights commit:
-- **Scenario straight positions** carry `fundedDate` in the future. With `asOfDate = today`, `isBeforeISODate(today, fundedDate) = true` for every one of them → they all show grayed "Not started · funds …". That's exactly what you saw.
-- **Original positions without a `fundedDate`** get a `manual` anchor at `loadedAsOf` (future). Repricing back to today is blocked by the cap in `repricedBalance` (`Math.min(anchorBal, raw)`), so their balance stays at the already-projected (10-weeks-down) number instead of being restored. That's the "balances of all the other positions came down by 10 weeks" symptom.
+2. **Allow backward repricing to increase balances for funded positions**
+   - Update `repricedBalance` so funded-anchor positions can move both ways by date:
+     - moving forward lowers balance
+     - moving backward raises balance up to the original `amountFunded`
+   - Keep manual-anchor positions capped at their stored manual balance, because we do not know their true original funding amount.
 
-In short: the commit saves a future as-of date, but the loader throws it away and snaps to today, which both (a) makes future-funded straights look "not started" and (b) leaves manual-anchored originals stuck at the future-projected balance.
+3. **Hydrate loaded positions correctly**
+   - In the calculator load effect, only assign a manual anchor when a position lacks a valid funded anchor.
+   - This avoids accidentally freezing carried-over original positions at the commit-date balance.
 
-## Fix
+4. **Expected behavior after the fix**
+   - Commit all straights opens on the day after the last straight.
+   - Scenario straights are active when the as-of date is after they funded.
+   - Moving date back to May 11 grays out future straights as “not started yet.”
+   - Original positions with funding data restore their May 11 balances and weeks left.
+   - Moving date forward again lowers those balances again.
 
-Honor the saved as-of date on load. Don't force `effectiveAsOf = todayISO` and don't auto-reproject balances. The "Positions as of" calendar already lets the user move the date if they want.
+### Technical scope
 
-### Change in `src/pages/Index.tsx` (load effect ~L188–228)
+Files to update:
+- `src/lib/leverageMath.ts`
+- `src/lib/dateUtils.ts`
+- `src/pages/Index.tsx`
 
-Replace this block:
-
-```ts
-// Project forward to today if the saved as-of date is in the past.
-const todayISO = format(new Date(), 'yyyy-MM-dd');
-if (loadedAsOf !== todayISO && loadedPositions.length > 0) {
-  loadedPositions = loadedPositions.map(p => ({ ...p, balance: repricedBalance(p, todayISO) }));
-  toast({ title: 'Balances projected to today', description: `Repriced from …` });
-}
-const effectiveAsOf = todayISO;
-```
-
-with:
-
-```ts
-// Use the saved as-of date as-is. Balances saved at loadedAsOf are already correct for that date,
-// and `fundedDate` anchors will reprice on demand when the user moves the "Positions as of" picker.
-const effectiveAsOf = loadedAsOf;
-```
-
-Then `setAsOfDate(effectiveAsOf)` and the `lastSavedState` snapshot below it (L260) already pick up `effectiveAsOf`, no further change needed.
-
-### Why this works
-
-- A straights commit saves `as_of_date = day-after-last-straight`. The calculator now opens at that date.
-- Every scenario straight has `fundedDate ≤ asOfDate` (last straight's fundedDate = lastOffset, asOfDate = lastOffset+1) → none are grayed "not started".
-- Original positions' saved balances are the checkpoint balances (already correct for that future date), so they don't get further reduced.
-- If the user manually rolls the picker back to today (or May 11), the existing `handleAsOfDateChange` reprices funded-anchor positions from their `fundedDate` and grays the not-yet-started ones — which is the behavior you said you loved.
-
-### What about loading non-scenario deals where the saved `as_of_date` is genuinely old?
-
-Currently the auto-projection happens silently and is half-broken anyway (originals with funded anchors get restored, manual-anchor positions don't). Removing it makes load deterministic: open at the saved date, then let the user move the picker forward to today if they want — re-pricing then happens through `handleAsOfDateChange`, which is the same code path used everywhere else and is the one we actually trust.
-
-## Files
-
-- `src/pages/Index.tsx` — single edit in the load effect (~L215–224), drop the auto-projection block and set `effectiveAsOf = loadedAsOf`.
-
-No backend / schema changes. No change to `CommitScenarioDialog`, `leverageMath`, or `dateUtils`.
-
-## Acceptance
-
-1. Commit straights → Calculator opens at day-after-last-straight. All scenario straights are active (none grayed). Original positions show their checkpoint balances unchanged.
-2. Move the "Positions as of" picker back to May 11 → scenario straights gray out as "Not started · funds {date}", originals reprice from their funded anchor (manual-anchor positions stay put per existing rule).
-3. Move the picker forward again → scenario straights re-activate at proper repriced balances.
-4. Loading any non-scenario saved deal opens at its saved as-of date instead of silently jumping to today.
+No backend/schema changes are needed.
