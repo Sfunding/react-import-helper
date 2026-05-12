@@ -2001,33 +2001,42 @@ export default function Index() {
             {/* Positions Being Consolidated */}
             <div className="bg-muted rounded-lg p-4">
               <h3 className="font-semibold text-foreground mb-3 uppercase text-sm tracking-wide">Positions Being Consolidated</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left p-2 font-semibold">Funder</th>
-                      <th className="text-right p-2 font-semibold">Balance</th>
-                      <th className="text-right p-2 font-semibold">Daily Payment</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {includedPositions.map(p => (
-                      <tr key={p.id} className="border-b border-border/50">
-                        <td className="p-2">{p.entity || 'Unknown Funder'}</td>
-                        <td className="p-2 text-right">{fmt(getEffectiveBalance(p) || 0)}</td>
-                        <td className="p-2 text-right">{fmt(p.dailyPayment)}/day</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-primary text-primary-foreground font-bold">
-                      <td className="p-2 rounded-bl-md">TOTAL</td>
-                      <td className="p-2 text-right">{fmt(totalBalance)}</td>
-                      <td className="p-2 text-right rounded-br-md">{fmt(totalCurrentDailyPayment)}/day</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              {(() => {
+                const showDailyCol = paymentView === 'daily' || paymentView === 'both';
+                const showWeeklyCol = paymentView === 'weekly' || paymentView === 'both';
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left p-2 font-semibold">Funder</th>
+                          <th className="text-right p-2 font-semibold">Balance</th>
+                          {showDailyCol && <th className="text-right p-2 font-semibold">Daily Payment</th>}
+                          {showWeeklyCol && <th className="text-right p-2 font-semibold">Weekly Payment</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {includedPositions.map(p => (
+                          <tr key={p.id} className="border-b border-border/50">
+                            <td className="p-2">{p.entity || 'Unknown Funder'}</td>
+                            <td className="p-2 text-right">{fmt(getEffectiveBalance(p) || 0)}</td>
+                            {showDailyCol && <td className="p-2 text-right">{fmt(p.dailyPayment)}/day</td>}
+                            {showWeeklyCol && <td className="p-2 text-right">{fmt(p.dailyPayment * 5)}/week</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-primary text-primary-foreground font-bold">
+                          <td className="p-2 rounded-bl-md">TOTAL</td>
+                          <td className={cn('p-2 text-right', !showDailyCol && !showWeeklyCol && 'rounded-br-md')}>{fmt(totalBalance)}</td>
+                          {showDailyCol && <td className={cn('p-2 text-right', !showWeeklyCol && 'rounded-br-md')}>{fmt(totalCurrentDailyPayment)}/day</td>}
+                          {showWeeklyCol && <td className="p-2 text-right rounded-br-md">{fmt(totalCurrentDailyPayment * 5)}/week</td>}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Payment Comparison */}
