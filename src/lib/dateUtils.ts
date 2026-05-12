@@ -134,8 +134,12 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
   // Weekly positions still pay business-day equivalents (dailyPayment IS the daily-equivalent in this app's model)
   const paid = days * (p.dailyPayment || 0);
   const raw = anchorBal - paid;
-  const capped = Math.min(anchorBal, Math.max(0, raw));
-  return Math.round(capped * 100) / 100;
+  // No upper cap: rolling the as-of date BACKWARD from the anchor must allow the balance
+  // to grow (the position had more balance owed in the past). Only clamp at zero on the
+  // lower end. For funded anchors `anchorBal = amountFunded` so "before fundedDate" cases
+  // are handled separately by the "not started yet" check in the calculator.
+  const repriced = Math.max(0, raw);
+  return Math.round(repriced * 100) / 100;
 }
 
 /**
