@@ -590,13 +590,25 @@ export default function Index() {
       // Scenario position not started yet — leave stored balance untouched.
       if (p.fundedDate && isBeforeISODate(newDate, p.fundedDate)) return p;
       const newBal = repricedBalance(p, newDate);
-      // For manual-anchor positions, advance the anchor date with the balance so the
-      // next date change re-prices from the correct point (prevents cumulative drift
-      // when moving the as-of date back and forth).
+      // Manual anchor takes priority over funded metadata: when a position has
+      // a confirmed manual snapshot (e.g., committed scenario, user-entered
+      // balance), advance the anchor with the balance so repeat date moves
+      // stay stable and round-trips return to the original values.
+      if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) {
+        return {
+          ...p,
+          balance: newBal,
+          balanceAsOfDate: newDate,
+          balanceAnchor: 'manual',
+        };
+      }
+      // Funded-only positions: keep the funded anchor (fundedDate + amountFunded)
+      // unchanged — repricedBalance reconstructs from there each time.
       const hasFundedAnchor = !!p.fundedDate && p.amountFunded != null && p.amountFunded > 0;
       if (hasFundedAnchor) {
         return { ...p, balance: newBal };
       }
+      // No anchor yet — stamp a manual one on the new date.
       return {
         ...p,
         balance: newBal,
