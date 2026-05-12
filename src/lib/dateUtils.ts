@@ -118,7 +118,14 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
   let anchorDate: string | null = null;
   let anchorBal: number | null = null;
 
-  if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+  // Manual anchor wins when explicitly set — it represents a confirmed snapshot
+  // (e.g., user-entered balance, or a projected balance locked in at scenario commit)
+  // and reflects reality more faithfully than the linear funded model.
+  const manualAnchored = p.balanceAnchor === 'manual' && !!p.balanceAsOfDate && p.balance != null;
+  if (manualAnchored) {
+    anchorDate = p.balanceAsOfDate!;
+    anchorBal = p.balance!;
+  } else if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
     anchorDate = p.fundedDate;
     anchorBal = p.amountFunded;
   } else if (p.balanceAsOfDate && p.balance != null) {

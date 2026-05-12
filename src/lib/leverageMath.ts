@@ -867,6 +867,11 @@ export function checkpointToPositions(
         ...orig,
         balance: ap.balance,
         dailyPayment: ap.dailyPayment,
+        // Lock a manual anchor at the commit date so future as-of-date moves
+        // reprice from this projected snapshot (and round-trips return exactly
+        // to the pre-commit balance) instead of from the funded model.
+        balanceAsOfDate: fundedDateFor(checkpoint.dayOffset),
+        balanceAnchor: 'manual',
       });
       continue;
     }
