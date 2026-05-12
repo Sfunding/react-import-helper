@@ -63,7 +63,7 @@ export function ScheduleBreakdownDialog({
   return (
     <>
       <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent className="w-[400px] sm:w-[540px]">
+        <SheetContent className="w-[400px] sm:w-[540px] flex flex-col h-full overflow-hidden">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2 text-primary">
               <Banknote className="h-5 w-5" />
@@ -72,7 +72,7 @@ export function ScheduleBreakdownDialog({
             <SheetDescription>{description}</SheetDescription>
           </SheetHeader>
           
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 space-y-4 flex-1 overflow-y-auto pr-2 -mr-2">
             {/* Position Entries - now clickable */}
             {entries.map((entry, i) => (
               <div 

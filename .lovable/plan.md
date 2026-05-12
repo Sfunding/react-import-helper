@@ -1,21 +1,12 @@
-The Payment View toggle (Daily / Weekly / Daily + Weekly) on the Merchant's Offer tab already changes the comparison cards beneath the table, but the "Positions Being Consolidated" table itself is hardcoded to a single "Daily Payment" column. That's why switching the toggle appears to do nothing — the most prominent thing on screen never updates.
+The Week/Day Breakdown side panel (`ScheduleBreakdownDialog`) overflows the viewport when there are many positions (e.g., 22 funders), but the panel itself doesn't scroll — so the bottom entries and Total row are unreachable.
 
-Plan:
-
-1. Make the Positions Being Consolidated table react to Payment View
-   - In `src/pages/Index.tsx`, replace the static "Daily Payment" column with dynamic columns driven by `paymentView`.
-     - Daily: one column "Daily Payment" showing `$X/day`.
-     - Weekly: one column "Weekly Payment" showing `$X * 5/week`.
-     - Daily + Weekly: two columns, "Daily Payment" and "Weekly Payment".
-   - Update the TOTAL footer to match the same column set, using `totalCurrentDailyPayment` and `totalCurrentDailyPayment * 5`.
-   - Apply the same dynamic columns to any sibling tables on this view (e.g., the New Position summary table if present).
-
-2. Keep PDF export consistent (no change needed)
-   - The PDF already honors `paymentView` for the Positions Being Consolidated table. No changes there, just confirming parity with the on-screen view.
+Fix:
+- In `src/components/ScheduleBreakdownDialog.tsx`, make `SheetContent` a flex column with full height and hidden overflow, and wrap the inner content area in a scrollable container so the list, Total, RTR breakdown, and explanation can all be reached.
+  - `SheetContent` className: add `flex flex-col h-full overflow-hidden`.
+  - Keep `SheetHeader` non-scrolling at the top.
+  - Wrap the `mt-6 space-y-4` content block in a `flex-1 overflow-y-auto pr-2` div (or use the existing `ScrollArea` component) so the entries list scrolls independently.
 
 Acceptance:
-- On Merchant's Offer, toggling Daily / Weekly / Daily + Weekly visibly changes the Positions Being Consolidated table columns, header, per-row values, and TOTAL row.
-- Daily mode: only daily values.
-- Weekly mode: only weekly values (daily × 5).
-- Daily + Weekly mode: both columns side by side.
-- The comparison cards underneath continue to behave as they do today.
+- Opening Week 8 Breakdown with 22 positions shows a scrollbar inside the panel; user can scroll to see every funder, the Total Cash Infusion row, the RTR Calculation card (Day/Week 1), and the explanation.
+- Header stays pinned at the top while scrolling.
+- No changes to math or data — purely a layout/scroll fix.
