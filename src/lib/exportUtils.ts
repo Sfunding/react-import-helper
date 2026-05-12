@@ -332,6 +332,21 @@ export function exportToExcel(calculation: SavedCalculation) {
   positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
+  // Currency format that preserves cents in Excel
+  const CURRENCY_FMT = '$#,##0.00;($#,##0.00);-';
+  const applyCurrencyFormat = (sheet: XLSX.WorkSheet, columns: string[], startRow: number, endRow: number) => {
+    for (let r = startRow; r <= endRow; r++) {
+      for (const col of columns) {
+        const ref = `${col}${r}`;
+        const cell = sheet[ref];
+        if (cell && typeof cell.v === 'number') {
+          cell.t = 'n';
+          cell.z = CURRENCY_FMT;
+        }
+      }
+    }
+  };
+
   // Tab 3: Daily Schedule
   const dailyData = [
     ['DAILY PAYMENT SCHEDULE'],
@@ -340,14 +355,15 @@ export function exportToExcel(calculation: SavedCalculation) {
     ...dailySchedule.map(d => [
       d.day,
       d.week,
-      d.cashInfusion > 0 ? fmtNoDecimals(d.cashInfusion) : '-',
-      d.dailyWithdrawal > 0 ? fmtNoDecimals(d.dailyWithdrawal) : '-',
-      fmtNoDecimals(d.exposureOnReverse),
-      fmtNoDecimals(d.rtrBalance)
+      d.cashInfusion > 0 ? d.cashInfusion : '-',
+      d.dailyWithdrawal > 0 ? d.dailyWithdrawal : '-',
+      d.exposureOnReverse,
+      d.rtrBalance
     ])
   ];
   const dailySheet = XLSX.utils.aoa_to_sheet(dailyData);
-  dailySheet['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 15 }];
+  dailySheet['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
+  applyCurrencyFormat(dailySheet, ['C', 'D', 'E', 'F'], 4, 3 + dailySchedule.length);
   XLSX.utils.book_append_sheet(workbook, dailySheet, 'Daily Schedule');
 
   // Tab 4: Weekly Schedule
@@ -357,13 +373,14 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Week', 'Cash Infusion', 'Total Debits', 'End Exposure'],
     ...weeklySchedule.map(w => [
       w.week,
-      fmtNoDecimals(w.cashInfusion),
-      fmtNoDecimals(w.totalDebits),
-      fmtNoDecimals(w.endExposure)
+      w.cashInfusion,
+      w.totalDebits,
+      w.endExposure
     ])
   ];
   const weeklySheet = XLSX.utils.aoa_to_sheet(weeklyData);
-  weeklySheet['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 15 }, { wch: 15 }];
+  weeklySheet['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
+  applyCurrencyFormat(weeklySheet, ['B', 'C', 'D'], 4, 3 + weeklySchedule.length);
   XLSX.utils.book_append_sheet(workbook, weeklySheet, 'Weekly Schedule');
 
   // Tab 5: Offer Details
