@@ -401,8 +401,8 @@ export default function Index() {
             .filter(p => p.balance > 0 && d <= p.daysLeft)
             .reduce((sum, p) => {
               if (d === p.daysLeft) {
-                const remainder = p.balance % p.dailyPayment;
-                return sum + (remainder === 0 ? p.dailyPayment : remainder);
+                const lastPayment = p.balance - (p.daysLeft - 1) * p.dailyPayment;
+                return sum + Math.min(p.dailyPayment, Math.max(0, lastPayment));
               }
               return sum + p.dailyPayment;
             }, 0);
