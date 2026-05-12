@@ -128,7 +128,9 @@ export function projectStackToDate(
   const businessDays = getBusinessDaysBetween(asOf, view);
   if (businessDays <= 0) return positions.map(p => ({ ...p }));
   return positions.map(p => {
-    if (p.frequency === 'weekly') return { ...p }; // TODO weekly projection
+    // dailyPayment is treated as the daily-equivalent across the app (weekly
+    // positions store the per-day equivalent), so project both daily and
+    // weekly positions the same way.
     if (p.balance == null) return { ...p };
     const daily = p.dailyPayment ?? 0;
     if (daily <= 0 || p.balance <= 0) return { ...p };
