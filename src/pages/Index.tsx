@@ -352,7 +352,7 @@ export default function Index() {
     if (!routeDealId) return;
     if (calculations.length === 0) return; // still loading
     const found = calculations.find(c => c.id === routeDealId);
-    if (!found && hydratedKeyRef.current !== `route:${routeDealId}:`) {
+    if (!found && hydratedKeyRef.current !== `route:${routeDealId}`) {
       // Only show if we never hydrated from sessionStorage for this id
       const ssActive = !!sessionStorage.getItem('loadCalculation');
       if (!ssActive) {
