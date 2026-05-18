@@ -1076,11 +1076,7 @@ export default function Index() {
             {parentCalculationId && (
               <button
                 type="button"
-                onClick={() => {
-                  sessionStorage.setItem('loadCalculation', JSON.stringify({ id: parentCalculationId }));
-                  navigate('/');
-                  window.location.reload();
-                }}
+                onClick={() => navigate(`/deal/${parentCalculationId}`)}
                 className="w-full flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-sm text-primary text-left transition"
                 title="Open the parent deal"
               >
