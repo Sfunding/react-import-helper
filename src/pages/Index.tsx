@@ -151,10 +151,12 @@ export default function Index() {
   useBeforeUnloadGuard(isDirty);
 
   // Detect a previously-saved draft on mount (e.g. after a crash/refresh)
-  // Capture the incoming-load signal synchronously on first render, before any
-  // effect (including the loadCalculation one below) has a chance to clear it.
+  // Treat any saved-deal route (or sessionStorage load) as an incoming load,
+  // captured synchronously on the first render so it can't be lost to effect
+  // timing.
   const hadIncomingLoadRef = useRef<boolean>(
-    typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation')
+    (!!routeDealId) ||
+    (typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation'))
   );
   const { draft: pendingDraft, dismiss: dismissDraft } = useDraftOnMount();
   const [draftBannerDraft, setDraftBannerDraft] = useState<DraftPayload | null>(null);
@@ -164,7 +166,6 @@ export default function Index() {
     const hasContent = (pendingDraft.positions?.length ?? 0) > 0 ||
                        (pendingDraft.merchant?.name ?? '') !== '' ||
                        (pendingDraft.merchant?.monthlyRevenue ?? 0) > 0;
-    // Don't double-prompt when we're about to load a calc from sessionStorage
     const incomingLoad = hadIncomingLoadRef.current;
     if (hasContent && !incomingLoad) {
       setDraftBannerDraft(pendingDraft);
@@ -173,6 +174,7 @@ export default function Index() {
       dismissDraft();
     }
   }, [pendingDraft, dismissDraft]);
+
 
   const handleRestoreDraft = () => {
     if (!draftBannerDraft) return;
