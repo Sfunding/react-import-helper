@@ -44,6 +44,18 @@ export function Navbar() {
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Link>
+              <Link
+                to="/deal/new"
+                onClick={(e) => handleNavClick(e, '/deal/new')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  location.pathname.startsWith('/deal')
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
                 <Calculator className="w-4 h-4" />
                 <span className="hidden sm:inline">Calculator</span>
               </Link>
