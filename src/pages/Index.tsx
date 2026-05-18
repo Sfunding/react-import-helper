@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Save, FilePlus, Info, ChevronRight, FileSpreadsheet, FileText, TrendingUp, AlertCircle, MoreHorizontal, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Navbar } from '@/components/Navbar';
@@ -144,6 +144,11 @@ export default function Index() {
   useBeforeUnloadGuard(isDirty);
 
   // Detect a previously-saved draft on mount (e.g. after a crash/refresh)
+  // Capture the incoming-load signal synchronously on first render, before any
+  // effect (including the loadCalculation one below) has a chance to clear it.
+  const hadIncomingLoadRef = useRef<boolean>(
+    typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation')
+  );
   const { draft: pendingDraft, dismiss: dismissDraft } = useDraftOnMount();
   const [draftBannerDraft, setDraftBannerDraft] = useState<DraftPayload | null>(null);
   useEffect(() => {
@@ -153,9 +158,13 @@ export default function Index() {
                        (pendingDraft.merchant?.name ?? '') !== '' ||
                        (pendingDraft.merchant?.monthlyRevenue ?? 0) > 0;
     // Don't double-prompt when we're about to load a calc from sessionStorage
-    const incomingLoad = !!sessionStorage.getItem('loadCalculation');
-    if (hasContent && !incomingLoad) setDraftBannerDraft(pendingDraft);
-    else dismissDraft();
+    const incomingLoad = hadIncomingLoadRef.current;
+    if (hasContent && !incomingLoad) {
+      setDraftBannerDraft(pendingDraft);
+    } else {
+      if (incomingLoad) clearDraft();
+      dismissDraft();
+    }
   }, [pendingDraft, dismissDraft]);
 
   const handleRestoreDraft = () => {
