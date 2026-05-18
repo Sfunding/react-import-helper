@@ -806,17 +806,13 @@ export default function Index() {
   };
 
   const handleNewCalculation = () => {
-    setMerchant(DEFAULT_MERCHANT);
-    setSettings(DEFAULT_SETTINGS);
-    setPositions([]);
-    setActiveTab('positions');
-    setLoadedCalculationId(null);
-    setLoadedCalculationName('');
-    setParentCalculationId(null);
-    setParentCalculationName('');
-    setLastSavedState('');
+    // Reset hydration guard and navigate to /deal/new. The hydration effect
+    // there will perform the state reset and open the New tab.
+    hydratedKeyRef.current = null;
     clearDraft();
+    navigate('/deal/new');
   };
+
 
   // Create export data from current state (for exporting without saving)
   const createExportData = (): SavedCalculation => ({
