@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calculator, FolderOpen, LogOut, Settings } from 'lucide-react';
+import { Calculator, FolderOpen, LogOut, Settings, LayoutDashboard, FilePlus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import avionLogo from '@/assets/avion-logo.png';
@@ -17,7 +17,8 @@ export function Navbar() {
   const isActive = (path: string) => location.pathname === path;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
-    if (location.pathname === '/' && path !== '/') {
+    const onCalculator = location.pathname.startsWith('/deal/');
+    if (onCalculator && !path.startsWith('/deal/')) {
       const customNav = (window as any).__calculatorNavigation;
       if (customNav) {
         e.preventDefault();
@@ -25,6 +26,7 @@ export function Navbar() {
       }
     }
   };
+
 
   return (
     <nav className="bg-card border-b border-border shadow-sm">
@@ -41,6 +43,18 @@ export function Navbar() {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive('/') 
                     ? 'bg-primary text-primary-foreground' 
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Link>
+              <Link
+                to="/deal/new"
+                onClick={(e) => handleNavClick(e, '/deal/new')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  location.pathname.startsWith('/deal')
+                    ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >

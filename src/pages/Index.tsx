@@ -11,7 +11,9 @@ import { useCalculations } from '@/hooks/useCalculations';
 import { supabase } from '@/integrations/supabase/client';
 import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useOpenTabs, NEW_TAB_ID } from '@/hooks/useOpenTabs';
+import { OpenTabsBar } from '@/components/OpenTabsBar';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
@@ -53,9 +55,14 @@ import { CalendarIcon } from 'lucide-react';
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
 
 export default function Index() {
-  const { saveCalculation, updateCalculation, isSaving, isUpdating } = useCalculations();
+  const { saveCalculation, updateCalculation, isSaving, isUpdating, calculations } = useCalculations();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { dealId: dealIdParam } = useParams<{ dealId?: string }>();
+  const isNewRoute = !dealIdParam || dealIdParam === 'new';
+  const routeDealId = isNewRoute ? null : (dealIdParam || null);
+  const { openTab } = useOpenTabs();
+
 
   const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -144,10 +151,12 @@ export default function Index() {
   useBeforeUnloadGuard(isDirty);
 
   // Detect a previously-saved draft on mount (e.g. after a crash/refresh)
-  // Capture the incoming-load signal synchronously on first render, before any
-  // effect (including the loadCalculation one below) has a chance to clear it.
+  // Treat any saved-deal route (or sessionStorage load) as an incoming load,
+  // captured synchronously on the first render so it can't be lost to effect
+  // timing.
   const hadIncomingLoadRef = useRef<boolean>(
-    typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation')
+    (!!routeDealId) ||
+    (typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation'))
   );
   const { draft: pendingDraft, dismiss: dismissDraft } = useDraftOnMount();
   const [draftBannerDraft, setDraftBannerDraft] = useState<DraftPayload | null>(null);
@@ -157,7 +166,6 @@ export default function Index() {
     const hasContent = (pendingDraft.positions?.length ?? 0) > 0 ||
                        (pendingDraft.merchant?.name ?? '') !== '' ||
                        (pendingDraft.merchant?.monthlyRevenue ?? 0) > 0;
-    // Don't double-prompt when we're about to load a calc from sessionStorage
     const incomingLoad = hadIncomingLoadRef.current;
     if (hasContent && !incomingLoad) {
       setDraftBannerDraft(pendingDraft);
@@ -166,6 +174,7 @@ export default function Index() {
       dismissDraft();
     }
   }, [pendingDraft, dismissDraft]);
+
 
   const handleRestoreDraft = () => {
     if (!draftBannerDraft) return;
@@ -193,89 +202,167 @@ export default function Index() {
     writeAutoSaveEnabled(next);
   };
 
-  // Load calculation from sessionStorage if available
+  // ============================================================
+  // Hydration: route-driven (/deal/:id) with sessionStorage fallback
+  // ============================================================
+  const hydratedKeyRef = useRef<string | null>(null);
+  const [hydrating, setHydrating] = useState<boolean>(!!routeDealId);
 
   useEffect(() => {
+    // Build the source payload from: sessionStorage (legacy/commit flow) > route id
     const stored = sessionStorage.getItem('loadCalculation');
+    let data: any = null;
+    let sourceKey: string | null = null;
+
     if (stored) {
       try {
-        const data = JSON.parse(stored);
-        if (data.merchant) setMerchant(data.merchant);
-        if (data.settings) setSettings(data.settings);
-        
-        // Determine the effective as-of date the saved data was true on.
-        const loadedAsOf: string = data.as_of_date
-          || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
-          || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-
-        // Hydrate anchors so future as-of-date changes reprice correctly.
-        let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
-          // Respect an explicit manual anchor when present (e.g., committed scenarios
-          // lock a manual anchor at the commit date so round-trips are exact).
-          if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) {
-            return p;
-          }
-          // Funded anchor is implicit — fundedDate + amountFunded handle it.
-          if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
-            return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
-          }
-          // Otherwise stamp a manual anchor on the as-of date the data was true on.
-          if (!p.balanceAsOfDate) {
-            return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
-          }
-          return p;
-        });
-
-        // Use the saved as-of date as-is. Balances saved at loadedAsOf are already correct for that
-        // date, and `fundedDate` anchors will reprice on demand when the user moves the
-        // "Positions as of" picker via handleAsOfDateChange.
-        const effectiveAsOf = loadedAsOf;
-
-        if (loadedPositions) setPositions(loadedPositions);
-
-        setAsOfDate(effectiveAsOf);
-
-
-        // Track the loaded calculation ID and name for updates
-        if (data.id) {
-          setLoadedCalculationId(data.id);
-          setLoadedCalculationName(data.name || '');
-        }
-
-        // Hydrate parent breadcrumb (when this deal was committed from a scenario)
-        const parentId: string | null = data.parent_calculation_id ?? null;
-        const parentNameInline: string = data.parent_calculation_name ?? '';
-        setParentCalculationId(parentId);
-        setParentCalculationName(parentNameInline);
-        if (parentId && !parentNameInline) {
-          // Lazy fetch when not provided in the load payload
-          (async () => {
-            const { data: row } = await supabase
-              .from('saved_calculations')
-              .select('name')
-              .eq('id', parentId)
-              .maybeSingle();
-            if (row?.name) setParentCalculationName(row.name);
-          })();
-        }
-
-        sessionStorage.removeItem('loadCalculation');
-        // Mark as "saved" state since we just loaded it
-        setLastSavedState(JSON.stringify({ 
-          merchant: data.merchant || DEFAULT_MERCHANT, 
-          settings: data.settings || DEFAULT_SETTINGS, 
-          positions: loadedPositions || [],
-          asOfDate: effectiveAsOf,
-        }));
-        toast({
-          title: 'Calculation loaded',
-          description: 'Your saved calculation has been loaded.'
-        });
+        data = JSON.parse(stored);
+        sourceKey = `ss:${data?.id || Date.now()}`;
       } catch (e) {
         console.error('Failed to parse stored calculation:', e);
+        sessionStorage.removeItem('loadCalculation');
       }
     }
-  }, [toast]);
+
+    // If no sessionStorage payload, look up from the route id
+    if (!data && routeDealId) {
+      const calc = calculations.find(c => c.id === routeDealId);
+      if (!calc) {
+        // Still loading the calculations list — wait for it
+        return;
+      }
+      data = {
+        id: calc.id,
+        name: calc.name,
+        merchant: {
+          name: calc.merchant_name || '',
+          businessType: calc.merchant_business_type || '',
+          monthlyRevenue: calc.merchant_monthly_revenue || 0,
+        },
+        settings: calc.settings,
+        positions: calc.positions,
+        funded_at: (calc as any).funded_at || null,
+        as_of_date: (calc as any).as_of_date || null,
+        parent_calculation_id: (calc as any).parent_calculation_id || null,
+      };
+      sourceKey = `route:${calc.id}`;
+    }
+
+    // /deal/new — reset state once
+    if (!data && isNewRoute) {
+      if (hydratedKeyRef.current !== 'new') {
+        hydratedKeyRef.current = 'new';
+        setMerchant(DEFAULT_MERCHANT);
+        setSettings(DEFAULT_SETTINGS);
+        setPositions([]);
+        setLoadedCalculationId(null);
+        setLoadedCalculationName('');
+        setParentCalculationId(null);
+        setParentCalculationName('');
+        setLastSavedState('');
+        setHydrating(false);
+        openTab({ id: NEW_TAB_ID, name: 'New calculation' });
+      }
+      return;
+    }
+
+    if (!data || !sourceKey) {
+      setHydrating(false);
+      return;
+    }
+
+    // Skip if already hydrated for this key
+    if (hydratedKeyRef.current === sourceKey) {
+      setHydrating(false);
+      return;
+    }
+    hydratedKeyRef.current = sourceKey;
+
+    try {
+      if (data.merchant) setMerchant(data.merchant);
+      if (data.settings) setSettings(data.settings);
+
+      const loadedAsOf: string = data.as_of_date
+        || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
+        || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+
+      let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
+        if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) return p;
+        if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+          return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
+        }
+        if (!p.balanceAsOfDate) {
+          return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
+        }
+        return p;
+      });
+
+      const effectiveAsOf = loadedAsOf;
+
+      if (loadedPositions) setPositions(loadedPositions);
+      setAsOfDate(effectiveAsOf);
+
+      if (data.id) {
+        setLoadedCalculationId(data.id);
+        setLoadedCalculationName(data.name || '');
+        // Add to in-app tab bar
+        openTab({
+          id: data.id,
+          name: data.name || 'Untitled',
+          merchant: data.merchant?.name,
+        });
+      }
+
+      const parentId: string | null = data.parent_calculation_id ?? null;
+      const parentNameInline: string = data.parent_calculation_name ?? '';
+      setParentCalculationId(parentId);
+      setParentCalculationName(parentNameInline);
+      if (parentId && !parentNameInline) {
+        (async () => {
+          const { data: row } = await supabase
+            .from('saved_calculations')
+            .select('name')
+            .eq('id', parentId)
+            .maybeSingle();
+          if (row?.name) setParentCalculationName(row.name);
+        })();
+      }
+
+      if (stored) sessionStorage.removeItem('loadCalculation');
+      setLastSavedState(JSON.stringify({
+        merchant: data.merchant || DEFAULT_MERCHANT,
+        settings: data.settings || DEFAULT_SETTINGS,
+        positions: loadedPositions || [],
+        asOfDate: effectiveAsOf,
+      }));
+      setHydrating(false);
+      toast({
+        title: 'Calculation loaded',
+        description: 'Your saved calculation has been loaded.',
+      });
+    } catch (e) {
+      console.error('Hydration failed:', e);
+      setHydrating(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeDealId, isNewRoute, calculations.length]);
+
+  // If saved-deal route but calc not found after load completes, bounce
+  useEffect(() => {
+    if (!routeDealId) return;
+    if (calculations.length === 0) return; // still loading
+    const found = calculations.find(c => c.id === routeDealId);
+    if (!found && hydratedKeyRef.current !== `route:${routeDealId}`) {
+      // Only show if we never hydrated from sessionStorage for this id
+      const ssActive = !!sessionStorage.getItem('loadCalculation');
+      if (!ssActive) {
+        toast({ title: 'Deal not found', description: 'Returning to dashboard.', variant: 'destructive' });
+        navigate('/', { replace: true });
+      }
+    }
+  }, [routeDealId, calculations, navigate, toast]);
+
+
 
   // Helper to get effective balance - always use the stored balance for calculations
   const getEffectiveBalance = (p: Position): number | null => {
@@ -719,17 +806,13 @@ export default function Index() {
   };
 
   const handleNewCalculation = () => {
-    setMerchant(DEFAULT_MERCHANT);
-    setSettings(DEFAULT_SETTINGS);
-    setPositions([]);
-    setActiveTab('positions');
-    setLoadedCalculationId(null);
-    setLoadedCalculationName('');
-    setParentCalculationId(null);
-    setParentCalculationName('');
-    setLastSavedState('');
+    // Reset hydration guard and navigate to /deal/new. The hydration effect
+    // there will perform the state reset and open the New tab.
+    hydratedKeyRef.current = null;
     clearDraft();
+    navigate('/deal/new');
   };
+
 
   // Create export data from current state (for exporting without saving)
   const createExportData = (): SavedCalculation => ({
@@ -765,6 +848,29 @@ export default function Index() {
     // Clear loaded ID since this is now a new calculation
     setLoadedCalculationId(result?.id || null);
     setLoadedCalculationName(name);
+
+    // Promote /deal/new -> /deal/:id so the URL reflects the saved deal
+    if (result?.id) {
+      // Mark this id as already hydrated to avoid the route change re-running hydration
+      hydratedKeyRef.current = `route:${result.id}`;
+      openTab({ id: result.id, name, merchant: merchant.name });
+      // Replace the New tab from the bar
+      try {
+        const evt = new Event('avion:openTabs:changed');
+        // close NEW_TAB_ID
+        const raw = localStorage.getItem('avion:openTabs:v1');
+        if (raw) {
+          const arr = JSON.parse(raw).filter((t: any) => t?.id !== NEW_TAB_ID);
+          localStorage.setItem('avion:openTabs:v1', JSON.stringify(arr));
+          window.dispatchEvent(evt);
+        }
+      } catch { /* ignore */ }
+      if (isNewRoute) {
+        navigate(`/deal/${result.id}`, { replace: true });
+      }
+    }
+
+
     
     // Store the saved calculation for export options
     if (result) {
@@ -953,9 +1059,23 @@ export default function Index() {
     updateCalculation,
   });
 
+  // Loading state while hydrating a saved deal
+  if (hydrating && routeDealId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <OpenTabsBar />
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm text-muted-foreground">Loading deal…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <OpenTabsBar />
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         {draftBannerDraft && (
           <DraftRestoreBanner
@@ -970,11 +1090,7 @@ export default function Index() {
             {parentCalculationId && (
               <button
                 type="button"
-                onClick={() => {
-                  sessionStorage.setItem('loadCalculation', JSON.stringify({ id: parentCalculationId }));
-                  navigate('/');
-                  window.location.reload();
-                }}
+                onClick={() => navigate(`/deal/${parentCalculationId}`)}
                 className="w-full flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 px-3 py-2 text-sm text-primary text-left transition"
                 title="Open the parent deal"
               >

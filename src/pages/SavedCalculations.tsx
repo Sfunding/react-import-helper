@@ -7,6 +7,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { UserFilter } from '@/components/UserFilter';
 import { ShareDealDialog } from '@/components/ShareDealDialog';
 import { Navbar } from '@/components/Navbar';
+import { OpenTabsBar } from '@/components/OpenTabsBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -91,20 +92,18 @@ export default function SavedCalculations() {
   };
 
   const handleLoad = (calc: typeof calculations[0]) => {
-    sessionStorage.setItem('loadCalculation', JSON.stringify({
-      id: calc.id,
-      name: calc.name,
-      merchant: {
-        name: calc.merchant_name || '',
-        businessType: calc.merchant_business_type || '',
-        monthlyRevenue: calc.merchant_monthly_revenue || 0
-      },
-      settings: calc.settings,
-      positions: calc.positions,
-      funded_at: (calc as any).funded_at || null,
-      as_of_date: (calc as any).as_of_date || null,
-    }));
-    navigate('/');
+    // Open the tab and navigate to the dedicated deal route
+    try {
+      const key = 'avion:openTabs:v1';
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      const idx = arr.findIndex((t: any) => t?.id === calc.id);
+      const tab = { id: calc.id, name: calc.name, merchant: calc.merchant_name || undefined };
+      if (idx >= 0) arr[idx] = tab; else arr.push(tab);
+      localStorage.setItem(key, JSON.stringify(arr));
+      window.dispatchEvent(new Event('avion:openTabs:changed'));
+    } catch { /* ignore */ }
+    navigate(`/deal/${calc.id}`);
   };
 
   const openDuplicateDialog = (calc: typeof calculations[0]) => {
@@ -149,6 +148,7 @@ export default function SavedCalculations() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <OpenTabsBar />
       <div className="max-w-6xl mx-auto p-4">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -157,7 +157,7 @@ export default function SavedCalculations() {
           </h1>
           <div className="flex items-center gap-3">
             {showUserFilter && <UserFilter value={userFilter} onChange={setUserFilter} />}
-            <Button onClick={() => navigate('/')} variant="outline">
+            <Button onClick={() => navigate('/deal/new')} variant="outline">
               <Calculator className="w-4 h-4 mr-2" />
               New Calculation
             </Button>
@@ -176,7 +176,7 @@ export default function SavedCalculations() {
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">No Saved Calculations</h3>
               <p className="text-muted-foreground mb-4">Create and save your first calculation to see it here.</p>
-              <Button onClick={() => navigate('/')}>Create Calculation</Button>
+              <Button onClick={() => navigate('/deal/new')}>Create Calculation</Button>
             </CardContent>
           </Card>
         ) : (

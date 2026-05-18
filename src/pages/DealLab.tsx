@@ -454,22 +454,8 @@ export default function DealLabPage() {
             <button
               type="button"
               onClick={() => {
-                if (selectedCalc) {
-                  sessionStorage.setItem('loadCalculation', JSON.stringify({
-                    id: selectedCalc.id,
-                    name: selectedCalc.name,
-                    merchant: {
-                      name: selectedCalc.merchant_name || '',
-                      businessType: selectedCalc.merchant_business_type || '',
-                      monthlyRevenue: selectedCalc.merchant_monthly_revenue || 0,
-                    },
-                    settings: selectedCalc.settings,
-                    positions: selectedCalc.positions,
-                    funded_at: (selectedCalc as unknown as { funded_at?: string | null }).funded_at || null,
-                    as_of_date: (selectedCalc as unknown as { as_of_date?: string | null }).as_of_date || null,
-                  }));
-                }
-                navigate('/');
+                if (selectedCalc) navigate(`/deal/${selectedCalc.id}`);
+                else navigate('/');
               }}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-1"
             >

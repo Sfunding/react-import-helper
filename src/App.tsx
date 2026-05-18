@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { AuthGuard } from "./components/AuthGuard";
 import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import SavedCalculations from "./pages/SavedCalculations";
@@ -25,6 +26,22 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route 
               path="/" 
+              element={
+                <AuthGuard>
+                  <Dashboard />
+                </AuthGuard>
+              } 
+            />
+            <Route 
+              path="/deal/new" 
+              element={
+                <AuthGuard>
+                  <Index />
+                </AuthGuard>
+              } 
+            />
+            <Route 
+              path="/deal/:dealId" 
               element={
                 <AuthGuard>
                   <Index />
