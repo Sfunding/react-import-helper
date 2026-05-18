@@ -55,9 +55,14 @@ import { CalendarIcon } from 'lucide-react';
 type TabType = 'positions' | 'metrics' | 'daily' | 'weekly' | 'offer' | 'merchantOffer';
 
 export default function Index() {
-  const { saveCalculation, updateCalculation, isSaving, isUpdating } = useCalculations();
+  const { saveCalculation, updateCalculation, isSaving, isUpdating, calculations } = useCalculations();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { dealId: dealIdParam } = useParams<{ dealId?: string }>();
+  const isNewRoute = !dealIdParam || dealIdParam === 'new';
+  const routeDealId = isNewRoute ? null : (dealIdParam || null);
+  const { openTab } = useOpenTabs();
+
 
   const [merchant, setMerchant] = useState<Merchant>(DEFAULT_MERCHANT);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
