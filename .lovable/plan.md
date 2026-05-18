@@ -1,26 +1,55 @@
-## Plan
+## Problem
 
-1. **Make Excel use the same position view as the app**
-   - Update the export calculation helper to respect the calculation `as_of_date`.
-   - Positions with a future funded date will be excluded/zeroed in Excel the same way they are on-screen.
-   - Totals, included balances, daily payments, days left, and schedule infusions will all derive from that normalized position list.
+When clicking a saved deal from Saved Calculations, the deal loads briefly, then the app reverts to an empty/new calculation page.
 
-2. **Preserve cents for position money columns**
-   - Change the Excel Positions tab money cells from rounded strings to real numeric values where possible.
-   - Apply the same two-decimal currency format used on the schedule tabs to Amount Funded, Balance, Daily Payment, and totals.
-   - Keep non-numeric markers like `Unknown`, `-`, and auto labels readable without breaking Excel sums.
+## Root cause
 
-3. **Include the as-of date in all export paths**
-   - Add `as_of_date` to exports generated directly from the current calculator.
-   - Add `as_of_date` to the saved/updated calculation object used by the post-save Excel buttons.
-   - Saved Calculations exports already carry `as_of_date`; this will make all export entry points consistent.
+In `src/pages/Index.tsx` there is a startup race between two effects:
 
-4. **Verify the tie-out behavior**
-   - Confirm the Weekly Schedule cash infusion sum equals the included position balances / Net Advance with cents preserved.
-   - Confirm the Positions tab balance totals match the Summary/Offer Details and app values.
+- `useDraftOnMount` reads the local-storage draft inside a `useEffect`, so `pendingDraft` becomes available only on the *next* render.
+- A separate `useEffect` reads `sessionStorage.loadCalculation` and immediately removes it.
 
-## Technical details
+The draft-banner effect that decides whether to offer "Unsaved draft recovered" checks `sessionStorage.getItem('loadCalculation')` to detect an incoming load. But because it runs after `pendingDraft` is set — i.e. after the load effect already cleared the key — `incomingLoad` is always `false` on a deal load. The banner shows up, the user (or any restore action) then overwrites the freshly-loaded deal with the previous "new calculation" draft.
 
-- Main files: `src/lib/exportUtils.ts` and `src/pages/Index.tsx`.
-- The current app normalizes positions using `asOfDate` before totals/schedules, but the Excel export currently calculates from raw positions and often omits `as_of_date` from current-state exports.
-- Excel Positions currently uses `fmtNoDecimals(...)`, which rounds cents and converts values to strings. I’ll change those cells to numeric values plus Excel number formats.
+## Fix
+
+Capture the incoming-load signal synchronously at module/mount time, before any effect can clear it.
+
+1. In `src/pages/Index.tsx`, add a top-of-component ref:
+   ```ts
+   const hadIncomingLoadRef = useRef<boolean>(
+     typeof window !== 'undefined' && !!sessionStorage.getItem('loadCalculation')
+   );
+   ```
+   This is evaluated during the very first render, before any `useEffect` runs.
+
+2. Replace the existing check inside the draft-banner effect (around line 156):
+   ```ts
+   const incomingLoad = !!sessionStorage.getItem('loadCalculation');
+   ```
+   with:
+   ```ts
+   const incomingLoad = hadIncomingLoadRef.current;
+   ```
+
+3. When an incoming load is detected, also clear the stored draft so a stale draft can't reappear later:
+   ```ts
+   if (hasContent && !incomingLoad) {
+     setDraftBannerDraft(pendingDraft);
+   } else {
+     if (incomingLoad) clearDraft();
+     dismissDraft();
+   }
+   ```
+
+That's the only change required. The load-from-sessionStorage effect, auto-save logic, and draft backup logic stay as-is.
+
+## Verification
+
+- Open a saved deal from `/saved` → deal stays loaded; no "Unsaved draft recovered" banner appears.
+- Refresh `/` after editing without saving → draft banner still appears as before.
+- Discard / Restore on the banner still behave correctly when there is no incoming load.
+
+## Out of scope
+
+- Excel/PDF math, factor rates, schedules, RLS, auth.
