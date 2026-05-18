@@ -17,7 +17,8 @@ export function Navbar() {
   const isActive = (path: string) => location.pathname === path;
 
   const handleNavClick = (e: React.MouseEvent, path: string) => {
-    if (location.pathname === '/' && path !== '/') {
+    const onCalculator = location.pathname.startsWith('/deal/');
+    if (onCalculator && !path.startsWith('/deal/')) {
       const customNav = (window as any).__calculatorNavigation;
       if (customNav) {
         e.preventDefault();
@@ -25,6 +26,7 @@ export function Navbar() {
       }
     }
   };
+
 
   return (
     <nav className="bg-card border-b border-border shadow-sm">
