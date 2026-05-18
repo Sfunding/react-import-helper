@@ -202,89 +202,167 @@ export default function Index() {
     writeAutoSaveEnabled(next);
   };
 
-  // Load calculation from sessionStorage if available
+  // ============================================================
+  // Hydration: route-driven (/deal/:id) with sessionStorage fallback
+  // ============================================================
+  const hydratedKeyRef = useRef<string | null>(null);
+  const [hydrating, setHydrating] = useState<boolean>(!!routeDealId);
 
   useEffect(() => {
+    // Build the source payload from: sessionStorage (legacy/commit flow) > route id
     const stored = sessionStorage.getItem('loadCalculation');
+    let data: any = null;
+    let sourceKey: string | null = null;
+
     if (stored) {
       try {
-        const data = JSON.parse(stored);
-        if (data.merchant) setMerchant(data.merchant);
-        if (data.settings) setSettings(data.settings);
-        
-        // Determine the effective as-of date the saved data was true on.
-        const loadedAsOf: string = data.as_of_date
-          || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
-          || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-
-        // Hydrate anchors so future as-of-date changes reprice correctly.
-        let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
-          // Respect an explicit manual anchor when present (e.g., committed scenarios
-          // lock a manual anchor at the commit date so round-trips are exact).
-          if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) {
-            return p;
-          }
-          // Funded anchor is implicit — fundedDate + amountFunded handle it.
-          if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
-            return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
-          }
-          // Otherwise stamp a manual anchor on the as-of date the data was true on.
-          if (!p.balanceAsOfDate) {
-            return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
-          }
-          return p;
-        });
-
-        // Use the saved as-of date as-is. Balances saved at loadedAsOf are already correct for that
-        // date, and `fundedDate` anchors will reprice on demand when the user moves the
-        // "Positions as of" picker via handleAsOfDateChange.
-        const effectiveAsOf = loadedAsOf;
-
-        if (loadedPositions) setPositions(loadedPositions);
-
-        setAsOfDate(effectiveAsOf);
-
-
-        // Track the loaded calculation ID and name for updates
-        if (data.id) {
-          setLoadedCalculationId(data.id);
-          setLoadedCalculationName(data.name || '');
-        }
-
-        // Hydrate parent breadcrumb (when this deal was committed from a scenario)
-        const parentId: string | null = data.parent_calculation_id ?? null;
-        const parentNameInline: string = data.parent_calculation_name ?? '';
-        setParentCalculationId(parentId);
-        setParentCalculationName(parentNameInline);
-        if (parentId && !parentNameInline) {
-          // Lazy fetch when not provided in the load payload
-          (async () => {
-            const { data: row } = await supabase
-              .from('saved_calculations')
-              .select('name')
-              .eq('id', parentId)
-              .maybeSingle();
-            if (row?.name) setParentCalculationName(row.name);
-          })();
-        }
-
-        sessionStorage.removeItem('loadCalculation');
-        // Mark as "saved" state since we just loaded it
-        setLastSavedState(JSON.stringify({ 
-          merchant: data.merchant || DEFAULT_MERCHANT, 
-          settings: data.settings || DEFAULT_SETTINGS, 
-          positions: loadedPositions || [],
-          asOfDate: effectiveAsOf,
-        }));
-        toast({
-          title: 'Calculation loaded',
-          description: 'Your saved calculation has been loaded.'
-        });
+        data = JSON.parse(stored);
+        sourceKey = `ss:${data?.id || Date.now()}`;
       } catch (e) {
         console.error('Failed to parse stored calculation:', e);
+        sessionStorage.removeItem('loadCalculation');
       }
     }
-  }, [toast]);
+
+    // If no sessionStorage payload, look up from the route id
+    if (!data && routeDealId) {
+      const calc = calculations.find(c => c.id === routeDealId);
+      if (!calc) {
+        // Still loading the calculations list — wait for it
+        return;
+      }
+      data = {
+        id: calc.id,
+        name: calc.name,
+        merchant: {
+          name: calc.merchant_name || '',
+          businessType: calc.merchant_business_type || '',
+          monthlyRevenue: calc.merchant_monthly_revenue || 0,
+        },
+        settings: calc.settings,
+        positions: calc.positions,
+        funded_at: (calc as any).funded_at || null,
+        as_of_date: (calc as any).as_of_date || null,
+        parent_calculation_id: (calc as any).parent_calculation_id || null,
+      };
+      sourceKey = `route:${calc.id}:${calc.updated_at || ''}`;
+    }
+
+    // /deal/new — reset state once
+    if (!data && isNewRoute) {
+      if (hydratedKeyRef.current !== 'new') {
+        hydratedKeyRef.current = 'new';
+        setMerchant(DEFAULT_MERCHANT);
+        setSettings(DEFAULT_SETTINGS);
+        setPositions([]);
+        setLoadedCalculationId(null);
+        setLoadedCalculationName('');
+        setParentCalculationId(null);
+        setParentCalculationName('');
+        setLastSavedState('');
+        setHydrating(false);
+        openTab({ id: NEW_TAB_ID, name: 'New calculation' });
+      }
+      return;
+    }
+
+    if (!data || !sourceKey) {
+      setHydrating(false);
+      return;
+    }
+
+    // Skip if already hydrated for this key
+    if (hydratedKeyRef.current === sourceKey) {
+      setHydrating(false);
+      return;
+    }
+    hydratedKeyRef.current = sourceKey;
+
+    try {
+      if (data.merchant) setMerchant(data.merchant);
+      if (data.settings) setSettings(data.settings);
+
+      const loadedAsOf: string = data.as_of_date
+        || (data.funded_at ? String(data.funded_at).slice(0, 10) : null)
+        || (data.created_at ? String(data.created_at).slice(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+
+      let loadedPositions: Position[] = (data.positions || []).map((p: Position) => {
+        if (p.balanceAnchor === 'manual' && p.balanceAsOfDate) return p;
+        if (p.fundedDate && p.amountFunded != null && p.amountFunded > 0) {
+          return { ...p, balanceAnchor: p.balanceAnchor ?? 'funded' };
+        }
+        if (!p.balanceAsOfDate) {
+          return { ...p, balanceAsOfDate: loadedAsOf, balanceAnchor: 'manual' };
+        }
+        return p;
+      });
+
+      const effectiveAsOf = loadedAsOf;
+
+      if (loadedPositions) setPositions(loadedPositions);
+      setAsOfDate(effectiveAsOf);
+
+      if (data.id) {
+        setLoadedCalculationId(data.id);
+        setLoadedCalculationName(data.name || '');
+        // Add to in-app tab bar
+        openTab({
+          id: data.id,
+          name: data.name || 'Untitled',
+          merchant: data.merchant?.name,
+        });
+      }
+
+      const parentId: string | null = data.parent_calculation_id ?? null;
+      const parentNameInline: string = data.parent_calculation_name ?? '';
+      setParentCalculationId(parentId);
+      setParentCalculationName(parentNameInline);
+      if (parentId && !parentNameInline) {
+        (async () => {
+          const { data: row } = await supabase
+            .from('saved_calculations')
+            .select('name')
+            .eq('id', parentId)
+            .maybeSingle();
+          if (row?.name) setParentCalculationName(row.name);
+        })();
+      }
+
+      if (stored) sessionStorage.removeItem('loadCalculation');
+      setLastSavedState(JSON.stringify({
+        merchant: data.merchant || DEFAULT_MERCHANT,
+        settings: data.settings || DEFAULT_SETTINGS,
+        positions: loadedPositions || [],
+        asOfDate: effectiveAsOf,
+      }));
+      setHydrating(false);
+      toast({
+        title: 'Calculation loaded',
+        description: 'Your saved calculation has been loaded.',
+      });
+    } catch (e) {
+      console.error('Hydration failed:', e);
+      setHydrating(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeDealId, isNewRoute, calculations.length]);
+
+  // If saved-deal route but calc not found after load completes, bounce
+  useEffect(() => {
+    if (!routeDealId) return;
+    if (calculations.length === 0) return; // still loading
+    const found = calculations.find(c => c.id === routeDealId);
+    if (!found && hydratedKeyRef.current !== `route:${routeDealId}:`) {
+      // Only show if we never hydrated from sessionStorage for this id
+      const ssActive = !!sessionStorage.getItem('loadCalculation');
+      if (!ssActive) {
+        toast({ title: 'Deal not found', description: 'Returning to dashboard.', variant: 'destructive' });
+        navigate('/', { replace: true });
+      }
+    }
+  }, [routeDealId, calculations, navigate, toast]);
+
+
 
   // Helper to get effective balance - always use the stored balance for calculations
   const getEffectiveBalance = (p: Position): number | null => {
