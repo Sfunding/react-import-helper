@@ -155,7 +155,7 @@ export default function SavedCalculations() {
           </h1>
           <div className="flex items-center gap-3">
             {showUserFilter && <UserFilter value={userFilter} onChange={setUserFilter} />}
-            <Button onClick={() => navigate('/')} variant="outline">
+            <Button onClick={() => navigate('/deal/new')} variant="outline">
               <Calculator className="w-4 h-4 mr-2" />
               New Calculation
             </Button>
