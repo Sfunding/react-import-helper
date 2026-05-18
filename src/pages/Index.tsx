@@ -245,7 +245,7 @@ export default function Index() {
         as_of_date: (calc as any).as_of_date || null,
         parent_calculation_id: (calc as any).parent_calculation_id || null,
       };
-      sourceKey = `route:${calc.id}:${calc.updated_at || ''}`;
+      sourceKey = `route:${calc.id}`;
     }
 
     // /deal/new — reset state once
