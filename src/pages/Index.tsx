@@ -852,7 +852,7 @@ export default function Index() {
     // Promote /deal/new -> /deal/:id so the URL reflects the saved deal
     if (result?.id) {
       // Mark this id as already hydrated to avoid the route change re-running hydration
-      hydratedKeyRef.current = `route:${result.id}:`;
+      hydratedKeyRef.current = `route:${result.id}`;
       openTab({ id: result.id, name, merchant: merchant.name });
       // Replace the New tab from the bar
       try {
