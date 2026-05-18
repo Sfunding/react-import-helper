@@ -7,6 +7,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { UserFilter } from '@/components/UserFilter';
 import { ShareDealDialog } from '@/components/ShareDealDialog';
 import { Navbar } from '@/components/Navbar';
+import { OpenTabsBar } from '@/components/OpenTabsBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
