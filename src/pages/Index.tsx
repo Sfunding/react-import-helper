@@ -848,6 +848,29 @@ export default function Index() {
     // Clear loaded ID since this is now a new calculation
     setLoadedCalculationId(result?.id || null);
     setLoadedCalculationName(name);
+
+    // Promote /deal/new -> /deal/:id so the URL reflects the saved deal
+    if (result?.id) {
+      // Mark this id as already hydrated to avoid the route change re-running hydration
+      hydratedKeyRef.current = `route:${result.id}:`;
+      openTab({ id: result.id, name, merchant: merchant.name });
+      // Replace the New tab from the bar
+      try {
+        const evt = new Event('avion:openTabs:changed');
+        // close NEW_TAB_ID
+        const raw = localStorage.getItem('avion:openTabs:v1');
+        if (raw) {
+          const arr = JSON.parse(raw).filter((t: any) => t?.id !== NEW_TAB_ID);
+          localStorage.setItem('avion:openTabs:v1', JSON.stringify(arr));
+          window.dispatchEvent(evt);
+        }
+      } catch { /* ignore */ }
+      if (isNewRoute) {
+        navigate(`/deal/${result.id}`, { replace: true });
+      }
+    }
+
+
     
     // Store the saved calculation for export options
     if (result) {
