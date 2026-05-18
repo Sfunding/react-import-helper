@@ -1059,9 +1059,23 @@ export default function Index() {
     updateCalculation,
   });
 
+  // Loading state while hydrating a saved deal
+  if (hydrating && routeDealId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <OpenTabsBar />
+        <div className="flex items-center justify-center py-20">
+          <div className="text-sm text-muted-foreground">Loading deal…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <OpenTabsBar />
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
         {draftBannerDraft && (
           <DraftRestoreBanner
