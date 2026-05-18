@@ -28,6 +28,22 @@ const App = () => (
               path="/" 
               element={
                 <AuthGuard>
+                  <Dashboard />
+                </AuthGuard>
+              } 
+            />
+            <Route 
+              path="/deal/new" 
+              element={
+                <AuthGuard>
+                  <Index />
+                </AuthGuard>
+              } 
+            />
+            <Route 
+              path="/deal/:dealId" 
+              element={
+                <AuthGuard>
                   <Index />
                 </AuthGuard>
               } 
