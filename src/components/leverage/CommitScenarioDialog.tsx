@@ -197,24 +197,20 @@ export function CommitScenarioDialog({
         totalDailyPayment: totals.totalDaily,
       });
 
-      sessionStorage.setItem('loadCalculation', JSON.stringify({
-        id: (newRow as any).id,
-        name: (newRow as any).name,
-        merchant: {
-          name: originalCalc.merchant_name || '',
-          businessType: originalCalc.merchant_business_type || '',
-          monthlyRevenue: originalCalc.merchant_monthly_revenue || 0,
-        },
-        settings,
-        positions,
-        funded_at: null,
-        as_of_date: asOfDate,
-        parent_calculation_id: originalCalc.id,
-        parent_calculation_name: originalCalc.name,
-      }));
+      const newId = (newRow as any).id;
+      try {
+        const key = 'avion:openTabs:v1';
+        const raw = localStorage.getItem(key);
+        const arr = raw ? JSON.parse(raw) : [];
+        const idx = arr.findIndex((t: any) => t?.id === newId);
+        const tab = { id: newId, name: (newRow as any).name, merchant: originalCalc.merchant_name || undefined };
+        if (idx >= 0) arr[idx] = tab; else arr.push(tab);
+        localStorage.setItem(key, JSON.stringify(arr));
+        window.dispatchEvent(new Event('avion:openTabs:changed'));
+      } catch { /* ignore */ }
       toast({ title: 'Snapshot committed', description: 'A new deal was created in the calculator.' });
       onOpenChange(false);
-      navigate('/');
+      navigate(`/deal/${newId}`);
     } catch {
       // toast handled inside the mutation
     }
