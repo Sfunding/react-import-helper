@@ -91,20 +91,18 @@ export default function SavedCalculations() {
   };
 
   const handleLoad = (calc: typeof calculations[0]) => {
-    sessionStorage.setItem('loadCalculation', JSON.stringify({
-      id: calc.id,
-      name: calc.name,
-      merchant: {
-        name: calc.merchant_name || '',
-        businessType: calc.merchant_business_type || '',
-        monthlyRevenue: calc.merchant_monthly_revenue || 0
-      },
-      settings: calc.settings,
-      positions: calc.positions,
-      funded_at: (calc as any).funded_at || null,
-      as_of_date: (calc as any).as_of_date || null,
-    }));
-    navigate('/');
+    // Open the tab and navigate to the dedicated deal route
+    try {
+      const key = 'avion:openTabs:v1';
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      const idx = arr.findIndex((t: any) => t?.id === calc.id);
+      const tab = { id: calc.id, name: calc.name, merchant: calc.merchant_name || undefined };
+      if (idx >= 0) arr[idx] = tab; else arr.push(tab);
+      localStorage.setItem(key, JSON.stringify(arr));
+      window.dispatchEvent(new Event('avion:openTabs:changed'));
+    } catch { /* ignore */ }
+    navigate(`/deal/${calc.id}`);
   };
 
   const openDuplicateDialog = (calc: typeof calculations[0]) => {
