@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Calculator, FolderOpen, LogOut, Settings } from 'lucide-react';
+import { Calculator, FolderOpen, LogOut, Settings, LayoutDashboard, FilePlus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import avionLogo from '@/assets/avion-logo.png';
