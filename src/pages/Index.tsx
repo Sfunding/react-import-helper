@@ -11,7 +11,9 @@ import { useCalculations } from '@/hooks/useCalculations';
 import { supabase } from '@/integrations/supabase/client';
 import { CurrencyInput } from '@/components/CurrencyInput';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useOpenTabs, NEW_TAB_ID } from '@/hooks/useOpenTabs';
+import { OpenTabsBar } from '@/components/OpenTabsBar';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
