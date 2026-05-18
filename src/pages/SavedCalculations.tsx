@@ -174,7 +174,7 @@ export default function SavedCalculations() {
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">No Saved Calculations</h3>
               <p className="text-muted-foreground mb-4">Create and save your first calculation to see it here.</p>
-              <Button onClick={() => navigate('/')}>Create Calculation</Button>
+              <Button onClick={() => navigate('/deal/new')}>Create Calculation</Button>
             </CardContent>
           </Card>
         ) : (
