@@ -111,8 +111,9 @@ const WEEKDAY_INDEX: Record<string, number> = {
 };
 
 /**
- * Count occurrences of a given weekday (e.g. "Wednesday") strictly between two dates.
- * Signed: negative when `to` < `from`. Excludes both endpoints.
+ * Count occurrences of a given weekday (e.g. "Wednesday") between two dates.
+ * Signed: negative when `to` < `from`. Excludes `from`, includes `to` —
+ * matching the convention used by `businessDaysBetweenSigned`.
  */
 export function countWeekdayOccurrencesBetweenSigned(from: Date, to: Date, weekdayName: string): number {
   const target = WEEKDAY_INDEX[weekdayName];
@@ -120,18 +121,12 @@ export function countWeekdayOccurrencesBetweenSigned(from: Date, to: Date, weekd
   if (from.getTime() === to.getTime()) return 0;
   const sign = to < from ? -1 : 1;
   const [start, end] = sign === 1 ? [from, to] : [to, from];
+  const cur = new Date(start); cur.setHours(0, 0, 0, 0);
+  const stop = new Date(end); stop.setHours(0, 0, 0, 0);
   let count = 0;
-  const cur = new Date(start);
-  cur.setHours(0, 0, 0, 0);
-  const stop = new Date(end);
-  stop.setHours(0, 0, 0, 0);
   while (cur < stop) {
     cur.setDate(cur.getDate() + 1);
-    if (cur < stop || cur.getTime() === stop.getTime()) {
-      // Exclude the endpoint itself
-      if (cur.getTime() === stop.getTime()) break;
-      if (cur.getDay() === target) count++;
-    }
+    if (cur.getDay() === target) count++;
   }
   return sign * count;
 }
