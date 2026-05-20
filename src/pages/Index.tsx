@@ -426,33 +426,37 @@ export default function Index() {
   // Base payback calculation from funding × rate (used as default reference)
   const basePayback = totalFunding * settings.rate;
   
-  // Determine Daily Payment and Term based on which is set
-  // Priority: dailyPaymentOverride > termDays > discount-based calculation
-  let newDailyPayment: number;
-  let calculatedNumberOfDebits: number;
-  
+  // Cadence-aware derivation. In weekly mode the user-entered "term" is # of
+  // weekly clips and the user-entered "payment" is the weekly clip amount.
+  // Stored field names are kept for backward-compatible persistence.
+  const cadenceWeekly = settings.reverseCadence === 'weekly';
+  const includedClip = cadenceWeekly ? includedDailyPayment * 5 : includedDailyPayment;
+
+  let newClip: number;       // weekly clip OR daily payment depending on mode
+  let termCount: number;     // weekly clips OR daily debits
+
   if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
-    // User specified daily payment → derive term from base payback
-    newDailyPayment = settings.dailyPaymentOverride;
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+    newClip = settings.dailyPaymentOverride;
+    termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
   } else if (settings.termDays !== null && settings.termDays > 0) {
-    // User specified term → derive daily payment from base payback
-    calculatedNumberOfDebits = settings.termDays;
-    newDailyPayment = calculatedNumberOfDebits > 0 ? basePayback / calculatedNumberOfDebits : 0;
+    termCount = settings.termDays;
+    newClip = termCount > 0 ? basePayback / termCount : 0;
   } else {
-    // Default: use discount to calculate payment, derive term
-    newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+    newClip = includedClip * (1 - settings.dailyPaymentDecrease);
+    termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
   }
-  
+
+  const newDailyPayment: number = cadenceWeekly ? newClip / 5 : newClip;
+  const calculatedNumberOfDebits: number = termCount; // in cadence-units
+
   // CRITICAL: Total Payback = Advance Amount × Factor Rate (exact, factor-based)
   const totalPayback = totalFunding * settings.rate;
-  
-  // Derive the implied discount for display
-  const impliedDiscount = includedDailyPayment > 0 
-    ? 1 - (newDailyPayment / includedDailyPayment) 
+
+  // Derive the implied discount for display (cadence-aware)
+  const impliedDiscount = includedClip > 0
+    ? 1 - (newClip / includedClip)
     : 0;
-  
+
   const newWeeklyPayment = newDailyPayment * 5;
   
   // Use ALL positions for leverage/SP calculations to show true merchant leverage
