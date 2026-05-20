@@ -1996,8 +1996,8 @@ export default function Index() {
                   <tr><td className="py-2">Net Advance</td><td className="text-right font-semibold py-2">{fmt(netAdvance)}</td></tr>
                   <tr><td className="py-2">Fees</td><td className="text-right py-2">{fmt(consolidationFees)}</td></tr>
                   <tr><td className="py-2">Rate</td><td className="text-right py-2">{settings.rate}</td></tr>
-                  <tr className="bg-secondary/20"><td className="py-2 font-medium"># of Debits</td><td className="text-right font-bold py-2">{calculatedNumberOfDebits}</td></tr>
-                  <tr><td className="py-2">New Daily Payment</td><td className="text-right font-semibold py-2">{fmt(newDailyPayment)}</td></tr>
+                  <tr className="bg-secondary/20"><td className="py-2 font-medium">{cadenceWeekly ? '# of Weekly Clips' : '# of Debits'}</td><td className="text-right font-bold py-2">{calculatedNumberOfDebits}</td></tr>
+                  <tr><td className="py-2">{cadenceWeekly ? 'New Weekly Payment' : 'New Daily Payment'}</td><td className="text-right font-semibold py-2">{fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}</td></tr>
                   <tr><td className="py-2">Max Exposure</td><td className="text-right text-destructive py-2">({fmt(metrics.maxExposure || 0)})</td></tr>
                   <tr><td className="py-2">Max Exposure Day</td><td className="text-right font-semibold py-2">{metrics.maxExposureDay || 0}</td></tr>
                   <tr className="bg-success/10"><td className="py-2 font-medium">Deal True Factor</td><td className="text-right font-bold py-2">{(metrics.dealTrueFactor || 0).toFixed(3)}</td></tr>
