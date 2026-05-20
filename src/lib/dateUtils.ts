@@ -103,7 +103,38 @@ type RepriceablePosition = {
   balanceAsOfDate?: string | null;
   balanceAnchor?: 'funded' | 'manual' | null;
   frequency?: 'daily' | 'weekly';
+  weeklyPullDay?: string | null;
 };
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
+};
+
+/**
+ * Count occurrences of a given weekday (e.g. "Wednesday") strictly between two dates.
+ * Signed: negative when `to` < `from`. Excludes both endpoints.
+ */
+export function countWeekdayOccurrencesBetweenSigned(from: Date, to: Date, weekdayName: string): number {
+  const target = WEEKDAY_INDEX[weekdayName];
+  if (target === undefined) return 0;
+  if (from.getTime() === to.getTime()) return 0;
+  const sign = to < from ? -1 : 1;
+  const [start, end] = sign === 1 ? [from, to] : [to, from];
+  let count = 0;
+  const cur = new Date(start);
+  cur.setHours(0, 0, 0, 0);
+  const stop = new Date(end);
+  stop.setHours(0, 0, 0, 0);
+  while (cur < stop) {
+    cur.setDate(cur.getDate() + 1);
+    if (cur < stop || cur.getTime() === stop.getTime()) {
+      // Exclude the endpoint itself
+      if (cur.getTime() === stop.getTime()) break;
+      if (cur.getDay() === target) count++;
+    }
+  }
+  return sign * count;
+}
 
 /**
  * Re-prices a position's balance to a new as-of date based on its anchor.
