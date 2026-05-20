@@ -307,30 +307,44 @@ export function exportToExcel(calculation: SavedCalculation) {
   const positionsData = [
     ['CURRENT MCA POSITIONS'],
     [''],
-    ['Ours', 'Include', 'Entity', 'Funded Date', 'Amount Funded', 'Balance', 'Daily Payment', 'Days Left', 'Last Payment Date'],
+    ['Ours', 'Include', 'Entity', 'Frequency', 'Pull Day', 'Funded Date', 'Amount Funded', 'Balance', 'Payment', 'Time Remaining', 'Last Payment Date'],
     ...positions.map(p => {
       const posWithDays = positionsWithDays.find(pwd => pwd.id === p.id);
       const isOurs = p.isOurPosition;
       const effectiveBalance = posWithDays?.balance;
       const isUnknown = effectiveBalance === null;
-      const hasAutoCalc = p.fundedDate && p.amountFunded !== null;
+      const isWeekly = p.frequency === 'weekly';
+      const daysLeft = posWithDays?.daysLeft || 0;
+      const payment = isWeekly ? (p.dailyPayment || 0) * 5 : (p.dailyPayment || 0);
+      const timeRemaining = isUnknown
+        ? '?'
+        : isWeekly
+          ? `${Math.ceil(daysLeft / 5)} weeks`
+          : `${daysLeft} days`;
       return [
         isOurs ? 'Yes' : 'No',
         isOurs ? '-' : (p.includeInReverse !== false ? 'Yes' : 'No'),
         p.entity || 'Unknown',
+        isWeekly ? 'Weekly' : 'Daily',
+        isWeekly ? (p.weeklyPullDay || '-') : '-',
         p.fundedDate ? format(new Date(p.fundedDate), 'MMM d, yyyy') : '-',
         p.amountFunded !== null ? p.amountFunded : '-',
         isUnknown ? 'Unknown' : (effectiveBalance || 0),
-        p.dailyPayment || 0,
-        isUnknown ? '?' : (posWithDays?.daysLeft || 0),
-        isUnknown ? '-' : getFormattedLastPaymentDate(posWithDays?.daysLeft || 0)
+        payment,
+        timeRemaining,
+        isUnknown ? '-' : getFormattedLastPaymentDate(daysLeft)
       ];
     }),
     [''],
-    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, '', '', metrics.totalBalance, metrics.totalCurrentDailyPayment, '', '']
+    ['', '', `REVERSING ${includedPositions.length} of ${allExternalPositions.length}${ourPositions.length > 0 ? ` (${ourPositions.length} ours)` : ''}${unknownBalancePositions.length > 0 ? ` (${unknownBalancePositions.length} unknown)` : ''}`, '', '', '', '', metrics.totalBalance, '', '', ''],
+    [''],
+    ['', '', 'Total Daily Equivalent', '', '', '', '', '', metrics.totalCurrentDailyPayment, '', '']
   ];
   const positionsSheet = XLSX.utils.aoa_to_sheet(positionsData);
-  positionsSheet['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
+  positionsSheet['!cols'] = [
+    { wch: 8 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 12 },
+    { wch: 15 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 18 }
+  ];
 
   // Currency format that preserves cents in Excel
   const CURRENCY_FMT = '$#,##0.00;($#,##0.00);-';
@@ -347,8 +361,8 @@ export function exportToExcel(calculation: SavedCalculation) {
     }
   };
 
-  // Position rows start at row 4 (header rows 1-3); totals row is the last row.
-  applyCurrencyFormat(positionsSheet, ['E', 'F', 'G'], 4, 3 + positions.length + 2);
+  // Position rows start at row 4 (header rows 1-3); totals/equivalent rows after.
+  applyCurrencyFormat(positionsSheet, ['G', 'H', 'I'], 4, 3 + positions.length + 4);
   XLSX.utils.book_append_sheet(workbook, positionsSheet, 'Positions');
 
   // Tab 3: Daily Schedule

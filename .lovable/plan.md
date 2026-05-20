@@ -1,49 +1,39 @@
-## Goal
+## Improve Excel Export — Positions Tab
 
-Make the funding/anchor day actually matter: (1) reprice weekly positions accurately based on their pull day, (2) add a floating "Deal Structuring" helper bubble that recommends the merchant move every debit to the funding day, and (3) flag positions whose pull day doesn't match the anchor.
+Scope: only the "Positions" sheet in `src/lib/exportUtils.ts` (around lines 308–352). No other exports, PDFs, or UI affected.
 
----
+### New column layout
 
-## 1. Pull-day-aware repricing (`src/lib/dateUtils.ts`)
+Replace current headers:
+`Ours | Include | Entity | Funded Date | Amount Funded | Balance | Daily Payment | Days Left | Last Payment Date`
 
-Today `repricedBalance` does `days * dailyPayment` for both daily and weekly positions. That's wrong for weekly: a weekly merchant only drops by one weekly clip when the as-of date crosses their `weeklyPullDay`.
+With:
+`Ours | Include | Entity | Frequency | Pull Day | Funded Date | Amount Funded | Balance | Payment | Time Remaining | Last Payment Date`
 
-Change: when `p.frequency === 'weekly'` and `p.weeklyPullDay` is set, count how many of that weekday occur strictly between the anchor date and the new as-of date (signed; negative when rolling backward). Decrement balance by `count * dailyPayment * 5` (one weekly clip per occurrence). Daily-frequency positions keep current behavior.
+### Per-row behavior
 
-Add helper `countWeekdayOccurrencesBetween(from, to, weekdayName)` next to the other date utils.
+- **Frequency**: "Daily" or "Weekly" (from `p.frequency`, default `Daily`).
+- **Pull Day**: weekly → `p.weeklyPullDay` (e.g. "Monday"); daily → `-`.
+- **Payment**:
+  - daily → `p.dailyPayment` (labeled by header as the daily amount)
+  - weekly → `p.dailyPayment * 5` (one weekly clip)
+- **Time Remaining**:
+  - daily → `"{daysLeft} days"`
+  - weekly → `"{ceil(daysLeft / 5)} weeks"`
+  - unknown balance → `"?"`
+- **Last Payment Date**: unchanged (already business-day based).
 
-Apply this to both `repricedBalance` and `calculateRemainingBalance` so the auto-calculated balance on the position card also respects pull day.
+### Totals row
 
-## 2. Anchor day = the as-of / funding date
+Update the `REVERSING X of Y` summary row to align with the new column count, putting:
+- total balance under **Balance**
+- total daily payment (sum of `dailyPayment`, kept as daily for apples-to-apples) under **Payment**, with a note in the header cell or footer that this column mixes daily/weekly amounts. Simpler: leave the total blank under Payment to avoid mixing units, and instead place `Total Daily Equivalent: $X` text in the trailing cell. Recommendation: **leave Payment total blank, add a "Total Daily Equivalent" line below** so weekly+daily aren't summed misleadingly.
 
-Treat `asOfDate` as the anchor. Derive `anchorWeekday` (Mon–Fri) from it. Weekend dates fall back to the nearest business day for the suggestion. No new field needed.
+### Formatting
 
-## 3. Mismatch warning on positions (`src/pages/Index.tsx`)
+- Update `!cols` widths to match 11 columns.
+- Update `applyCurrencyFormat` to target columns `F` (Amount Funded), `G` (no — that's now Pull Day)… recompute: currency cols become `G` (Amount Funded), `H` (Balance), `I` (Payment). Pass `['G','H','I']`.
 
-In the positions list, for each weekly position where `weeklyPullDay !== anchorWeekday`, render a small amber badge next to the pull-day select: "Pulls {day} — anchor is {anchorDay}". Reuses existing badge tokens; no layout shift.
+### Out of scope
 
-## 4. Floating "Deal Structuring" helper bubble
-
-New component `src/components/DealStructureHelper.tsx`. Fixed bottom-right button (icon: `Lightbulb` from lucide). Click opens a `Popover` panel anchored bottom-right with:
-
-- **Anchor day**: shows the derived weekday from `asOfDate` and a one-line explanation: "Fund on {date} ({weekday}). Recommend the merchant move every weekly debit to {weekday} so all positions clip together with our wire."
-- **Mismatch list**: bullets each weekly position whose pull day ≠ anchor weekday ("Funder A pulls Tuesday → move to Wednesday").
-- **Daily reminder**: short note when any daily positions exist ("Daily debits will continue every business day — no move needed.").
-- **Empty state**: when everything aligns, a green check + "All weekly debits are aligned with your funding day."
-
-Non-destructive — read-only suggestions. No auto-mutation of `weeklyPullDay`.
-
-Mount once inside `src/pages/Index.tsx` so it only appears on the calculator route. Hide when no positions exist.
-
-## 5. Verification
-
-- Move `asOfDate` forward across a Wednesday with a weekly-Wed position → balance drops by exactly one weekly clip (5 × daily).
-- Move it forward by 3 business days that don't include the pull day → weekly balance unchanged; daily balance drops by 3 × daily.
-- Move date backward across the pull day → weekly balance grows by one clip.
-- Floating bubble lists mismatches accurately; clears to green state when all weekly `pullDay` match the anchor weekday.
-
-## Out of scope
-
-- No edits to `leverageMath.ts`, scenario engine, PDF export, or schedule simulation (those already model the post-funding world where everything pulls on the anchor day).
-- No auto-rewrite of `weeklyPullDay`; user keeps full control.
-- No new DB columns.
+No changes to PDF export, schedule tabs, or on-screen positions table.
