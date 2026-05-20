@@ -189,17 +189,23 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
 export function calculateRemainingBalance(
   fundedDate: string | null,
   amountFunded: number | null,
-  dailyPayment: number
+  dailyPayment: number,
+  frequency?: 'daily' | 'weekly',
+  weeklyPullDay?: string | null
 ): number | null {
   if (!fundedDate || amountFunded === null || amountFunded <= 0) {
     return null;
   }
-  
+
   const funded = new Date(fundedDate);
   const today = new Date();
-  const businessDaysElapsed = getBusinessDaysBetween(funded, today);
-  const totalPaid = businessDaysElapsed * dailyPayment;
-  const remaining = Math.max(0, amountFunded - totalPaid);
-  
-  return remaining;
+  let totalPaid: number;
+  if (frequency === 'weekly' && weeklyPullDay) {
+    const occurrences = countWeekdayOccurrencesBetweenSigned(funded, today, weeklyPullDay);
+    totalPaid = occurrences * dailyPayment * 5;
+  } else {
+    const businessDaysElapsed = getBusinessDaysBetween(funded, today);
+    totalPaid = businessDaysElapsed * dailyPayment;
+  }
+  return Math.max(0, amountFunded - totalPaid);
 }
