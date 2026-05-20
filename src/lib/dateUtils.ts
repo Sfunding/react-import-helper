@@ -137,14 +137,22 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
 
   const from = parseISODateLocal(anchorDate);
   const to = parseISODateLocal(asOfDateISO);
-  const days = businessDaysBetweenSigned(from, to);
-  // Weekly positions still pay business-day equivalents (dailyPayment IS the daily-equivalent in this app's model)
-  const paid = days * (p.dailyPayment || 0);
+
+  let paid: number;
+  if (p.frequency === 'weekly' && p.weeklyPullDay) {
+    // Weekly position: only drops by a full weekly clip (5 × dailyPayment)
+    // for each occurrence of its pull weekday strictly between anchor and as-of.
+    const occurrences = countWeekdayOccurrencesBetweenSigned(from, to, p.weeklyPullDay);
+    paid = occurrences * (p.dailyPayment || 0) * 5;
+  } else {
+    // Daily position: one daily-payment per business day elapsed (signed).
+    const days = businessDaysBetweenSigned(from, to);
+    paid = days * (p.dailyPayment || 0);
+  }
+
   const raw = anchorBal - paid;
   // No upper cap: rolling the as-of date BACKWARD from the anchor must allow the balance
-  // to grow (the position had more balance owed in the past). Only clamp at zero on the
-  // lower end. For funded anchors `anchorBal = amountFunded` so "before fundedDate" cases
-  // are handled separately by the "not started yet" check in the calculator.
+  // to grow. Only clamp at zero on the lower end.
   const repriced = Math.max(0, raw);
   return Math.round(repriced * 100) / 100;
 }
