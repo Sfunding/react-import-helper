@@ -21,14 +21,22 @@ function getAnchorWeekday(iso: string): string {
   return WEEKDAY_NAMES[dow];
 }
 
-export function DealStructureHelper({ asOfDate, positions }: Props) {
+export function DealStructureHelper({ asOfDate, positions, reverseCadence = 'daily' }: Props) {
   if (!positions || positions.length === 0) return null;
 
   const anchorWeekday = getAnchorWeekday(asOfDate);
+  const cadenceWeekly = reverseCadence === 'weekly';
   const includedWeekly = positions.filter(p => p.includeInReverse && p.frequency === 'weekly');
   const includedDaily = positions.filter(p => p.includeInReverse && (p.frequency || 'daily') === 'daily');
-  const mismatched = includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday);
-  const allAligned = includedWeekly.length > 0 && mismatched.length === 0;
+  // In weekly-reverse mode, every included position needs to be re-papered to the
+  // anchor weekday. Otherwise only weekly positions on the wrong day need to move.
+  const mismatched = cadenceWeekly
+    ? [
+        ...includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday),
+        ...includedDaily,
+      ]
+    : includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday);
+  const allAligned = (includedWeekly.length + (cadenceWeekly ? includedDaily.length : 0)) > 0 && mismatched.length === 0;
 
   return (
     <div className="fixed bottom-6 right-6 z-40">
