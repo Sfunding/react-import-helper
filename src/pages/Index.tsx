@@ -2397,7 +2397,7 @@ export default function Index() {
                   <div className="text-lg font-bold">{(settings.feePercent * 100).toFixed(1)}%</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground uppercase mb-1"># of Payments</div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">{cadenceWeekly ? '# of Weekly Payments' : '# of Payments'}</div>
                   <div className="text-lg font-bold">{calculatedNumberOfDebits}</div>
                 </div>
               </div>
