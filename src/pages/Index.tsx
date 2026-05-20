@@ -513,7 +513,7 @@ export default function Index() {
       const rtrBeforeDebit = (cumulativeGross * settings.rate) - cumulativeDebits;
       
       let dailyWithdrawal = 0;
-      if (day >= 2 && rtrBeforeDebit > 0) {
+      if (rtrBeforeDebit > 0) {
         dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
       }
       cumulativeDebits += dailyWithdrawal;
@@ -754,7 +754,7 @@ export default function Index() {
       const cumGross = cumNetFunded + testFees;
       const rtrBefore = (cumGross * settings.rate) - cumDebits;
       
-      if (day >= 2 && rtrBefore > 0) {
+      if (rtrBefore > 0) {
         cumDebits += Math.min(testDailyPayment, rtrBefore);
       }
       
