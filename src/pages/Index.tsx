@@ -531,7 +531,14 @@ export default function Index() {
       
       let dailyWithdrawal = 0;
       if (rtrBeforeDebit > 0) {
-        dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+        if (cadenceWeekly) {
+          // Weekly cadence: only debit on the anchor weekday (day 1 of the loop's 5-day week)
+          if (isPayDay) {
+            dailyWithdrawal = Math.min(newWeeklyPayment, rtrBeforeDebit);
+          }
+        } else {
+          dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+        }
       }
       cumulativeDebits += dailyWithdrawal;
       
