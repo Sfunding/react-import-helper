@@ -97,7 +97,8 @@ export const DEFAULT_SETTINGS: Settings = {
   currentExposure: 0,
   earlyPayOptions: DEFAULT_EPO_SETTINGS,
   termDays: null,
-  dailyPaymentOverride: null
+  dailyPaymentOverride: null,
+  reverseCadence: 'daily'
 };
 
 export type ScheduleBreakdown = {
