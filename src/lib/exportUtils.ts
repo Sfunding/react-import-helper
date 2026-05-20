@@ -301,7 +301,7 @@ export function exportToExcel(calculation: SavedCalculation) {
   // Tab 2: Current Positions (show all positions with Include status)
   const ourPositions = positions.filter(p => p.isOurPosition);
   const unknownBalancePositions = positions.filter(p => {
-    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment);
+    const autoCalc = calculateRemainingBalance(p.fundedDate, p.amountFunded, p.dailyPayment, p.frequency, p.weeklyPullDay);
     return autoCalc === null && p.balance === null;
   });
   const positionsData = [

@@ -103,7 +103,33 @@ type RepriceablePosition = {
   balanceAsOfDate?: string | null;
   balanceAnchor?: 'funded' | 'manual' | null;
   frequency?: 'daily' | 'weekly';
+  weeklyPullDay?: string | null;
 };
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
+};
+
+/**
+ * Count occurrences of a given weekday (e.g. "Wednesday") between two dates.
+ * Signed: negative when `to` < `from`. Excludes `from`, includes `to` —
+ * matching the convention used by `businessDaysBetweenSigned`.
+ */
+export function countWeekdayOccurrencesBetweenSigned(from: Date, to: Date, weekdayName: string): number {
+  const target = WEEKDAY_INDEX[weekdayName];
+  if (target === undefined) return 0;
+  if (from.getTime() === to.getTime()) return 0;
+  const sign = to < from ? -1 : 1;
+  const [start, end] = sign === 1 ? [from, to] : [to, from];
+  const cur = new Date(start); cur.setHours(0, 0, 0, 0);
+  const stop = new Date(end); stop.setHours(0, 0, 0, 0);
+  let count = 0;
+  while (cur < stop) {
+    cur.setDate(cur.getDate() + 1);
+    if (cur.getDay() === target) count++;
+  }
+  return sign * count;
+}
 
 /**
  * Re-prices a position's balance to a new as-of date based on its anchor.
@@ -137,14 +163,22 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
 
   const from = parseISODateLocal(anchorDate);
   const to = parseISODateLocal(asOfDateISO);
-  const days = businessDaysBetweenSigned(from, to);
-  // Weekly positions still pay business-day equivalents (dailyPayment IS the daily-equivalent in this app's model)
-  const paid = days * (p.dailyPayment || 0);
+
+  let paid: number;
+  if (p.frequency === 'weekly' && p.weeklyPullDay) {
+    // Weekly position: only drops by a full weekly clip (5 × dailyPayment)
+    // for each occurrence of its pull weekday strictly between anchor and as-of.
+    const occurrences = countWeekdayOccurrencesBetweenSigned(from, to, p.weeklyPullDay);
+    paid = occurrences * (p.dailyPayment || 0) * 5;
+  } else {
+    // Daily position: one daily-payment per business day elapsed (signed).
+    const days = businessDaysBetweenSigned(from, to);
+    paid = days * (p.dailyPayment || 0);
+  }
+
   const raw = anchorBal - paid;
   // No upper cap: rolling the as-of date BACKWARD from the anchor must allow the balance
-  // to grow (the position had more balance owed in the past). Only clamp at zero on the
-  // lower end. For funded anchors `anchorBal = amountFunded` so "before fundedDate" cases
-  // are handled separately by the "not started yet" check in the calculator.
+  // to grow. Only clamp at zero on the lower end.
   const repriced = Math.max(0, raw);
   return Math.round(repriced * 100) / 100;
 }
@@ -155,17 +189,23 @@ export function repricedBalance(p: RepriceablePosition, asOfDateISO: string): nu
 export function calculateRemainingBalance(
   fundedDate: string | null,
   amountFunded: number | null,
-  dailyPayment: number
+  dailyPayment: number,
+  frequency?: 'daily' | 'weekly',
+  weeklyPullDay?: string | null
 ): number | null {
   if (!fundedDate || amountFunded === null || amountFunded <= 0) {
     return null;
   }
-  
+
   const funded = new Date(fundedDate);
   const today = new Date();
-  const businessDaysElapsed = getBusinessDaysBetween(funded, today);
-  const totalPaid = businessDaysElapsed * dailyPayment;
-  const remaining = Math.max(0, amountFunded - totalPaid);
-  
-  return remaining;
+  let totalPaid: number;
+  if (frequency === 'weekly' && weeklyPullDay) {
+    const occurrences = countWeekdayOccurrencesBetweenSigned(funded, today, weeklyPullDay);
+    totalPaid = occurrences * dailyPayment * 5;
+  } else {
+    const businessDaysElapsed = getBusinessDaysBetween(funded, today);
+    totalPaid = businessDaysElapsed * dailyPayment;
+  }
+  return Math.max(0, amountFunded - totalPaid);
 }

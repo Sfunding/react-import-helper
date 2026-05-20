@@ -36,6 +36,7 @@ import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/export
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { DraftRestoreBanner } from '@/components/DraftRestoreBanner';
+import { DealStructureHelper } from '@/components/DealStructureHelper';
 import { AutoSaveIndicator } from '@/components/AutoSaveIndicator';
 import { useDraftBackup, useBeforeUnloadGuard, useDraftOnMount, clearDraft, DraftPayload } from '@/hooks/useDraftBackup';
 import { useAutoSave, readAutoSaveEnabled, writeAutoSaveEnabled } from '@/hooks/useAutoSave';
@@ -469,6 +470,17 @@ export default function Index() {
     0
   );
   const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
+
+  // Anchor weekday derived from the as-of/funding date (Mon-Fri; weekends roll to Monday)
+  const anchorWeekday = useMemo(() => {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const d = parseISODateLocal(asOfDate);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) return 'Monday';
+    return names[dow];
+  }, [asOfDate]);
+
+
 
 
 
@@ -1746,6 +1758,14 @@ export default function Index() {
                                   <option value="Friday">Fri</option>
                                 </select>
                               )}
+                              {isWeekly && (p.weeklyPullDay || 'Monday') !== anchorWeekday && (
+                                <span
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning-foreground border border-warning/40 font-medium whitespace-nowrap"
+                                  title={`Funding day is ${anchorWeekday}. Recommend moving this debit to ${anchorWeekday}.`}
+                                >
+                                  ≠ {anchorWeekday.slice(0, 3)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Balance */}
@@ -2446,6 +2466,7 @@ export default function Index() {
           feeSchedule={settings.feeSchedule}
         />
       </div>
+      <DealStructureHelper asOfDate={asOfDate} positions={positions} />
     </div>
   );
 }
