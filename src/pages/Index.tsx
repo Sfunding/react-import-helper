@@ -513,7 +513,7 @@ export default function Index() {
       const rtrBeforeDebit = (cumulativeGross * settings.rate) - cumulativeDebits;
       
       let dailyWithdrawal = 0;
-      if (day >= 2 && rtrBeforeDebit > 0) {
+      if (rtrBeforeDebit > 0) {
         dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
       }
       cumulativeDebits += dailyWithdrawal;
