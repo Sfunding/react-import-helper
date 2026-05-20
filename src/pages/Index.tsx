@@ -92,6 +92,13 @@ export default function Index() {
   useEffect(() => {
     try { localStorage.setItem('merchantOfferPaymentView:v1', paymentView); } catch { /* ignore */ }
   }, [paymentView]);
+
+  // When the reverse cadence is weekly, force the payment view away from daily-only.
+  useEffect(() => {
+    if (settings.reverseCadence === 'weekly' && paymentView === 'daily') {
+      setPaymentView('weekly');
+    }
+  }, [settings.reverseCadence, paymentView]);
   
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
@@ -426,33 +433,37 @@ export default function Index() {
   // Base payback calculation from funding × rate (used as default reference)
   const basePayback = totalFunding * settings.rate;
   
-  // Determine Daily Payment and Term based on which is set
-  // Priority: dailyPaymentOverride > termDays > discount-based calculation
-  let newDailyPayment: number;
-  let calculatedNumberOfDebits: number;
-  
+  // Cadence-aware derivation. In weekly mode the user-entered "term" is # of
+  // weekly clips and the user-entered "payment" is the weekly clip amount.
+  // Stored field names are kept for backward-compatible persistence.
+  const cadenceWeekly = settings.reverseCadence === 'weekly';
+  const includedClip = cadenceWeekly ? includedDailyPayment * 5 : includedDailyPayment;
+
+  let newClip: number;       // weekly clip OR daily payment depending on mode
+  let termCount: number;     // weekly clips OR daily debits
+
   if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
-    // User specified daily payment → derive term from base payback
-    newDailyPayment = settings.dailyPaymentOverride;
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+    newClip = settings.dailyPaymentOverride;
+    termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
   } else if (settings.termDays !== null && settings.termDays > 0) {
-    // User specified term → derive daily payment from base payback
-    calculatedNumberOfDebits = settings.termDays;
-    newDailyPayment = calculatedNumberOfDebits > 0 ? basePayback / calculatedNumberOfDebits : 0;
+    termCount = settings.termDays;
+    newClip = termCount > 0 ? basePayback / termCount : 0;
   } else {
-    // Default: use discount to calculate payment, derive term
-    newDailyPayment = includedDailyPayment * (1 - settings.dailyPaymentDecrease);
-    calculatedNumberOfDebits = newDailyPayment > 0 ? Math.ceil(basePayback / newDailyPayment) : 0;
+    newClip = includedClip * (1 - settings.dailyPaymentDecrease);
+    termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
   }
-  
+
+  const newDailyPayment: number = cadenceWeekly ? newClip / 5 : newClip;
+  const calculatedNumberOfDebits: number = termCount; // in cadence-units
+
   // CRITICAL: Total Payback = Advance Amount × Factor Rate (exact, factor-based)
   const totalPayback = totalFunding * settings.rate;
-  
-  // Derive the implied discount for display
-  const impliedDiscount = includedDailyPayment > 0 
-    ? 1 - (newDailyPayment / includedDailyPayment) 
+
+  // Derive the implied discount for display (cadence-aware)
+  const impliedDiscount = includedClip > 0
+    ? 1 - (newClip / includedClip)
     : 0;
-  
+
   const newWeeklyPayment = newDailyPayment * 5;
   
   // Use ALL positions for leverage/SP calculations to show true merchant leverage
@@ -469,7 +480,8 @@ export default function Index() {
       .map(p => p.daysLeft),
     0
   );
-  const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
+  const termInDays = cadenceWeekly ? calculatedNumberOfDebits * 5 : calculatedNumberOfDebits;
+  const dealTooShort = termInDays > 0 && maxPositionDays > 0 && termInDays < maxPositionDays;
 
   // Anchor weekday derived from the as-of/funding date (Mon-Fri; weekends roll to Monday)
   const anchorWeekday = useMemo(() => {
@@ -526,7 +538,14 @@ export default function Index() {
       
       let dailyWithdrawal = 0;
       if (rtrBeforeDebit > 0) {
-        dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+        if (cadenceWeekly) {
+          // Weekly cadence: only debit on the anchor weekday (day 1 of the loop's 5-day week)
+          if (isPayDay) {
+            dailyWithdrawal = Math.min(newWeeklyPayment, rtrBeforeDebit);
+          }
+        } else {
+          dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+        }
       }
       cumulativeDebits += dailyWithdrawal;
       
@@ -538,7 +557,7 @@ export default function Index() {
       if (rtrBalance <= 0) dealComplete = true;
     }
     return schedule;
-  }, [positionsWithDays, settings, newDailyPayment, consolidationFees, includedBalance]);
+  }, [positionsWithDays, settings, newDailyPayment, newWeeklyPayment, cadenceWeekly, consolidationFees, includedBalance]);
 
   const totalDays = dailySchedule.length;
 
@@ -1285,10 +1304,67 @@ export default function Index() {
 
       {/* Settings Section */}
       <div className="mb-4 p-4 bg-accent rounded-lg border-2 border-secondary">
+        {/* Reverse Cadence Toggle */}
+        <div className="mb-3 flex items-center gap-3">
+          <label className="text-xs font-semibold text-muted-foreground uppercase">Reverse Cadence</label>
+          <div className="inline-flex rounded-md border-2 border-primary overflow-hidden">
+            {(['daily', 'weekly'] as const).map(c => {
+              const active = (settings.reverseCadence || 'daily') === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    const current = settings.reverseCadence || 'daily';
+                    if (current === c) return;
+                    // Convert any user override between cadences so the displayed
+                    // value stays economically equivalent.
+                    let nextTerm = settings.termDays;
+                    let nextPayment = settings.dailyPaymentOverride;
+                    if (c === 'weekly') {
+                      // daily -> weekly
+                      if (nextTerm !== null && nextTerm > 0) nextTerm = Math.max(1, Math.ceil(nextTerm / 5));
+                      if (nextPayment !== null && nextPayment > 0) nextPayment = Math.round(nextPayment * 5 * 100) / 100;
+                    } else {
+                      // weekly -> daily
+                      if (nextTerm !== null && nextTerm > 0) nextTerm = nextTerm * 5;
+                      if (nextPayment !== null && nextPayment > 0) nextPayment = Math.round((nextPayment / 5) * 100) / 100;
+                    }
+                    setSettings({
+                      ...settings,
+                      reverseCadence: c,
+                      termDays: nextTerm,
+                      dailyPaymentOverride: nextPayment,
+                    });
+                    toast({
+                      title: `Reverse switched to ${c}`,
+                      description: c === 'weekly'
+                        ? `Debits pull once per week on ${anchorWeekday}.`
+                        : 'Debits pull every business day.',
+                    });
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold capitalize transition-colors',
+                    active ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground hover:bg-muted'
+                  )}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+          {cadenceWeekly && (
+            <span className="text-[11px] text-muted-foreground">
+              Weekly clip pulls on <span className="font-semibold text-foreground">{anchorWeekday}</span>.
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-8 gap-4 items-end">
-          {/* Term (# of Debits) - Editable */}
+          {/* Term - Editable (Debits or Weeks) */}
           <div>
-            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Term (Debits)</label>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">
+              {cadenceWeekly ? 'Term (Weeks)' : 'Term (Debits)'}
+            </label>
             <input 
               type="number" 
               min="1" 
@@ -1308,16 +1384,18 @@ export default function Index() {
             />
           </div>
           
-          {/* Daily Payment - Editable */}
+          {/* Payment - Editable (Daily or Weekly) */}
           <div>
-            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Daily Payment</label>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">
+              {cadenceWeekly ? 'Weekly Payment' : 'Daily Payment'}
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
               <input 
                 type="number" 
                 min="0" 
                 step="100" 
-                value={settings.dailyPaymentOverride !== null ? settings.dailyPaymentOverride : Math.round(newDailyPayment * 100) / 100}
+                value={settings.dailyPaymentOverride !== null ? settings.dailyPaymentOverride : Math.round((cadenceWeekly ? newWeeklyPayment : newDailyPayment) * 100) / 100}
                 onChange={e => {
                   const payment = parseFloat(e.target.value) || 0;
                   if (payment > 0) {
@@ -1332,6 +1410,7 @@ export default function Index() {
               />
             </div>
           </div>
+          
           
           {/* Implied Discount % - Display Only */}
           <div>
@@ -1586,15 +1665,21 @@ export default function Index() {
             <div className="text-2xl font-bold text-primary-foreground">{fmt(totalPayback)}</div>
           </div>
           
-          {/* Daily Payment - Display */}
+          {/* Payment - Display (cadence-aware) */}
           <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
-            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Daily Payment</div>
-            <div className="text-2xl font-bold text-primary-foreground">{fmt(newDailyPayment)}</div>
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">
+              {cadenceWeekly ? 'Weekly Payment' : 'Daily Payment'}
+            </div>
+            <div className="text-2xl font-bold text-primary-foreground">
+              {fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}
+            </div>
           </div>
           
-          {/* Number of Debits - Display */}
+          {/* Number of Debits - Display (cadence-aware) */}
           <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
-            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1"># of Debits</div>
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">
+              {cadenceWeekly ? '# of Weekly Clips' : '# of Debits'}
+            </div>
             <div className="text-2xl font-bold text-primary-foreground">{calculatedNumberOfDebits}</div>
           </div>
         </div>
@@ -1607,8 +1692,8 @@ export default function Index() {
           <div>
             <p className="font-bold text-destructive">Deal Term Too Short</p>
             <p className="text-sm text-destructive/80">
-              The deal ends in <strong>{calculatedNumberOfDebits} debits</strong> but the longest position needs <strong>{maxPositionDays} days</strong> to pay off. 
-              The deal must be at least as long as the longest position. Increase the term, lower the daily payment, or adjust the factor rate.
+              The deal ends in <strong>{calculatedNumberOfDebits} {cadenceWeekly ? 'weekly clips' : 'debits'}</strong> (~{termInDays} business days) but the longest position needs <strong>{maxPositionDays} days</strong> to pay off. 
+              The deal must be at least as long as the longest position. Increase the term, lower the payment, or adjust the factor rate.
             </p>
           </div>
         </div>
@@ -1918,8 +2003,8 @@ export default function Index() {
                   <tr><td className="py-2">Net Advance</td><td className="text-right font-semibold py-2">{fmt(netAdvance)}</td></tr>
                   <tr><td className="py-2">Fees</td><td className="text-right py-2">{fmt(consolidationFees)}</td></tr>
                   <tr><td className="py-2">Rate</td><td className="text-right py-2">{settings.rate}</td></tr>
-                  <tr className="bg-secondary/20"><td className="py-2 font-medium"># of Debits</td><td className="text-right font-bold py-2">{calculatedNumberOfDebits}</td></tr>
-                  <tr><td className="py-2">New Daily Payment</td><td className="text-right font-semibold py-2">{fmt(newDailyPayment)}</td></tr>
+                  <tr className="bg-secondary/20"><td className="py-2 font-medium">{cadenceWeekly ? '# of Weekly Clips' : '# of Debits'}</td><td className="text-right font-bold py-2">{calculatedNumberOfDebits}</td></tr>
+                  <tr><td className="py-2">{cadenceWeekly ? 'New Weekly Payment' : 'New Daily Payment'}</td><td className="text-right font-semibold py-2">{fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}</td></tr>
                   <tr><td className="py-2">Max Exposure</td><td className="text-right text-destructive py-2">({fmt(metrics.maxExposure || 0)})</td></tr>
                   <tr><td className="py-2">Max Exposure Day</td><td className="text-right font-semibold py-2">{metrics.maxExposureDay || 0}</td></tr>
                   <tr className="bg-success/10"><td className="py-2 font-medium">Deal True Factor</td><td className="text-right font-bold py-2">{(metrics.dealTrueFactor || 0).toFixed(3)}</td></tr>
@@ -2045,7 +2130,7 @@ export default function Index() {
             <h2 className="text-center text-primary text-xl font-bold mb-6">Deal Summary</h2>
             <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden mb-6">
               <div className="grid grid-cols-5">
-                {['Advance Amount', 'Factor Rate', 'Total Payback', 'Payment', '# of Debits'].map(h => (
+                {['Advance Amount', 'Factor Rate', 'Total Payback', cadenceWeekly ? 'Weekly Payment' : 'Daily Payment', cadenceWeekly ? '# of Weekly Clips' : '# of Debits'].map(h => (
                   <div key={h} className="p-2 bg-secondary font-semibold text-sm text-center text-secondary-foreground">{h}</div>
                 ))}
               </div>
@@ -2053,7 +2138,7 @@ export default function Index() {
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalFunding)}</div>
                 <div className="p-4 text-center text-lg font-bold">{settings.rate.toFixed(3)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalPayback)}</div>
-                <div className="p-4 text-center text-lg font-bold">{fmt(newDailyPayment)}</div>
+                <div className="p-4 text-center text-lg font-bold">{fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}</div>
                 <div className="p-4 text-center text-lg font-bold">{calculatedNumberOfDebits}</div>
               </div>
               <div className="grid grid-cols-5 border-t-2 border-secondary">
@@ -2319,7 +2404,7 @@ export default function Index() {
                   <div className="text-lg font-bold">{(settings.feePercent * 100).toFixed(1)}%</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground uppercase mb-1"># of Payments</div>
+                  <div className="text-xs text-muted-foreground uppercase mb-1">{cadenceWeekly ? '# of Weekly Payments' : '# of Payments'}</div>
                   <div className="text-lg font-bold">{calculatedNumberOfDebits}</div>
                 </div>
               </div>
@@ -2466,7 +2551,7 @@ export default function Index() {
           feeSchedule={settings.feeSchedule}
         />
       </div>
-      <DealStructureHelper asOfDate={asOfDate} positions={positions} />
+      <DealStructureHelper asOfDate={asOfDate} positions={positions} reverseCadence={settings.reverseCadence} />
     </div>
   );
 }

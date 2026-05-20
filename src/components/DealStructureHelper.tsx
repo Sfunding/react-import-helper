@@ -7,6 +7,7 @@ import { parseISODateLocal } from '@/lib/dateUtils';
 interface Props {
   asOfDate: string;
   positions: Position[];
+  reverseCadence?: 'daily' | 'weekly';
 }
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -20,14 +21,22 @@ function getAnchorWeekday(iso: string): string {
   return WEEKDAY_NAMES[dow];
 }
 
-export function DealStructureHelper({ asOfDate, positions }: Props) {
+export function DealStructureHelper({ asOfDate, positions, reverseCadence = 'daily' }: Props) {
   if (!positions || positions.length === 0) return null;
 
   const anchorWeekday = getAnchorWeekday(asOfDate);
+  const cadenceWeekly = reverseCadence === 'weekly';
   const includedWeekly = positions.filter(p => p.includeInReverse && p.frequency === 'weekly');
   const includedDaily = positions.filter(p => p.includeInReverse && (p.frequency || 'daily') === 'daily');
-  const mismatched = includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday);
-  const allAligned = includedWeekly.length > 0 && mismatched.length === 0;
+  // In weekly-reverse mode, every included position needs to be re-papered to the
+  // anchor weekday. Otherwise only weekly positions on the wrong day need to move.
+  const mismatched = cadenceWeekly
+    ? [
+        ...includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday),
+        ...includedDaily,
+      ]
+    : includedWeekly.filter(p => (p.weeklyPullDay || 'Monday') !== anchorWeekday);
+  const allAligned = (includedWeekly.length + (cadenceWeekly ? includedDaily.length : 0)) > 0 && mismatched.length === 0;
 
   return (
     <div className="fixed bottom-6 right-6 z-40">
@@ -54,8 +63,9 @@ export function DealStructureHelper({ asOfDate, positions }: Props) {
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
               Funding day is <span className="font-semibold text-foreground">{anchorWeekday}</span>.
-              Recommend the merchant align every debit to this day so all positions clip together
-              with your wire.
+              {cadenceWeekly
+                ? ` Your reverse pulls weekly on ${anchorWeekday} — every included position should be re-papered to the same day so the merchant has a single weekly debit.`
+                : ' Recommend the merchant align every debit to this day so all positions clip together with your wire.'}
             </p>
           </div>
 
@@ -64,17 +74,20 @@ export function DealStructureHelper({ asOfDate, positions }: Props) {
               <div>
                 <div className="flex items-center gap-2 text-xs font-semibold text-warning-foreground mb-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-                  Move these weekly pulls to {anchorWeekday}
+                  Move these debits to {anchorWeekday}
                 </div>
                 <ul className="space-y-1.5">
-                  {mismatched.map(p => (
-                    <li key={p.id} className="text-xs flex justify-between items-center bg-warning/10 border border-warning/30 rounded px-2 py-1.5">
-                      <span className="font-medium truncate">{p.entity || 'Unnamed position'}</span>
-                      <span className="text-muted-foreground whitespace-nowrap ml-2">
-                        {p.weeklyPullDay || 'Monday'} → <span className="font-semibold text-foreground">{anchorWeekday}</span>
-                      </span>
-                    </li>
-                  ))}
+                  {mismatched.map(p => {
+                    const currentDay = p.frequency === 'weekly' ? (p.weeklyPullDay || 'Monday') : 'Daily';
+                    return (
+                      <li key={p.id} className="text-xs flex justify-between items-center bg-warning/10 border border-warning/30 rounded px-2 py-1.5">
+                        <span className="font-medium truncate">{p.entity || 'Unnamed position'}</span>
+                        <span className="text-muted-foreground whitespace-nowrap ml-2">
+                          {currentDay} → <span className="font-semibold text-foreground">{anchorWeekday}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -82,11 +95,11 @@ export function DealStructureHelper({ asOfDate, positions }: Props) {
             {allAligned && (
               <div className="flex items-start gap-2 text-xs bg-success/10 border border-success/30 rounded p-2">
                 <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                <span>All weekly debits are aligned with your funding day.</span>
+                <span>All debits are aligned with your funding day.</span>
               </div>
             )}
 
-            {includedDaily.length > 0 && (
+            {!cadenceWeekly && includedDaily.length > 0 && (
               <div className="text-xs text-muted-foreground border-t pt-3">
                 <span className="font-semibold text-foreground">Daily positions ({includedDaily.length}):</span>{' '}
                 continue every business day — no move needed.

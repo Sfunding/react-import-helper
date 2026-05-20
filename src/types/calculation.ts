@@ -13,8 +13,12 @@ export type Settings = {
   currentExposure: number;
   earlyPayOptions?: EarlyPaySettings;
   whiteLabelCompany?: string;  // Custom company name for PDF export (defaults to "Avion Funding")
+  /** When reverseCadence === 'weekly', `termDays` stores # of weekly clips
+   *  and `dailyPaymentOverride` stores the weekly clip amount.
+   *  Field names kept for backward-compatible persistence. */
   termDays: number | null;  // null = auto-calculate from discount, number = user-set term
   dailyPaymentOverride: number | null;  // null = auto-calculate, number = user-set payment
+  reverseCadence?: 'daily' | 'weekly';  // defaults to 'daily'
 };
 
 export type Position = {
@@ -93,7 +97,8 @@ export const DEFAULT_SETTINGS: Settings = {
   currentExposure: 0,
   earlyPayOptions: DEFAULT_EPO_SETTINGS,
   termDays: null,
-  dailyPaymentOverride: null
+  dailyPaymentOverride: null,
+  reverseCadence: 'daily'
 };
 
 export type ScheduleBreakdown = {
