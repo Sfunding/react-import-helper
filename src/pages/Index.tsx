@@ -2446,6 +2446,7 @@ export default function Index() {
           feeSchedule={settings.feeSchedule}
         />
       </div>
+      <DealStructureHelper asOfDate={asOfDate} positions={positions} />
     </div>
   );
 }
