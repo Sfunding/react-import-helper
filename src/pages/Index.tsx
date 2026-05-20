@@ -92,6 +92,13 @@ export default function Index() {
   useEffect(() => {
     try { localStorage.setItem('merchantOfferPaymentView:v1', paymentView); } catch { /* ignore */ }
   }, [paymentView]);
+
+  // When the reverse cadence is weekly, force the payment view away from daily-only.
+  useEffect(() => {
+    if (settings.reverseCadence === 'weekly' && paymentView === 'daily') {
+      setPaymentView('weekly');
+    }
+  }, [settings.reverseCadence, paymentView]);
   
   // Pending adjustment state
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false);
