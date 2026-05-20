@@ -473,7 +473,8 @@ export default function Index() {
       .map(p => p.daysLeft),
     0
   );
-  const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
+  const termInDays = cadenceWeekly ? calculatedNumberOfDebits * 5 : calculatedNumberOfDebits;
+  const dealTooShort = termInDays > 0 && maxPositionDays > 0 && termInDays < maxPositionDays;
 
   // Anchor weekday derived from the as-of/funding date (Mon-Fri; weekends roll to Monday)
   const anchorWeekday = useMemo(() => {
