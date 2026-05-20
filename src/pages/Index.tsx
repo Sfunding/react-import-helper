@@ -1297,10 +1297,67 @@ export default function Index() {
 
       {/* Settings Section */}
       <div className="mb-4 p-4 bg-accent rounded-lg border-2 border-secondary">
+        {/* Reverse Cadence Toggle */}
+        <div className="mb-3 flex items-center gap-3">
+          <label className="text-xs font-semibold text-muted-foreground uppercase">Reverse Cadence</label>
+          <div className="inline-flex rounded-md border-2 border-primary overflow-hidden">
+            {(['daily', 'weekly'] as const).map(c => {
+              const active = (settings.reverseCadence || 'daily') === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    const current = settings.reverseCadence || 'daily';
+                    if (current === c) return;
+                    // Convert any user override between cadences so the displayed
+                    // value stays economically equivalent.
+                    let nextTerm = settings.termDays;
+                    let nextPayment = settings.dailyPaymentOverride;
+                    if (c === 'weekly') {
+                      // daily -> weekly
+                      if (nextTerm !== null && nextTerm > 0) nextTerm = Math.max(1, Math.ceil(nextTerm / 5));
+                      if (nextPayment !== null && nextPayment > 0) nextPayment = Math.round(nextPayment * 5 * 100) / 100;
+                    } else {
+                      // weekly -> daily
+                      if (nextTerm !== null && nextTerm > 0) nextTerm = nextTerm * 5;
+                      if (nextPayment !== null && nextPayment > 0) nextPayment = Math.round((nextPayment / 5) * 100) / 100;
+                    }
+                    setSettings({
+                      ...settings,
+                      reverseCadence: c,
+                      termDays: nextTerm,
+                      dailyPaymentOverride: nextPayment,
+                    });
+                    toast({
+                      title: `Reverse switched to ${c}`,
+                      description: c === 'weekly'
+                        ? `Debits pull once per week on ${anchorWeekday}.`
+                        : 'Debits pull every business day.',
+                    });
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold capitalize transition-colors',
+                    active ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground hover:bg-muted'
+                  )}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+          {cadenceWeekly && (
+            <span className="text-[11px] text-muted-foreground">
+              Weekly clip pulls on <span className="font-semibold text-foreground">{anchorWeekday}</span>.
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-8 gap-4 items-end">
-          {/* Term (# of Debits) - Editable */}
+          {/* Term - Editable (Debits or Weeks) */}
           <div>
-            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Term (Debits)</label>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">
+              {cadenceWeekly ? 'Term (Weeks)' : 'Term (Debits)'}
+            </label>
             <input 
               type="number" 
               min="1" 
@@ -1320,16 +1377,18 @@ export default function Index() {
             />
           </div>
           
-          {/* Daily Payment - Editable */}
+          {/* Payment - Editable (Daily or Weekly) */}
           <div>
-            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">Daily Payment</label>
+            <label className="block mb-1 text-xs font-semibold text-muted-foreground uppercase">
+              {cadenceWeekly ? 'Weekly Payment' : 'Daily Payment'}
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
               <input 
                 type="number" 
                 min="0" 
                 step="100" 
-                value={settings.dailyPaymentOverride !== null ? settings.dailyPaymentOverride : Math.round(newDailyPayment * 100) / 100}
+                value={settings.dailyPaymentOverride !== null ? settings.dailyPaymentOverride : Math.round((cadenceWeekly ? newWeeklyPayment : newDailyPayment) * 100) / 100}
                 onChange={e => {
                   const payment = parseFloat(e.target.value) || 0;
                   if (payment > 0) {
@@ -1344,6 +1403,7 @@ export default function Index() {
               />
             </div>
           </div>
+          
           
           {/* Implied Discount % - Display Only */}
           <div>
