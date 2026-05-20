@@ -159,7 +159,7 @@ export function calculateSchedules(
     const rtrBeforeDebit = (cumulativeGross * settings.rate) - cumulativeDebits;
 
     let dailyWithdrawal = 0;
-    if (!debitsComplete && day >= 2 && rtrBeforeDebit > 0) {
+    if (!debitsComplete && rtrBeforeDebit > 0) {
       dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
     }
     cumulativeDebits += dailyWithdrawal;
