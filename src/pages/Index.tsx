@@ -2123,7 +2123,7 @@ export default function Index() {
             <h2 className="text-center text-primary text-xl font-bold mb-6">Deal Summary</h2>
             <div className="bg-secondary/20 rounded-lg border-2 border-secondary overflow-hidden mb-6">
               <div className="grid grid-cols-5">
-                {['Advance Amount', 'Factor Rate', 'Total Payback', 'Payment', '# of Debits'].map(h => (
+                {['Advance Amount', 'Factor Rate', 'Total Payback', cadenceWeekly ? 'Weekly Payment' : 'Daily Payment', cadenceWeekly ? '# of Weekly Clips' : '# of Debits'].map(h => (
                   <div key={h} className="p-2 bg-secondary font-semibold text-sm text-center text-secondary-foreground">{h}</div>
                 ))}
               </div>
@@ -2131,7 +2131,7 @@ export default function Index() {
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalFunding)}</div>
                 <div className="p-4 text-center text-lg font-bold">{settings.rate.toFixed(3)}</div>
                 <div className="p-4 text-center text-lg font-bold">{fmt(totalPayback)}</div>
-                <div className="p-4 text-center text-lg font-bold">{fmt(newDailyPayment)}</div>
+                <div className="p-4 text-center text-lg font-bold">{fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}</div>
                 <div className="p-4 text-center text-lg font-bold">{calculatedNumberOfDebits}</div>
               </div>
               <div className="grid grid-cols-5 border-t-2 border-secondary">
