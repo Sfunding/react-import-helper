@@ -2551,7 +2551,7 @@ export default function Index() {
           feeSchedule={settings.feeSchedule}
         />
       </div>
-      <DealStructureHelper asOfDate={asOfDate} positions={positions} />
+      <DealStructureHelper asOfDate={asOfDate} positions={positions} reverseCadence={settings.reverseCadence} />
     </div>
   );
 }
