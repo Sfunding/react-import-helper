@@ -1747,6 +1747,14 @@ export default function Index() {
                                   <option value="Friday">Fri</option>
                                 </select>
                               )}
+                              {isWeekly && (p.weeklyPullDay || 'Monday') !== anchorWeekday && (
+                                <span
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-warning/20 text-warning-foreground border border-warning/40 font-medium whitespace-nowrap"
+                                  title={`Funding day is ${anchorWeekday}. Recommend moving this debit to ${anchorWeekday}.`}
+                                >
+                                  ≠ {anchorWeekday.slice(0, 3)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Balance */}
