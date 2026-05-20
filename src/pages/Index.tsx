@@ -471,6 +471,17 @@ export default function Index() {
   );
   const dealTooShort = calculatedNumberOfDebits > 0 && maxPositionDays > 0 && calculatedNumberOfDebits < maxPositionDays;
 
+  // Anchor weekday derived from the as-of/funding date (Mon-Fri; weekends roll to Monday)
+  const anchorWeekday = useMemo(() => {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const d = parseISODateLocal(asOfDate);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) return 'Monday';
+    return names[dow];
+  }, [asOfDate]);
+
+
+
 
 
   const dailySchedule = useMemo(() => {
