@@ -550,7 +550,7 @@ export default function Index() {
       if (rtrBalance <= 0) dealComplete = true;
     }
     return schedule;
-  }, [positionsWithDays, settings, newDailyPayment, consolidationFees, includedBalance]);
+  }, [positionsWithDays, settings, newDailyPayment, newWeeklyPayment, cadenceWeekly, consolidationFees, includedBalance]);
 
   const totalDays = dailySchedule.length;
 
