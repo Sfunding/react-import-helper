@@ -1685,8 +1685,8 @@ export default function Index() {
           <div>
             <p className="font-bold text-destructive">Deal Term Too Short</p>
             <p className="text-sm text-destructive/80">
-              The deal ends in <strong>{calculatedNumberOfDebits} debits</strong> but the longest position needs <strong>{maxPositionDays} days</strong> to pay off. 
-              The deal must be at least as long as the longest position. Increase the term, lower the daily payment, or adjust the factor rate.
+              The deal ends in <strong>{calculatedNumberOfDebits} {cadenceWeekly ? 'weekly clips' : 'debits'}</strong> (~{termInDays} business days) but the longest position needs <strong>{maxPositionDays} days</strong> to pay off. 
+              The deal must be at least as long as the longest position. Increase the term, lower the payment, or adjust the factor rate.
             </p>
           </div>
         </div>
