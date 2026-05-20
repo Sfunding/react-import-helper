@@ -7,6 +7,7 @@ import { parseISODateLocal } from '@/lib/dateUtils';
 interface Props {
   asOfDate: string;
   positions: Position[];
+  reverseCadence?: 'daily' | 'weekly';
 }
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
