@@ -1658,15 +1658,21 @@ export default function Index() {
             <div className="text-2xl font-bold text-primary-foreground">{fmt(totalPayback)}</div>
           </div>
           
-          {/* Daily Payment - Display */}
+          {/* Payment - Display (cadence-aware) */}
           <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
-            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">Daily Payment</div>
-            <div className="text-2xl font-bold text-primary-foreground">{fmt(newDailyPayment)}</div>
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">
+              {cadenceWeekly ? 'Weekly Payment' : 'Daily Payment'}
+            </div>
+            <div className="text-2xl font-bold text-primary-foreground">
+              {fmt(cadenceWeekly ? newWeeklyPayment : newDailyPayment)}
+            </div>
           </div>
           
-          {/* Number of Debits - Display */}
+          {/* Number of Debits - Display (cadence-aware) */}
           <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
-            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1"># of Debits</div>
+            <div className="text-xs text-primary-foreground/80 font-medium uppercase mb-1">
+              {cadenceWeekly ? '# of Weekly Clips' : '# of Debits'}
+            </div>
             <div className="text-2xl font-bold text-primary-foreground">{calculatedNumberOfDebits}</div>
           </div>
         </div>
