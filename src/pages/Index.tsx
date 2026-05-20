@@ -36,6 +36,7 @@ import { exportToExcel, exportToPDF, exportMerchantProposal } from '@/lib/export
 import { ExportOptionsDialog, MerchantPDFOptions } from '@/components/pdf/ExportOptionsDialog';
 import { CashBuildupSection } from '@/components/CashBuildupSection';
 import { DraftRestoreBanner } from '@/components/DraftRestoreBanner';
+import { DealStructureHelper } from '@/components/DealStructureHelper';
 import { AutoSaveIndicator } from '@/components/AutoSaveIndicator';
 import { useDraftBackup, useBeforeUnloadGuard, useDraftOnMount, clearDraft, DraftPayload } from '@/hooks/useDraftBackup';
 import { useAutoSave, readAutoSaveEnabled, writeAutoSaveEnabled } from '@/hooks/useAutoSave';
