@@ -237,6 +237,8 @@ export function calculateSchedules(
       newWeeklyPayment,
       totalPayback,
       numberOfDebits,
+      numberOfDailyDebits,
+      cadenceWeekly,
       impliedDiscount,
       dailySavings,
       weeklySavings,
