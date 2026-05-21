@@ -170,6 +170,7 @@ export function calculateSchedules(
         dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
       }
     }
+    cumulativeDebits += dailyWithdrawal;
 
     const exposureOnReverse = cumulativeNetFunded - cumulativeDebits;
     const rtrBalance = (cumulativeGross * settings.rate) - cumulativeDebits;
