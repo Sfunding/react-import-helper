@@ -320,6 +320,7 @@ export function exportToExcel(calculation: SavedCalculation) {
           ['# of Debits', metrics.numberOfDebits],
           ['Weeks to Payoff', Math.ceil(metrics.numberOfDebits / 5)],
         ]),
+  ];
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
   summarySheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
