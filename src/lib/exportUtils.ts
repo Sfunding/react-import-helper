@@ -291,8 +291,17 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Rate', settings.rate.toFixed(3)],
     [''],
     ['NEW PAYMENT TERMS'],
-    ['New Daily Payment', fmtNoDecimals(metrics.newDailyPayment)],
-    ['New Weekly Payment', fmtNoDecimals(metrics.newWeeklyPayment)],
+    ...(metrics.cadenceWeekly
+      ? [
+          ['Reverse Cadence', 'Weekly'],
+          ['New Weekly Payment', fmtNoDecimals(metrics.newWeeklyPayment)],
+          ['New Daily Equivalent', fmtNoDecimals(metrics.newDailyPayment)],
+        ]
+      : [
+          ['Reverse Cadence', 'Daily'],
+          ['New Daily Payment', fmtNoDecimals(metrics.newDailyPayment)],
+          ['New Weekly Payment', fmtNoDecimals(metrics.newWeeklyPayment)],
+        ]),
     ['Payment Reduction', fmtPct(metrics.impliedDiscount * 100)],
     [''],
     ['SAVINGS'],
@@ -301,9 +310,16 @@ export function exportToExcel(calculation: SavedCalculation) {
     ['Monthly Savings', fmtNoDecimals(metrics.monthlySavings)],
     [''],
     ['TIMELINE'],
-    ['# of Debits', metrics.numberOfDebits],
-    ['Weeks to Payoff', Math.ceil(metrics.numberOfDebits / 5)],
-  ];
+    ...(metrics.cadenceWeekly
+      ? [
+          ['# of Weekly Clips', metrics.numberOfDebits],
+          ['Weeks to Payoff', metrics.numberOfDebits],
+          ['# of Daily Debits (simulation)', metrics.numberOfDailyDebits],
+        ]
+      : [
+          ['# of Debits', metrics.numberOfDebits],
+          ['Weeks to Payoff', Math.ceil(metrics.numberOfDebits / 5)],
+        ]),
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
   summarySheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
