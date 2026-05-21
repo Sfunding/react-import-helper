@@ -164,9 +164,12 @@ export function calculateSchedules(
 
     let dailyWithdrawal = 0;
     if (!debitsComplete && rtrBeforeDebit > 0) {
-      dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+      if (cadenceWeekly) {
+        if (isPayDay) dailyWithdrawal = Math.min(newWeeklyPayment, rtrBeforeDebit);
+      } else {
+        dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
+      }
     }
-    cumulativeDebits += dailyWithdrawal;
 
     const exposureOnReverse = cumulativeNetFunded - cumulativeDebits;
     const rtrBalance = (cumulativeGross * settings.rate) - cumulativeDebits;
