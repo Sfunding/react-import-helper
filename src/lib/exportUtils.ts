@@ -103,7 +103,7 @@ export function calculateSchedules(
   }
 
   const newDailyPayment = cadenceWeekly ? newClip / 5 : newClip;
-  const newWeeklyPayment = cadenceWeekly ? newClip : newClip * 5;
+  const newWeeklyPayment = newDailyPayment * 5;
   const numberOfDebits = termCount;
   const numberOfDailyDebits = cadenceWeekly ? termCount * 5 : termCount;
 
