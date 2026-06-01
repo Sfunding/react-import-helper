@@ -1,93 +1,24 @@
+## Fix: position "Weeks Left" can skip values (e.g. 22 weeks unreachable)
 
-## Problem
+### Root cause
+The Days/Weeks Left controls in the Positions table do a lossy round-trip:
+- Weeks input writes `balance = weeks * 5 * dailyPayment` (line ~1932).
+- Days left is then re-derived with `Math.ceil(balance / dailyPayment)` (lines ~1762 and ~398).
+- Floating-point division turns an exact `110` into `110.0000000001`, and `Math.ceil` rounds it up to `111`, so the field redisplays `ceil(111/5) = 23` instead of `22`. For certain daily-payment amounts (like the Fox position's), specific week counts become impossible to land on.
 
-The Excel export's `calculateSchedules` in `src/lib/exportUtils.ts` does not read `settings.reverseCadence`. In weekly mode the calculator stores the **weekly clip** in `dailyPaymentOverride` and the **# of weekly clips** in `termDays` (per the Weekly Reverse Cadence design). The export blindly treats both as daily values, which is why the screenshot shows:
+### Changes (all in `src/pages/Index.tsx`)
+1. Make the days-left derivation tolerant of float error by subtracting a tiny epsilon before ceiling. Apply to both spots that compute it:
+   - The memoized positions map (line ~398).
+   - The per-row `daysLeft` used by the table inputs (line ~1762).
+   ```text
+   daysLeft = Math.ceil(balance / dailyPayment - 1e-6)
+   ```
+   This keeps genuine partial days rounding up while killing the spurious +1 from floating-point noise.
 
-- "New Daily Payment $857,261" (actually the weekly clip)
-- "New Weekly Payment $4,286,304" (= weekly_clip × 5 — nonsense)
-- "Daily Savings -$611,824" / "Weekly Savings -$3,059,118" (current daily minus weekly clip — meaningless)
-- "# of Debits 40" labeled as days when it should be 40 weekly clips
+2. Verify the weeks input (line ~1929) now round-trips cleanly: typing/stepping to 22 stores `110 * dailyPayment` and redisplays exactly `22`. No change needed there once the ceil is corrected, but confirm by testing decrement/increment across 21 → 22 → 23.
 
-## Fix
+### Out of scope
+- The reverse-deal Term (Weeks) field and Excel export math are unaffected by this bug and won't be touched.
 
-### 1. Make `calculateSchedules` cadence-aware (`src/lib/exportUtils.ts` lines 86–118)
-
-Mirror the Index.tsx math:
-
-```ts
-const cadenceWeekly = settings.reverseCadence === 'weekly';
-const includedClip = cadenceWeekly ? includedDailyPayment * 5 : includedDailyPayment;
-
-let newClip: number;       // weekly clip OR daily payment depending on mode
-let termCount: number;     // weekly clips OR daily debits
-
-if (settings.dailyPaymentOverride !== null && settings.dailyPaymentOverride > 0) {
-  newClip = settings.dailyPaymentOverride;
-  termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
-} else if (settings.termDays !== null && settings.termDays > 0) {
-  termCount = settings.termDays;
-  newClip = termCount > 0 ? basePayback / termCount : 0;
-} else {
-  newClip = includedClip * (1 - settings.dailyPaymentDecrease);
-  termCount = newClip > 0 ? Math.ceil(basePayback / newClip) : 0;
-}
-
-const newDailyPayment   = cadenceWeekly ? newClip / 5 : newClip;
-const newWeeklyPayment  = cadenceWeekly ? newClip     : newClip * 5;
-const numberOfDebits    = termCount;                       // clips OR daily debits
-const numberOfDailyDebits = cadenceWeekly ? termCount * 5 : termCount;
-
-const impliedDiscount = includedClip > 0 ? 1 - (newClip / includedClip) : 0;
-
-const dailySavings   = (includedDailyPayment) - newDailyPayment;
-const weeklySavings  = dailySavings * 5;
-const monthlySavings = dailySavings * 22;
-```
-
-The schedule loop already only debits on Mondays via `isPayDay`. In weekly mode the outflow `dailyWithdrawal` must also fire only on the pay day and pull the full `newWeeklyPayment` (capped). Replace the current single-line `dailyWithdrawal = min(newDailyPayment, rtrBeforeDebit)` with:
-
-```ts
-let dailyWithdrawal = 0;
-if (!debitsComplete && rtrBeforeDebit > 0) {
-  if (cadenceWeekly) {
-    if (isPayDay) dailyWithdrawal = Math.min(newWeeklyPayment, rtrBeforeDebit);
-  } else {
-    dailyWithdrawal = Math.min(newDailyPayment, rtrBeforeDebit);
-  }
-}
-```
-
-Return both `newDailyPayment`, `newWeeklyPayment`, `numberOfDebits` (clips when weekly), and `numberOfDailyDebits` (raw day count) from `metrics`, plus expose `cadenceWeekly`.
-
-### 2. Summary tab labels (`exportToExcel` ~lines 262–296)
-
-In weekly mode, rebuild the NEW PAYMENT TERMS + TIMELINE blocks:
-
-- Title rows in weekly mode:
-  - `New Weekly Payment` first, `New Daily Equivalent` second (instead of "New Daily Payment" first).
-  - `Payment Reduction` keeps the implied discount (now correctly computed against the weekly clip).
-- SAVINGS unchanged (numbers now correct because `dailySavings` is recomputed).
-- TIMELINE in weekly mode:
-  - `# of Weekly Clips` = `metrics.numberOfDebits`
-  - `Weeks to Payoff` = `metrics.numberOfDebits` (not `/5`)
-  - Add `# of Daily Debits (simulation)` = `metrics.numberOfDailyDebits` for reference.
-
-In daily mode the existing labels stay.
-
-### 3. Offer Details tab (~lines 408–416)
-
-`# of Debits (simulation)` already exists. Make it always show `numberOfDailyDebits` (the raw schedule day count) so the underlying simulation is auditable in both modes.
-
-### 4. Positions tab (no change to math)
-
-The per-position `isWeekly` flag (line 316) is independent of reverse cadence and already correct for showing each funder's frequency.
-
-## Out of scope
-
-- PDF (`exportToPDF`) cadence handling — separate pass if requested.
-- DealLab / ScenarioBuilder exports.
-- Changing persisted field names.
-
-## Files touched
-
-- `src/lib/exportUtils.ts` (only)
+### Verification
+- Load a deal with the Fox position, step the weeks field down to 21 and up to 23, and confirm 22 is now reachable both by typing and via the spinner arrows.

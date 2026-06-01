@@ -395,7 +395,7 @@ export default function Index() {
       notStartedYet,
       balance: effectiveBalance,
       dailyPayment: effectiveDaily,
-      daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / effectiveDaily) : 0
+      daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0 ? Math.ceil(effectiveBalance / effectiveDaily - 1e-6) : 0
     };
   });
 
@@ -1760,7 +1760,7 @@ export default function Index() {
                       const notStartedYet = !!p.fundedDate && isBeforeISODate(asOfDate, p.fundedDate);
                       const effectiveBalance = p.balance;
                       const daysLeft = p.dailyPayment > 0 && effectiveBalance !== null && effectiveBalance > 0 
-                        ? Math.ceil(effectiveBalance / p.dailyPayment) 
+                        ? Math.ceil(effectiveBalance / p.dailyPayment - 1e-6) 
                         : 0;
                       const isIncluded = p.includeInReverse !== false && !notStartedYet;
                       const isOurs = p.isOurPosition;
