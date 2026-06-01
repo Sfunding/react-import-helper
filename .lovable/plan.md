@@ -1,26 +1,27 @@
-## Fix: Excel export values don't match the on-screen calculator to the cent
+## Fix: Excel Summary tab drops cents (values don't match the on-screen Deal Summary)
 
 ### Root cause
-The Excel export's `calculateSchedules` re-derives the funder payoff timeline (`daysLeft`) with the **old** formula, while the on-screen calculator uses the epsilon-tolerant version that was fixed earlier.
+The numbers are correct — they're just rounded for display. The Summary tab in `src/lib/exportUtils.ts` formats every currency value with `fmtNoDecimals` (0 decimal places), so:
 
-- On screen (`src/pages/Index.tsx`): `Math.ceil(balance / dailyPayment - 1e-6)`
-- Excel (`src/lib/exportUtils.ts`, line 53): `Math.ceil(balance / dailyPayment)`
+- `$2,132,289.47` (screen "Advance Amount" / Excel "Total Funding") prints as `$2,132,289`
+- `$2,025,675.00` (Net Advance) prints as `$2,025,675`
+- `$106,614.47` (Consolidation Fees) prints as `$106,614`
 
-When `balance / dailyPayment` produces floating-point noise (e.g. `110.0000001`), the Excel rounds a position's payoff up by one extra day. That shifts the position's final partial payment into a different week, which cascades through the whole simulation: cash-infusion totals, weekly debits, exposure, RTR balance, and profit all drift by a few cents to a few dollars versus the screen.
+The Daily/Weekly schedule tabs already preserve cents via the `CURRENCY_FMT` (`$#,##0.00`) number format, which is why only the Summary tab looks "off to the cent."
 
-A second, smaller inconsistency: the weekly payment is computed as `newDailyPayment * 5` on screen but as `newClip` directly in the Excel export. These differ by a fraction of a cent due to the intermediate `/5` then `*5`.
+### Change (in `src/lib/exportUtils.ts`, Summary tab, ~lines 280-310)
+Switch the currency values in the Summary tab from `fmtNoDecimals(...)` to the existing 2-decimal `fmt(...)` helper so they display exact cents and match the on-screen Deal Summary. Rows to update:
 
-### Changes (all in `src/lib/exportUtils.ts`)
-1. **Match the `daysLeft` formula** (line 53): change `Math.ceil(effectiveBalance / effectiveDaily)` to `Math.ceil(effectiveBalance / effectiveDaily - 1e-6)` so the export computes the exact same payoff day count as the screen.
+- MERCHANT OVERVIEW: Monthly Revenue, Total Existing Balance, Current Daily Payment, Current Weekly Payment
+- DEAL STRUCTURE: Total Funding, Net Advance, Consolidation Fees
+- NEW PAYMENT TERMS: New Weekly Payment, New Daily Equivalent / New Daily Payment, New Weekly Payment
+- SAVINGS: Daily Savings, Weekly Savings, Monthly Savings
 
-2. **Match the weekly payment derivation** (lines 105-106): compute it the same way the screen does so the displayed weekly clip is byte-for-byte identical:
-   - `newDailyPayment = cadenceWeekly ? newClip / 5 : newClip`
-   - `newWeeklyPayment = newDailyPayment * 5`
+Non-currency rows are left unchanged: Fee Percentage and Payment Reduction stay as percentages, Rate stays at 3 decimals, the cadence label stays text, and the TIMELINE counts (# of debits/clips, weeks) stay as plain integers.
 
 ### Notes / scope
-- The closed-form headline numbers (Total Funding, Total Payback, factor rate, savings) are already identical between the two paths and are not changed.
-- The export's schedule loop intentionally runs longer than the on-screen one (it pays off the full funder tail instead of stopping when debits finish). That behavior is preserved — the only change is making the per-position day counts match so the overlapping rows agree to the cent.
+- Pure presentation change; no math is altered. The earlier `daysLeft` epsilon and weekly-payment fixes already aligned the schedule math.
+- Keeps the existing key/value string layout of the Summary tab (consistent with how it's built today).
 
 ### Verification
-- Open the deal in question (the weekly-cadence one), export to Excel, and compare the Deal Summary and weekly schedule against the on-screen values; confirm cash infusion, debits, exposure, and the new weekly/daily payment now match to the cent.
-- Spot-check a daily-cadence deal to confirm no regression.
+- Export the Bergelt Optometric deal to Excel and confirm the Summary tab now reads `$2,132,289.47`, `$2,025,675.00`, `$106,614.47`, etc., matching the on-screen Deal Summary to the cent.
