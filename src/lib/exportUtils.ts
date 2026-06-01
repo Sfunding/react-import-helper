@@ -50,7 +50,7 @@ export function calculateSchedules(
       balance: effectiveBalance,
       dailyPayment: effectiveDaily,
       daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0
-        ? Math.ceil(effectiveBalance / effectiveDaily)
+        ? Math.ceil(effectiveBalance / effectiveDaily - 1e-6)
         : 0,
     };
   });
