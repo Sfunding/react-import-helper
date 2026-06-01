@@ -1,24 +1,26 @@
-## Fix: position "Weeks Left" can skip values (e.g. 22 weeks unreachable)
+## Fix: Excel export values don't match the on-screen calculator to the cent
 
 ### Root cause
-The Days/Weeks Left controls in the Positions table do a lossy round-trip:
-- Weeks input writes `balance = weeks * 5 * dailyPayment` (line ~1932).
-- Days left is then re-derived with `Math.ceil(balance / dailyPayment)` (lines ~1762 and ~398).
-- Floating-point division turns an exact `110` into `110.0000000001`, and `Math.ceil` rounds it up to `111`, so the field redisplays `ceil(111/5) = 23` instead of `22`. For certain daily-payment amounts (like the Fox position's), specific week counts become impossible to land on.
+The Excel export's `calculateSchedules` re-derives the funder payoff timeline (`daysLeft`) with the **old** formula, while the on-screen calculator uses the epsilon-tolerant version that was fixed earlier.
 
-### Changes (all in `src/pages/Index.tsx`)
-1. Make the days-left derivation tolerant of float error by subtracting a tiny epsilon before ceiling. Apply to both spots that compute it:
-   - The memoized positions map (line ~398).
-   - The per-row `daysLeft` used by the table inputs (line ~1762).
-   ```text
-   daysLeft = Math.ceil(balance / dailyPayment - 1e-6)
-   ```
-   This keeps genuine partial days rounding up while killing the spurious +1 from floating-point noise.
+- On screen (`src/pages/Index.tsx`): `Math.ceil(balance / dailyPayment - 1e-6)`
+- Excel (`src/lib/exportUtils.ts`, line 53): `Math.ceil(balance / dailyPayment)`
 
-2. Verify the weeks input (line ~1929) now round-trips cleanly: typing/stepping to 22 stores `110 * dailyPayment` and redisplays exactly `22`. No change needed there once the ceil is corrected, but confirm by testing decrement/increment across 21 → 22 → 23.
+When `balance / dailyPayment` produces floating-point noise (e.g. `110.0000001`), the Excel rounds a position's payoff up by one extra day. That shifts the position's final partial payment into a different week, which cascades through the whole simulation: cash-infusion totals, weekly debits, exposure, RTR balance, and profit all drift by a few cents to a few dollars versus the screen.
 
-### Out of scope
-- The reverse-deal Term (Weeks) field and Excel export math are unaffected by this bug and won't be touched.
+A second, smaller inconsistency: the weekly payment is computed as `newDailyPayment * 5` on screen but as `newClip` directly in the Excel export. These differ by a fraction of a cent due to the intermediate `/5` then `*5`.
+
+### Changes (all in `src/lib/exportUtils.ts`)
+1. **Match the `daysLeft` formula** (line 53): change `Math.ceil(effectiveBalance / effectiveDaily)` to `Math.ceil(effectiveBalance / effectiveDaily - 1e-6)` so the export computes the exact same payoff day count as the screen.
+
+2. **Match the weekly payment derivation** (lines 105-106): compute it the same way the screen does so the displayed weekly clip is byte-for-byte identical:
+   - `newDailyPayment = cadenceWeekly ? newClip / 5 : newClip`
+   - `newWeeklyPayment = newDailyPayment * 5`
+
+### Notes / scope
+- The closed-form headline numbers (Total Funding, Total Payback, factor rate, savings) are already identical between the two paths and are not changed.
+- The export's schedule loop intentionally runs longer than the on-screen one (it pays off the full funder tail instead of stopping when debits finish). That behavior is preserved — the only change is making the per-position day counts match so the overlapping rows agree to the cent.
 
 ### Verification
-- Load a deal with the Fox position, step the weeks field down to 21 and up to 23, and confirm 22 is now reachable both by typing and via the spinner arrows.
+- Open the deal in question (the weekly-cadence one), export to Excel, and compare the Deal Summary and weekly schedule against the on-screen values; confirm cash infusion, debits, exposure, and the new weekly/daily payment now match to the cent.
+- Spot-check a daily-cadence deal to confirm no regression.

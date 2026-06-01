@@ -50,7 +50,7 @@ export function calculateSchedules(
       balance: effectiveBalance,
       dailyPayment: effectiveDaily,
       daysLeft: effectiveDaily > 0 && effectiveBalance !== null && effectiveBalance > 0
-        ? Math.ceil(effectiveBalance / effectiveDaily)
+        ? Math.ceil(effectiveBalance / effectiveDaily - 1e-6)
         : 0,
     };
   });
@@ -103,7 +103,7 @@ export function calculateSchedules(
   }
 
   const newDailyPayment = cadenceWeekly ? newClip / 5 : newClip;
-  const newWeeklyPayment = cadenceWeekly ? newClip : newClip * 5;
+  const newWeeklyPayment = newDailyPayment * 5;
   const numberOfDebits = termCount;
   const numberOfDailyDebits = cadenceWeekly ? termCount * 5 : termCount;
 
