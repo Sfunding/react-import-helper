@@ -101,7 +101,7 @@ export default function SettingsPage() {
     setIsCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('manage-users', {
-        body: { action: 'create', username: newUsername, password: newPassword, fullName: newFullName || newUsername }
+        body: { action: 'create', username: newUsername, password: newPassword, fullName: newFullName || newUsername, email: newEmail || null }
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
@@ -110,6 +110,7 @@ export default function SettingsPage() {
       setNewUsername('');
       setNewPassword('');
       setNewFullName('');
+      setNewEmail('');
       fetchUsers();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to create user', variant: 'destructive' });
@@ -117,6 +118,44 @@ export default function SettingsPage() {
       setIsCreating(false);
     }
   };
+
+  const handleSaveEmail = async (userId: string) => {
+    setIsSavingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-email', userId, email: editingEmailValue }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({ title: 'Email saved' });
+      setEditingEmailId(null);
+      setEditingEmailValue('');
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to save email', variant: 'destructive' });
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleSendResetEmail = async (userId: string) => {
+    setSendingResetId(userId);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'send-reset-email', userId, redirectOrigin: window.location.origin }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({ title: 'Reset email sent', description: `A password reset link was sent to ${data.sentTo}.` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to send reset email', variant: 'destructive' });
+    } finally {
+      setSendingResetId(null);
+    }
+  };
+
 
   const handleResetPassword = async () => {
     if (!resetUserId || !resetPassword.trim()) return;
