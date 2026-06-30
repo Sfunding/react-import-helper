@@ -312,12 +312,39 @@ export default function SettingsPage() {
                   return (
                     <div key={user.id} className="rounded-lg border bg-card">
                       <div className="flex items-center justify-between p-3">
-                        <div className="flex items-center gap-3">
-                          <div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
                             <div className="font-medium">{user.full_name || user.username}</div>
                             <div className="text-sm text-muted-foreground">@{user.username}</div>
+                            {editingEmailId === user.id ? (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Input
+                                  type="email"
+                                  value={editingEmailValue}
+                                  onChange={e => setEditingEmailValue(e.target.value)}
+                                  placeholder="name@company.com"
+                                  className="h-7 text-xs w-52"
+                                  autoFocus
+                                />
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleSaveEmail(user.id)} disabled={isSavingEmail} title="Save email">
+                                  {isSavingEmail ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                </Button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-0.5"
+                                onClick={() => { setEditingEmailId(user.id); setEditingEmailValue(user.email || ''); }}
+                                title="Edit email"
+                              >
+                                <Mail className="w-3 h-3" />
+                                {user.email ? user.email : <span className="italic">Add email</span>}
+                                <Pencil className="w-3 h-3 opacity-50" />
+                              </button>
+                            )}
                           </div>
                         </div>
+
                         <div className="flex items-center gap-2">
                           {/* Role selector */}
                           <Select
