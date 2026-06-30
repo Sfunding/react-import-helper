@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   // Reset password
@@ -63,7 +64,14 @@ export default function SettingsPage() {
   const [resetPassword, setResetPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
+  // Email editing + reset-email sending
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
+  const [editingEmailValue, setEditingEmailValue] = useState('');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [sendingResetId, setSendingResetId] = useState<string | null>(null);
+
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
 
   const fetchUsers = async () => {
     setIsLoadingUsers(true);
