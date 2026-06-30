@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Trash2, KeyRound, Users, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Loader2, UserPlus, Trash2, KeyRound, Users, ChevronDown, ChevronUp, Shield, Mail, Check, Pencil } from 'lucide-react';
 import { AuditLogViewer } from '@/components/AuditLogViewer';
 import {
   Select,
