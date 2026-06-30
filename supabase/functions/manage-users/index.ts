@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     const { action, ...params } = await req.json()
 
     if (action === 'create') {
-      const { username, password, fullName } = params
+      const { username, password, fullName, email: realEmail } = params
       if (!username || !password) {
         return new Response(JSON.stringify({ error: 'Username and password required' }), { status: 400, headers: corsHeaders })
       }
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 
       const { error: profileError } = await adminClient
         .from('profiles')
-        .insert({ id: userId, username: username.toLowerCase(), full_name: fullName || username })
+        .insert({ id: userId, username: username.toLowerCase(), full_name: fullName || username, email: realEmail?.trim() || null })
 
       if (profileError) throw profileError
 
