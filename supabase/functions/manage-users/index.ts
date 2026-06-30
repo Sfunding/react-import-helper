@@ -206,6 +206,81 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
     }
 
+    if (action === 'update-email') {
+      const { userId, email: newEmail } = params
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: corsHeaders })
+      }
+
+      const trimmed = (newEmail ?? '').trim()
+      if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        return new Response(JSON.stringify({ error: 'Invalid email address' }), { status: 400, headers: corsHeaders })
+      }
+
+      const { error } = await adminClient
+        .from('profiles')
+        .update({ email: trimmed || null })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      return new Response(JSON.stringify({ success: true }), { headers: corsHeaders })
+    }
+
+    if (action === 'send-reset-email') {
+      const { userId, redirectOrigin } = params
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: corsHeaders })
+      }
+
+      const { data: profile, error: profileError } = await adminClient
+        .from('profiles')
+        .select('username, full_name, email')
+        .eq('id', userId)
+        .single()
+
+      if (profileError) throw profileError
+      if (!profile?.email) {
+        return new Response(JSON.stringify({ error: 'This user has no email address on file. Add one first.' }), { status: 400, headers: corsHeaders })
+      }
+
+      const authEmail = `${profile.username.toLowerCase()}@app.internal`
+      const origin = (redirectOrigin || '').replace(/\/$/, '')
+      const redirectTo = `${origin}/reset-password`
+
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: 'recovery',
+        email: authEmail,
+        options: { redirectTo },
+      })
+
+      if (linkError) throw linkError
+
+      const actionLink = linkData?.properties?.action_link
+      if (!actionLink) {
+        return new Response(JSON.stringify({ error: 'Could not generate reset link' }), { status: 500, headers: corsHeaders })
+      }
+
+      const { error: sendError } = await adminClient.functions.invoke('send-transactional-email', {
+        body: {
+          templateName: 'password-reset',
+          recipientEmail: profile.email,
+          idempotencyKey: `pwreset-${userId}-${Date.now()}`,
+          templateData: {
+            name: profile.full_name || profile.username,
+            resetUrl: actionLink,
+          },
+        },
+      })
+
+      if (sendError) {
+        console.error('send-transactional-email error:', sendError)
+        return new Response(JSON.stringify({ error: 'Could not send the reset email. Make sure email sending is set up.' }), { status: 500, headers: corsHeaders })
+      }
+
+      return new Response(JSON.stringify({ success: true, sentTo: profile.email }), { headers: corsHeaders })
+    }
+
     return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers: corsHeaders })
   } catch (err) {
     console.error('manage-users error:', err)
