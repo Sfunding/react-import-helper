@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Trash2, KeyRound, Users, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Loader2, UserPlus, Trash2, KeyRound, Users, ChevronDown, ChevronUp, Shield, Mail, Check, Pencil } from 'lucide-react';
 import { AuditLogViewer } from '@/components/AuditLogViewer';
 import {
   Select,
@@ -39,6 +39,7 @@ interface UserProfile {
   id: string;
   username: string;
   full_name: string | null;
+  email: string | null;
   created_at: string;
   roles: string[];
   permissions: UserPermissions | null;
@@ -55,6 +56,7 @@ export default function SettingsPage() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   // Reset password
@@ -62,7 +64,14 @@ export default function SettingsPage() {
   const [resetPassword, setResetPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
+  // Email editing + reset-email sending
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
+  const [editingEmailValue, setEditingEmailValue] = useState('');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [sendingResetId, setSendingResetId] = useState<string | null>(null);
+
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
 
   const fetchUsers = async () => {
     setIsLoadingUsers(true);
@@ -92,7 +101,7 @@ export default function SettingsPage() {
     setIsCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('manage-users', {
-        body: { action: 'create', username: newUsername, password: newPassword, fullName: newFullName || newUsername }
+        body: { action: 'create', username: newUsername, password: newPassword, fullName: newFullName || newUsername, email: newEmail || null }
       });
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
@@ -101,6 +110,7 @@ export default function SettingsPage() {
       setNewUsername('');
       setNewPassword('');
       setNewFullName('');
+      setNewEmail('');
       fetchUsers();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to create user', variant: 'destructive' });
@@ -108,6 +118,44 @@ export default function SettingsPage() {
       setIsCreating(false);
     }
   };
+
+  const handleSaveEmail = async (userId: string) => {
+    setIsSavingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update-email', userId, email: editingEmailValue }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({ title: 'Email saved' });
+      setEditingEmailId(null);
+      setEditingEmailValue('');
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to save email', variant: 'destructive' });
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleSendResetEmail = async (userId: string) => {
+    setSendingResetId(userId);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'send-reset-email', userId, redirectOrigin: window.location.origin }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      toast({ title: 'Reset email sent', description: `A password reset link was sent to ${data.sentTo}.` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to send reset email', variant: 'destructive' });
+    } finally {
+      setSendingResetId(null);
+    }
+  };
+
 
   const handleResetPassword = async () => {
     if (!resetUserId || !resetPassword.trim()) return;
@@ -215,27 +263,33 @@ export default function SettingsPage() {
             <CardDescription>Add a new user who can access the calculator</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreateUser} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="new-username">Username</Label>
-                <Input id="new-username" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="username" />
-              </div>
-              <div>
-                <Label htmlFor="new-fullname">Full Name</Label>
-                <Input id="new-fullname" value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Full Name" />
-              </div>
-              <div>
-                <Label htmlFor="new-password">Password</Label>
-                <div className="flex gap-2">
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="new-username">Username</Label>
+                  <Input id="new-username" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="username" />
+                </div>
+                <div>
+                  <Label htmlFor="new-fullname">Full Name</Label>
+                  <Input id="new-fullname" value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Full Name" />
+                </div>
+                <div>
+                  <Label htmlFor="new-email">Email <span className="text-muted-foreground font-normal">(for password resets)</span></Label>
+                  <Input id="new-email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="name@company.com" />
+                </div>
+                <div>
+                  <Label htmlFor="new-password">Password</Label>
                   <Input id="new-password" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min 6 chars" />
-                  <Button type="submit" disabled={isCreating} className="shrink-0">
-                    {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
-                  </Button>
                 </div>
               </div>
+              <Button type="submit" disabled={isCreating} className="w-full sm:w-auto">
+                {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                Add User
+              </Button>
             </form>
           </CardContent>
         </Card>
+
 
         {/* Users List */}
         <Card>
@@ -258,12 +312,39 @@ export default function SettingsPage() {
                   return (
                     <div key={user.id} className="rounded-lg border bg-card">
                       <div className="flex items-center justify-between p-3">
-                        <div className="flex items-center gap-3">
-                          <div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
                             <div className="font-medium">{user.full_name || user.username}</div>
                             <div className="text-sm text-muted-foreground">@{user.username}</div>
+                            {editingEmailId === user.id ? (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Input
+                                  type="email"
+                                  value={editingEmailValue}
+                                  onChange={e => setEditingEmailValue(e.target.value)}
+                                  placeholder="name@company.com"
+                                  className="h-7 text-xs w-52"
+                                  autoFocus
+                                />
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleSaveEmail(user.id)} disabled={isSavingEmail} title="Save email">
+                                  {isSavingEmail ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                </Button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-0.5"
+                                onClick={() => { setEditingEmailId(user.id); setEditingEmailValue(user.email || ''); }}
+                                title="Edit email"
+                              >
+                                <Mail className="w-3 h-3" />
+                                {user.email ? user.email : <span className="italic">Add email</span>}
+                                <Pencil className="w-3 h-3 opacity-50" />
+                              </button>
+                            )}
                           </div>
                         </div>
+
                         <div className="flex items-center gap-2">
                           {/* Role selector */}
                           <Select
@@ -292,7 +373,19 @@ export default function SettingsPage() {
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </Button>
 
+                          {/* Send password reset email */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSendResetEmail(user.id)}
+                            disabled={!user.email || sendingResetId === user.id}
+                            title={user.email ? `Email a reset link to ${user.email}` : 'Add an email first'}
+                          >
+                            {sendingResetId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                          </Button>
+
                           {/* Reset Password */}
+
                           <AlertDialog open={resetUserId === user.id} onOpenChange={(open) => { if (!open) { setResetUserId(null); setResetPassword(''); } }}>
                             <AlertDialogTrigger asChild>
                               <Button variant="outline" size="sm" onClick={() => setResetUserId(user.id)}>

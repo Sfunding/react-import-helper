@@ -1,27 +1,52 @@
-## Fix: Excel Summary tab drops cents (values don't match the on-screen Deal Summary)
+## Goal
 
-### Root cause
-The numbers are correct — they're just rounded for display. The Summary tab in `src/lib/exportUtils.ts` formats every currency value with `fmtNoDecimals` (0 decimal places), so:
+Let admins capture a real email address for each user and email them a secure "reset your password" link. The user clicks it, lands on a new page, and sets their own password. Adding users, role/permission management, and the login audit log already exist and stay as-is.
 
-- `$2,132,289.47` (screen "Advance Amount" / Excel "Total Funding") prints as `$2,132,289`
-- `$2,025,675.00` (Net Advance) prints as `$2,025,675`
-- `$106,614.47` (Consolidation Fees) prints as `$106,614`
+## How the reset link works (important constraint)
 
-The Daily/Weekly schedule tabs already preserve cents via the `CURRENCY_FMT` (`$#,##0.00`) number format, which is why only the Summary tab looks "off to the cent."
+Logins are username-based — each account's real auth identity is a synthetic `username@app.internal` address, and login must keep working that way. So we do **not** change the auth email. Instead:
 
-### Change (in `src/lib/exportUtils.ts`, Summary tab, ~lines 280-310)
-Switch the currency values in the Summary tab from `fmtNoDecimals(...)` to the existing 2-decimal `fmt(...)` helper so they display exact cents and match the on-screen Deal Summary. Rows to update:
+- Store a real email on each user's profile (e.g. `jake@gmail.com`).
+- When you click "Send reset email", the backend generates a Supabase recovery link for that account and emails it to the real address. The link carries the secure token, so it works regardless of which inbox receives it.
+- The link opens a new `/reset-password` page where the user chooses a new password.
 
-- MERCHANT OVERVIEW: Monthly Revenue, Total Existing Balance, Current Daily Payment, Current Weekly Payment
-- DEAL STRUCTURE: Total Funding, Net Advance, Consolidation Fees
-- NEW PAYMENT TERMS: New Weekly Payment, New Daily Equivalent / New Daily Payment, New Weekly Payment
-- SAVINGS: Daily Savings, Weekly Savings, Monthly Savings
+## Prerequisite: email sending domain
 
-Non-currency rows are left unchanged: Fee Percentage and Payment Reduction stay as percentages, Rate stays at 3 decimals, the cadence label stays text, and the TIMELINE counts (# of debits/clips, weeks) stay as plain integers.
+The project has no email-sending domain yet, so reset emails can't go out until one is set up. This is a one-time step you complete in a dialog:
 
-### Notes / scope
-- Pure presentation change; no math is altered. The earlier `daysLeft` epsilon and weekly-payment fixes already aligned the schedule math.
-- Keeps the existing key/value string layout of the Summary tab (consistent with how it's built today).
+<presentation-actions>
+<presentation-open-email-setup>Set up email domain</presentation-open-email-setup>
+</presentation-actions>
 
-### Verification
-- Export the Bergelt Optometric deal to Excel and confirm the Summary tab now reads `$2,132,289.47`, `$2,025,675.00`, `$106,614.47`, etc., matching the on-screen Deal Summary to the cent.
+After the domain is added (DNS can finish verifying in the background), I'll wire up the email infrastructure and the reset flow.
+
+## What I'll build
+
+**1. Database**
+- Add an `email` column to the `profiles` table (text, optional, stores each user's real email).
+
+**2. Email infrastructure + template**
+- Set up Lovable's app-email infrastructure.
+- Create a branded "Reset your password" email template (matching the Avion navy/teal styling) containing the reset button/link.
+
+**3. Backend (`manage-users` edge function)** — admin-only, as today
+- `create`: also accept and save a real `email` on the profile.
+- `update-email`: set/change a user's email (for the 5 existing users and future edits).
+- `send-reset-email`: look up the user's real email, generate a recovery link pointing at `/reset-password`, and send it via the reset-password email template. Errors clearly if the user has no email on file.
+
+**4. New page: `/reset-password`** (public route)
+- Reads the recovery token from the URL, shows a "set new password" form, calls `supabase.auth.updateUser({ password })`, then redirects to login. Includes the existing 8+ char validation.
+
+**5. Settings UI (`src/pages/Settings.tsx`)**
+- Add an **Email** field to the Create New User form.
+- Show each user's email in the list, with an inline edit to add/change it.
+- Add a **"Send reset email"** button per user (mail icon) next to the existing key/delete actions. The current admin "set password directly" reset stays as a fallback.
+
+## Out of scope (already working, untouched)
+- Adding users, roles, granular permissions, delete user, and the login audit log all already exist on the admin Settings page.
+
+## Technical notes
+- The recovery link is created with the service-role admin client via `generateLink({ type: 'recovery', email: '<username>@app.internal', options: { redirectTo: <app-origin>/reset-password } })`; only the link is emailed, to the real address.
+- `/reset-password` must be a public route (added above the catch-all in `App.tsx`), outside `AuthGuard`.
+- After setting the password, the temporary recovery session is signed out and the user is sent to `/login`.
+- No change to the username→synthetic-email login mapping.

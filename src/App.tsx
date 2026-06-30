@@ -8,6 +8,7 @@ import { AuthGuard } from "./components/AuthGuard";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Settings from "./pages/Settings";
 import SavedCalculations from "./pages/SavedCalculations";
 import DealLabPage from "./pages/DealLab";
@@ -24,6 +25,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route 
               path="/" 
               element={
