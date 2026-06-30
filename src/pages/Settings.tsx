@@ -39,6 +39,7 @@ interface UserProfile {
   id: string;
   username: string;
   full_name: string | null;
+  email: string | null;
   created_at: string;
   roles: string[];
   permissions: UserPermissions | null;
