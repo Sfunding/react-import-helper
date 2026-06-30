@@ -263,27 +263,33 @@ export default function SettingsPage() {
             <CardDescription>Add a new user who can access the calculator</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreateUser} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="new-username">Username</Label>
-                <Input id="new-username" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="username" />
-              </div>
-              <div>
-                <Label htmlFor="new-fullname">Full Name</Label>
-                <Input id="new-fullname" value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Full Name" />
-              </div>
-              <div>
-                <Label htmlFor="new-password">Password</Label>
-                <div className="flex gap-2">
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="new-username">Username</Label>
+                  <Input id="new-username" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="username" />
+                </div>
+                <div>
+                  <Label htmlFor="new-fullname">Full Name</Label>
+                  <Input id="new-fullname" value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Full Name" />
+                </div>
+                <div>
+                  <Label htmlFor="new-email">Email <span className="text-muted-foreground font-normal">(for password resets)</span></Label>
+                  <Input id="new-email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="name@company.com" />
+                </div>
+                <div>
+                  <Label htmlFor="new-password">Password</Label>
                   <Input id="new-password" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Min 6 chars" />
-                  <Button type="submit" disabled={isCreating} className="shrink-0">
-                    {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
-                  </Button>
                 </div>
               </div>
+              <Button type="submit" disabled={isCreating} className="w-full sm:w-auto">
+                {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                Add User
+              </Button>
             </form>
           </CardContent>
         </Card>
+
 
         {/* Users List */}
         <Card>
