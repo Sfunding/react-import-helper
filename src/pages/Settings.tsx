@@ -373,7 +373,19 @@ export default function SettingsPage() {
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </Button>
 
+                          {/* Send password reset email */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSendResetEmail(user.id)}
+                            disabled={!user.email || sendingResetId === user.id}
+                            title={user.email ? `Email a reset link to ${user.email}` : 'Add an email first'}
+                          >
+                            {sendingResetId === user.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                          </Button>
+
                           {/* Reset Password */}
+
                           <AlertDialog open={resetUserId === user.id} onOpenChange={(open) => { if (!open) { setResetUserId(null); setResetPassword(''); } }}>
                             <AlertDialogTrigger asChild>
                               <Button variant="outline" size="sm" onClick={() => setResetUserId(user.id)}>
